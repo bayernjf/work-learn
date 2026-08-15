@@ -44,7 +44,8 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 - `save_material`、`search_corpus`、`get_review_items`；
 - Universal Learning Skill 的指令和输出格式；
-- MCP Server 或本地 API；
+- Hono API 和 Supabase 数据层；
+- 连接 Hono API 的 MCP Server；
 - 基础 Web 语料库和每日复习。
 
 ## 设计原则

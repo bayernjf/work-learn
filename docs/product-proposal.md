@@ -29,10 +29,23 @@ Claude / ChatGPT / Hermes / OpenClaw / 其他 Agent
                          │
                    MCP / API 层
                          │
-       本地 Companion + 云端 Learning Service
+                  Hono API on Vercel
                          │
-              Web 语料库与复习系统
+              Supabase Auth / Postgres / RLS / Storage
+                          │
+          React Web App on Cloudflare Pages
 ```
+
+### 3.0 首版技术基线
+
+- API：Hono + TypeScript，部署到 Vercel Functions；
+- 前端：React + TypeScript，构建为静态资源，部署到 Cloudflare Pages；
+- 数据层：Supabase 一整套，统一承担 Auth、Postgres、Row Level Security 和后续 Storage；
+- Skill/MCP：通过 Hono API 访问统一的 Work Learn 能力，不直接耦合数据库；
+- CLI 与桌面端：后续接入同一套 API，必要时使用本地 SQLite 做离线队列；
+- 部署原则：前端和 API 分离部署，数据权限集中在 Supabase RLS。
+
+首版不引入 Cloudflare Workers API，也不再单独维护另一套数据库或认证系统。
 
 ### 3.1 Universal Learning Skill
 
@@ -149,7 +162,7 @@ Session
 第一版建议只包含：
 
 1. 一个可安装的 Universal Learning Skill；
-2. 一个 MCP Server 或本地 API；
+2. 一个连接 Hono API 的 MCP Server；
 3. 一个简单的 Web 语料库；
 4. `learn capture` CLI 作为通用兜底；
 5. 保存、整理、搜索、每日 5 条复习；
@@ -167,11 +180,12 @@ Session
 
 推荐顺序：
 
-1. Skill + MCP/API：验证核心价值；
-2. Web：承载语料、搜索和复习；
-3. CLI：覆盖终端和无 Skill Agent；
-4. macOS Companion：提供全局快捷键、离线能力和桌面兜底；
-5. 移动端：验证复习习惯后再建设。
+1. Hono API + Supabase：建立统一数据和权限基线；
+2. Skill + MCP：验证核心价值；
+3. React 静态 Web App：承载语料、搜索和复习，部署到 Cloudflare Pages；
+4. CLI：覆盖终端和无 Skill Agent；
+5. macOS Companion：提供全局快捷键、离线能力和桌面兜底；
+6. 移动端：验证复习习惯后再建设。
 
 核心数据和用户关系放在自己的服务中，Skill、CLI、Companion 都只是接入入口，避免绑定某一个 AI 平台。
 
