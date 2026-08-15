@@ -1,0 +1,51 @@
+# Handoff
+
+## 当前产品结论
+
+本项目定位为一个跨 AI Agent 的个人英语语料学习系统。核心入口是安装到 Claude、ChatGPT、Hermes、OpenClaw 等 Agent 中的 Universal Learning Skill。
+
+Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨平台同步；CLI 与 macOS Companion 负责无 Skill 场景、终端会话和本地兜底采集。
+
+详细方案见：[docs/product-proposal.md](/Users/jiangfeng/000mycodes/work-learn/docs/product-proposal.md)
+
+## 推荐的第一步
+
+先实现最小闭环：
+
+```text
+Agent 中调用 Skill
+  → 整理当前对话
+  → 用户确认
+  → MCP/API 保存
+  → Web 查看和复习
+```
+
+第一版只需要支持保存、搜索和每日复习，不需要先做桌面监听或移动 App。
+
+## 待实现模块
+
+- [ ] 定义 Session/Event 和 LearningMaterial 数据结构
+- [ ] 实现 `save_material`、`search_corpus`、`get_review_items`
+- [ ] 编写 Universal Learning Skill 指令和输出格式
+- [ ] 实现 MCP Server 或本地 API
+- [ ] 创建基础 Web 语料库页面
+- [ ] 实现 `learn capture` CLI
+- [ ] 增加 API Key、Token、密码和绝对路径脱敏
+- [ ] 用真实 Claude/ChatGPT/终端工作流验证闭环
+
+## 当前关键决策
+
+- Skill 是主入口，不是附属插件；
+- MCP/API 是统一能力层；
+- 本地采集只做兼容性兜底；
+- 不为每个 Agent 建立独立的核心业务逻辑；
+- 英语学习是第一场景，底层可扩展为个人 AI 工作资产沉淀系统；
+- 默认主动触发，不默认全量监听和上传。
+
+## 需要后续确认的问题
+
+- 首版是否只支持 macOS；
+- 使用本地模型还是云端模型做语料分析；
+- 数据是否默认本地优先、云端可选同步；
+- 首个重点 Agent 是 Claude Desktop、终端 Agent，还是两者同时支持；
+- 复习机制先采用简单队列，还是直接引入间隔重复算法。
