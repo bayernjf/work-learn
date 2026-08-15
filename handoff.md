@@ -8,6 +8,14 @@ Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习
 
 详细方案见：[docs/product-proposal.md](/Users/jiangfeng/000mycodes/work-learn/docs/product-proposal.md)
 
+## 技术基线
+
+- API：Hono + TypeScript，部署到 Vercel Functions；
+- 前端：React + TypeScript 静态构建，部署到 Cloudflare Pages；
+- 数据层：Supabase Auth、Postgres、RLS，后续按需使用 Storage；
+- Skill/MCP、CLI 和桌面端统一通过 API 访问数据；
+- 不使用 Cloudflare Workers 作为 API，不引入第二套数据库或认证系统。
+
 ## 推荐的第一步
 
 先实现最小闭环：
@@ -27,7 +35,8 @@ Agent 中调用 Skill
 - [ ] 定义 Session/Event 和 LearningMaterial 数据结构
 - [ ] 实现 `save_material`、`search_corpus`、`get_review_items`
 - [ ] 编写 Universal Learning Skill 指令和输出格式
-- [ ] 实现 MCP Server 或本地 API
+- [ ] 实现 Hono API 和 Supabase 数据层
+- [ ] 实现连接 Hono API 的 MCP Server
 - [ ] 创建基础 Web 语料库页面
 - [ ] 实现 `learn capture` CLI
 - [ ] 增加 API Key、Token、密码和绝对路径脱敏
