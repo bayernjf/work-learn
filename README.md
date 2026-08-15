@@ -22,6 +22,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 - [产品方案](docs/product-proposal.md)：产品定位、用户流程、核心架构和平台策略。
 - [品牌标志](docs/brand.md)：`W` 路径标志的概念、颜色和使用规则。
+- [Logo 方案](docs/brand-concepts.md)：三个备用的 `W + L` 融合方向。
 
 ### 当前实施
 
