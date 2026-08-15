@@ -1,0 +1,18 @@
+:root { color: #171918; background: #f3f5f1; font-family: "Avenir Next", "SF Pro Display", system-ui, sans-serif; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+.app-shell { width: min(1120px, calc(100% - 48px)); margin: 0 auto; }
+.app-header { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d7ded8; }
+.brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; letter-spacing: -.04em; }
+.brand-mark { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 7px; color: #b8f23e; background: #171918; font-size: 13px; }
+.status, .eyebrow { color: #68736b; font: 10px/1.2 ui-monospace, SFMono-Regular, monospace; letter-spacing: .12em; text-transform: uppercase; }
+.welcome { padding: 112px 0 140px; }
+.eyebrow { margin: 0 0 20px; }
+h1 { max-width: 680px; margin: 0 0 22px; font-size: clamp(3.4rem, 7vw, 6.5rem); line-height: .9; letter-spacing: -.08em; font-weight: 600; }
+.lede { max-width: 430px; margin: 0 0 72px; color: #68736b; font-size: 17px; line-height: 1.5; }
+.empty-state { max-width: 620px; padding: 30px; border: 1px solid #cdd8cf; border-radius: 12px; background: #fff; box-shadow: 18px 18px 0 #dfe7df; }
+.empty-mark { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 28px; border-radius: 9px; background: #b8f23e; font-size: 24px; line-height: 1; }
+h2 { margin: 0 0 10px; font-size: 25px; letter-spacing: -.05em; }
+.empty-state p { max-width: 430px; margin: 0 0 22px; color: #68736b; line-height: 1.5; }
+code { display: inline-block; padding: 9px 11px; border-radius: 5px; background: #e8eee8; color: #4c5b4e; font: 12px ui-monospace, SFMono-Regular, monospace; }
+@media (max-width: 680px) { .app-shell { width: min(100% - 32px, 560px); } .welcome { padding: 78px 0 100px; } h1 { font-size: clamp(3.25rem, 17vw, 5rem); } .lede { margin-bottom: 48px; } }

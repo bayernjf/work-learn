@@ -24,6 +24,10 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 - [品牌标志](docs/brand.md)：`W` 路径标志的概念、颜色和使用规则。
 - [Logo 方案](docs/brand-concepts.md)：三个备用的 `W + L` 融合方向。
 
+### 技术设计
+
+- [v0.1 技术架构](docs/technical-architecture-v0.1.md)：Vercel API、Cloudflare 静态前端、Supabase 数据层和 monorepo 边界。
+
 ### 当前实施
 
 - [项目交接](handoff.md)：当前决策、待实现模块和下一步。

@@ -1,0 +1,5 @@
+{
+  "framework": null,
+  "buildCommand": "pnpm --filter @work-learn/api build",
+  "outputDirectory": "apps/api/dist"
+}

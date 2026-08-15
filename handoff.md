@@ -16,6 +16,8 @@ Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习
 - Skill/MCP、CLI 和桌面端统一通过 API 访问数据；
 - 不使用 Cloudflare Workers 作为 API，不引入第二套数据库或认证系统。
 
+脚手架已建立在 `apps/` 和 `packages/` 下，详细边界见 [v0.1 技术架构](docs/technical-architecture-v0.1.md)。
+
 ## 推荐的第一步
 
 先实现最小闭环：

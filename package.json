@@ -1,0 +1,16 @@
+{
+  "name": "work-learn",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "dev:web": "pnpm --filter @work-learn/web dev",
+    "dev:api": "pnpm --filter @work-learn/api dev",
+    "dev:cli": "pnpm --filter @work-learn/cli dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}
