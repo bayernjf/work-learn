@@ -2,7 +2,7 @@
 
 ## 标志概念
 
-Work Learn 的标志是一个融合 `W` 和 `L` 的连续路径：
+Work Learn 的正式标志采用 Concept 01「Tail」，是一个融合 `W` 和 `L` 的连续路径：
 
 - 左侧路径代表用户提出问题、输入工作语境；
 - 中间路径代表 AI 对话和上下文转换；
@@ -18,6 +18,8 @@ Work Learn 的标志是一个融合 `W` 和 `L` 的连续路径：
 
 - `work-learn-mark.svg`：96 x 96 的完整品牌标志，用于落地页、应用入口和社交分享；
 - `favicon.svg`：32 x 32 的浏览器图标版本。
+
+正式版本对应 [Logo Concept 01: Tail](brand-concepts.md)。Concept 02 和 Concept 03 保留为备选方向，不作为当前产品主标志。
 
 源文件目前位于 `work-learn-landing/public/brand/` 和 `work-learn-landing/public/`。后续如果增加桌面端或 Skill 图标，应继续使用同一条 `W` 路径，不重新设计第二套符号。
 
