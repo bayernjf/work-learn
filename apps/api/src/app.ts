@@ -58,6 +58,14 @@ app.post("/materials", async (c) => {
     .single();
 
   if (error) return c.json({ error: "Could not save learning material", details: error.message }, 500);
+
+  const { error: reviewError } = await auth.supabase.from("review_items").insert({
+    user_id: auth.user.id,
+    material_id: data.id,
+    due_at: new Date().toISOString()
+  });
+
+  if (reviewError) return c.json({ error: "Material saved but review item could not be created", details: reviewError.message }, 500);
   return c.json({ data }, 201);
 });
 
@@ -72,6 +80,37 @@ app.get("/materials", async (c) => {
   const { data, error } = await request;
   if (error) return c.json({ error: "Could not load learning materials", details: error.message }, 500);
   return c.json({ data: data ?? [], query: query ?? "" });
+});
+
+app.get("/reviews", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const { data, error } = await auth.supabase
+    .from("review_items")
+    .select("*, learning_materials(*)")
+    .eq("status", "pending")
+    .lte("due_at", new Date().toISOString())
+    .order("due_at", { ascending: true });
+
+  if (error) return c.json({ error: "Could not load review items", details: error.message }, 500);
+  return c.json({ data: data ?? [] });
+});
+
+app.post("/reviews/:id/complete", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const { data, error } = await auth.supabase
+    .from("review_items")
+    .update({ status: "completed", completed_at: new Date().toISOString(), interval_days: 1 })
+    .eq("id", c.req.param("id"))
+    .eq("status", "pending")
+    .select()
+    .single();
+
+  if (error) return c.json({ error: "Could not complete review item", details: error.message }, 500);
+  return c.json({ data });
 });
 
 app.notFound((c) => c.json({ error: "Not found" }, 404));

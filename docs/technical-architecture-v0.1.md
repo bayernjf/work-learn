@@ -29,10 +29,11 @@ packages/mcp-server      Agent 工具目录和 MCP 适配边界
 - `POST /api/sessions`
 - `GET /api/materials?q=`
 - `POST /api/materials`
-- 后续增加 `GET /api/reviews`、`POST /api/reviews/:id/complete`；
+- `GET /api/reviews`
+- `POST /api/reviews/:id/complete`
 - 所有请求和响应通过 `@work-learn/shared-schema` 校验。
 
-MCP Server 通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 调用上述 API，当前已实现 `create_session`、`save_material` 和 `search_corpus` 三个工具。
+MCP Server 通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 调用上述 API，当前已实现 `create_session`、`save_material`、`search_corpus`、`get_review_items` 和 `mark_mastered` 五个工具。
 
 ## 4. 本地开发
 

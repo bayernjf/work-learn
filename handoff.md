@@ -37,9 +37,11 @@ Agent 中调用 Skill
 - [x] 定义 Session/Event 和 LearningMaterial 数据结构
 - [x] 建立 Supabase schema、migration 和 RLS
 - [x] 实现 Hono API 的 Supabase 鉴权与 materials 读写接口
+- [x] 保存学习材料时自动创建待复习项
+- [x] 实现 reviews 查询和完成状态更新接口
 - [x] 实现 Web Supabase Auth 注册、登录、退出和 session 恢复
 - [x] 实现 `create_session`、`save_material`、`search_corpus` 的 MCP 工具调用
-- [ ] 实现真实的 `get_review_items` 查询和复习状态更新
+- [x] 实现 MCP `get_review_items` 和 `mark_mastered`
 - [x] 编写 Universal Learning Skill 指令和输出格式
 - [x] 实现连接 Hono API 的 MCP Server
 - [x] 创建基础 Web 语料库页面和登录入口

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { createMcpEndpoint, createSession, getReviewItems, saveMaterial, searchCorpus } from "./index.js";
+import { createMcpEndpoint, createSession, getReviewItems, markMastered, saveMaterial, searchCorpus } from "./index.js";
 
 const apiUrl = process.env.WORK_LEARN_API_URL ?? "http://localhost:3000";
 const accessToken = process.env.WORK_LEARN_ACCESS_TOKEN;
@@ -31,7 +31,12 @@ server.registerTool("search_corpus", {
 server.registerTool("get_review_items", {
   description: "Get the user's next Work Learn review items.",
   inputSchema: {}
-}, async () => ({ content: [{ type: "text", text: JSON.stringify(await getReviewItems()) }] }));
+}, async () => ({ content: [{ type: "text", text: JSON.stringify(await getReviewItems(config.config)) }] }));
+
+server.registerTool("mark_mastered", {
+  description: "Mark a Work Learn review item as completed.",
+  inputSchema: { reviewId: z.string() }
+}, async ({ reviewId }) => ({ content: [{ type: "text", text: JSON.stringify(await markMastered(config.config, reviewId)) }] }));
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

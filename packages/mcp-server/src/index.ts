@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
 
-export type McpToolName = "create_session" | "save_material" | "search_corpus" | "get_review_items";
+export type McpToolName = "create_session" | "save_material" | "search_corpus" | "get_review_items" | "mark_mastered";
 
 type McpConfig = { apiUrl: string; accessToken: string };
 
@@ -17,7 +17,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "search_corpus", "get_review_items"] as McpToolName[]
+  tools: ["create_session", "save_material", "search_corpus", "get_review_items", "mark_mastered"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -32,7 +32,9 @@ export const saveMaterial = (config: McpConfig, input: unknown) => {
 
 export const searchCorpus = (config: McpConfig, query?: string) => json(config, `/materials${query ? `?q=${encodeURIComponent(query)}` : ""}`);
 
-export const getReviewItems = async () => [] as unknown[];
+export const getReviewItems = (config: McpConfig) => json(config, "/reviews");
+
+export const markMastered = (config: McpConfig, reviewId: string) => json(config, `/reviews/${encodeURIComponent(reviewId)}/complete`, { method: "POST" });
 
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
