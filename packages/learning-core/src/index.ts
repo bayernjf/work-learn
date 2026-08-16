@@ -1,4 +1,6 @@
 import type { LearningMaterial, SaveMaterialInput } from "@work-learn/shared-schema";
+export { redactSecrets } from "./redaction.js";
+export type { RedactionResult } from "./redaction.js";
 
 export type LearningRepository = {
   saveMaterial(input: SaveMaterialInput): Promise<LearningMaterial>;
