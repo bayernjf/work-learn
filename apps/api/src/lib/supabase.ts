@@ -1,14 +1,26 @@
 import { createClient } from "@supabase/supabase-js";
 
-export const createSupabaseServerClient = () => {
+const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
 
-  if (!url || !serviceRoleKey) {
-    throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required");
+  if (!url || !anonKey) {
+    throw new Error("SUPABASE_URL and SUPABASE_ANON_KEY are required");
   }
 
-  return createClient(url, serviceRoleKey, {
+  return { url, anonKey };
+};
+
+export const createSupabaseUserClient = (accessToken: string) => {
+  const { url, anonKey } = getSupabaseConfig();
+
+  return createClient(url, anonKey, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
     auth: { autoRefreshToken: false, persistSession: false }
   });
+};
+
+export const getBearerToken = (authorization: string | undefined) => {
+  if (!authorization?.startsWith("Bearer ")) return null;
+  return authorization.slice("Bearer ".length).trim() || null;
 };

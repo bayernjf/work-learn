@@ -1,0 +1,7 @@
+project_id = "work-learn"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
