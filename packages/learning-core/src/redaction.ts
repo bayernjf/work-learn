@@ -15,9 +15,9 @@ export const redactSecrets = (input: string): RedactionResult => {
   let replacements = 0;
 
   for (const [pattern, replacement] of secretPatterns) {
-    text = text.replace(pattern, () => {
+    text = text.replace(pattern, (...args: unknown[]) => {
       replacements += 1;
-      return replacement;
+      return replacement.replace(/\$(\d+)/g, (_placeholder, group) => String(args[Number(group)] ?? ""));
     });
   }
 
