@@ -45,6 +45,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@work-learn/learning-core':
+        specifier: workspace:*
+        version: link:../../packages/learning-core
       '@work-learn/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
