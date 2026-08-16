@@ -13,6 +13,14 @@ SUPABASE_PROJECT_REF=<project-ref>
 
 Never commit `.env.local` or expose `SUPABASE_SERVICE_ROLE_KEY` to the browser.
 
+For the Vite app, copy the project URL and anon/publishable key into `apps/web/.env.local`:
+
+```env
+VITE_SUPABASE_URL=https://<project-ref>.supabase.co
+VITE_SUPABASE_ANON_KEY=<publishable-or-anon-key>
+VITE_WORK_LEARN_API_URL=http://localhost:3000
+```
+
 ## 2. Link the project
 
 Install the Supabase CLI, then authenticate locally:

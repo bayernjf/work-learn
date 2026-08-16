@@ -34,12 +34,14 @@ Agent 中调用 Skill
 
 ## 待实现模块
 
-- [ ] 定义 Session/Event 和 LearningMaterial 数据结构
-- [ ] 实现 `save_material`、`search_corpus`、`get_review_items`
-- [ ] 编写 Universal Learning Skill 指令和输出格式
-- [ ] 实现 Hono API 和 Supabase 数据层
+- [x] 定义 Session/Event 和 LearningMaterial 数据结构
+- [x] 建立 Supabase schema、migration 和 RLS
+- [x] 实现 Hono API 的 Supabase 鉴权与 materials 读写接口
+- [x] 实现 Web Supabase Auth 注册、登录、退出和 session 恢复
+- [ ] 实现 `save_material`、`search_corpus`、`get_review_items` 的 MCP 工具调用
+- [x] 编写 Universal Learning Skill 指令和输出格式
 - [ ] 实现连接 Hono API 的 MCP Server
-- [ ] 创建基础 Web 语料库页面
+- [x] 创建基础 Web 语料库页面和登录入口
 - [ ] 实现 `learn capture` CLI
 - [ ] 增加 API Key、Token、密码和绝对路径脱敏
 - [ ] 用真实 Claude/ChatGPT/终端工作流验证闭环
