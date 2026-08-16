@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { saveMaterialInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
 import { createSupabaseUserClient, getBearerToken } from "./lib/supabase.js";
 
 export const app = new Hono().basePath("/api");
@@ -15,6 +15,23 @@ const authenticate = async (authorization: string | undefined) => {
   if (error || !data.user) return null;
   return { supabase, user: data.user };
 };
+
+app.post("/sessions", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = createSessionInputSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: "Invalid session", issues: parsed.error.issues }, 400);
+
+  const { data, error } = await auth.supabase
+    .from("sessions")
+    .insert({ user_id: auth.user.id, source: parsed.data.source, topic: parsed.data.topic ?? null })
+    .select()
+    .single();
+
+  if (error) return c.json({ error: "Could not create session", details: error.message }, 500);
+  return c.json({ data }, 201);
+});
 
 app.post("/materials", async (c) => {
   const auth = await authenticate(c.req.header("Authorization"));

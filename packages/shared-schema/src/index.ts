@@ -3,6 +3,11 @@ import { z } from "zod";
 export const sourceSchema = z.enum(["claude", "chatgpt", "hermes", "openclaw", "terminal", "manual"]);
 export const roleSchema = z.enum(["user", "assistant", "tool"]);
 
+export const createSessionInputSchema = z.object({
+  source: sourceSchema,
+  topic: z.string().trim().max(160).optional()
+});
+
 export const sessionEventSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
@@ -30,6 +35,7 @@ export const saveMaterialInputSchema = learningMaterialSchema.omit({ id: true, c
 
 export type Source = z.infer<typeof sourceSchema>;
 export type Role = z.infer<typeof roleSchema>;
+export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 export type LearningMaterial = z.infer<typeof learningMaterialSchema>;
 export type SaveMaterialInput = z.infer<typeof saveMaterialInputSchema>;
