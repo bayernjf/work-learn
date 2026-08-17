@@ -15,7 +15,7 @@ jobs:
         with:
           node-version: 20
       - name: Deploy API to Vercel
-        uses: vercel/actions/deploy@v3
+        uses: amondnet/vercel-action@v42
         with:
           vercel-token: ${{ secrets.VERCEL_TOKEN }}
           vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}

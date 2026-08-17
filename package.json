@@ -11,6 +11,7 @@
     "lint": "pnpm -r lint"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "wrangler": "4.86.0"
   }
 }
