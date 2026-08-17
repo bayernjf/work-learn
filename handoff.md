@@ -48,6 +48,11 @@ Agent 中调用 Skill
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
+- [x] API 部署到 Vercel（`work-learn-api`，health 返回 200）
+- [x] Web 部署到 Cloudflare Pages（`work-learn-web`，dev 预览已上线）
+- [x] 配置 GitHub Actions 部署 workflow，并写入 Vercel / Supabase / Cloudflare 账号 Secrets
+- [ ] 在 Cloudflare 控制台创建 `CLOUDFLARE_API_TOKEN`（Pages:Edit 权限）并写入 Secret
+- [ ] push 到 `main` 触发 GitHub Actions 自动部署（需用户授权 push）
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 当前关键决策
@@ -58,6 +63,12 @@ Agent 中调用 Skill
 - 不为每个 Agent 建立独立的核心业务逻辑；
 - 英语学习是第一场景，底层可扩展为个人 AI 工作资产沉淀系统；
 - 默认主动触发，不默认全量监听和上传。
+
+## 部署结论
+
+- API 用 esbuild 打包为自包含 serverless 函数，从仓库根部署到 Vercel，规避 pnpm workspace 解析问题；
+- 根 `vercel.json` 用显式 `builds` 配置，避免根 `package.json` 被误判为静态站点；
+- 部署细节见 [docs/deployment.md](docs/deployment.md)。
 
 ## 需要后续确认的问题
 

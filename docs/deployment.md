@@ -4,14 +4,34 @@
 
 ## 架构
 
-- API：Hono serverless 函数 → Vercel
+- API：Hono serverless 函数（esbuild 打包为自包含函数）→ Vercel
 - Web：Vite 静态构建 → Cloudflare Pages
 - 数据：Supabase Auth + Postgres + RLS
+
+## API（Vercel）
+
+- Vercel 项目：`work-learn-api`（org `bayernjfs-projects`）
+- 生产域名：`https://work-learn-api.vercel.app`，health：`/api/health`
+- 由于 API 依赖 monorepo 内的 workspace 包，直接从 `apps/api` 部署会遇到 pnpm workspace 解析问题，
+  因此用 esbuild 把函数打包成自包含文件 `api/[[...route]].js`（见 `apps/api/scripts/bundle-function.mjs`），
+  再从**仓库根**部署。
+- 根 `vercel.json` 用显式 `builds` 配置，只声明 `api/[[...route]].js` 为 `@vercel/node` 函数，
+  避免根 `package.json` 被 Vercel 误判为静态站点。
+- 构建命令：`pnpm --filter @work-learn/api build:function`（生成打包函数后再部署）。
+- `api/[[...route]].js` 已加入 `.gitignore`，由构建阶段生成。
+- Supabase 环境变量（`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）配置在
+  Vercel 项目环境变量（production / preview / development），不放入 workflow。
+
+## Web（Cloudflare Pages）
+
+- Pages 项目：`work-learn-web`
+- 构建命令：`pnpm --filter @work-learn/web build`，输出目录 `apps/web/dist`
+- 生产域名：`https://work-learn-web.pages.dev`（push 到 `main` 后生效）
 
 ## Workflows
 
 - `.github/workflows/ci.yml`：push/PR 时跑全仓 `typecheck` 与 `build`
-- `.github/workflows/deploy-api.yml`：push 到 `main` 时部署 API 到 Vercel
+- `.github/workflows/deploy-api.yml`：push 到 `main` 时部署 API 到 Vercel（从仓库根）
 - `.github/workflows/deploy-web.yml`：push 到 `main` 时部署 Web 到 Cloudflare Pages
 
 ## 需要的 GitHub Secrets
@@ -19,23 +39,18 @@
 ### Vercel（`deploy-api.yml`）
 
 - `VERCEL_TOKEN`
-- `VERCEL_ORG_ID`
-- `VERCEL_PROJECT_ID`
-
-三个值来自 `vercel link` 的 `.vercel/project.json`，Vercel 项目根目录设为 `apps/api`。API 的 `SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY` 在 Vercel 项目环境变量里配置，不放入 workflow。
+- `VERCEL_ORG_ID`（`team_0EaIhqEnnWPbsb34TVj26WeI`）
+- `VERCEL_PROJECT_ID`（`prj_hI5SFzc4nWJA2er7MzYOM1PjriSC`）
 
 ### Cloudflare Pages（`deploy-web.yml`）
 
-- `CLOUDFLARE_API_TOKEN`
-- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`（需要 Cloudflare Pages 的 `Pages:Edit` 权限，需在控制台手动创建）
+- `CLOUDFLARE_ACCOUNT_ID`（`23afa7f0233653f87dc9ceafd02eb79a`）
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_WORK_LEARN_API_URL`
 
-Pages 项目名固定为 `work-learn-web`，构建目录为 `apps/web/dist`。
+## 部署触发
 
-## 已知注意点
-
-- `apps/api` 的 `api/[[...route]].ts` 是 Vercel serverless 入口，Hono 自带 `hono/vercel` 适配器，无需新增依赖。
-- `@work-learn/shared-schema` 等 workspace 包以 TS 源码发布，Vercel 函数打包时需能解析这些依赖；首次部署若失败，需把共享包先构建成 JS 或调整 `exports` 指向构建产物。
-- Vercel 项目根目录必须设为 `apps/api`（Web 的 Cloudflare Pages 根目录为 `apps/web`）。
+本地 `vercel deploy --prod` 与 `wrangler pages deploy` 可直接上线；GitHub Actions 在 push 到
+`main` 时自动执行。未 push 前不会触发 workflow。
