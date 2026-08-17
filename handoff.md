@@ -47,7 +47,8 @@ Agent 中调用 Skill
 - [x] 创建基础 Web 语料库页面和登录入口
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
-- [ ] 用真实 Claude/ChatGPT/终端工作流验证闭环
+- [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
+- [ ] 在 Claude Desktop / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 当前关键决策
 
