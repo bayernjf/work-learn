@@ -1,5 +1,6 @@
 node_modules/
 dist/
+/api/[[...route]].js
 build/
 .turbo/
 .vercel/
@@ -8,4 +9,5 @@ build/
 !.env.example
 coverage/
 .DS_Store
-
+.vercel
+.env*
