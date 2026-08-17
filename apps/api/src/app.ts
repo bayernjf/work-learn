@@ -75,7 +75,11 @@ app.get("/materials", async (c) => {
 
   const query = c.req.query("q")?.trim();
   let request = auth.supabase.from("learning_materials").select("*").order("created_at", { ascending: false });
-  if (query) request = request.ilike("topic", `%${query}%`);
+  if (query) {
+    const { data: rpcData, error: rpcError } = await auth.supabase.rpc("search_learning_materials", { p_user: auth.user.id, p_query: query });
+    if (rpcError) return c.json({ error: "Could not load learning materials", details: rpcError.message }, 500);
+    return c.json({ data: rpcData ?? [], query });
+  }
 
   const { data, error } = await request;
   if (error) return c.json({ error: "Could not load learning materials", details: error.message }, 500);
