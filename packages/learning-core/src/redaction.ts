@@ -4,6 +4,8 @@ const secretPatterns: Array<[RegExp, string]> = [
   [/\b(ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})\b/g, "[REDACTED GITHUB TOKEN]"],
   [/\b(AKIA[0-9A-Z]{16})\b/g, "[REDACTED AWS KEY]"],
   [/(Bearer\s+)[A-Za-z0-9._~+/=-]{16,}/gi, "$1[REDACTED TOKEN]"],
+  [/\/(?:Users|home)\/[^\s"'`]+/g, "[REDACTED PATH]"],
+  [/[A-Z]:\\[^\s"'`]+/g, "[REDACTED PATH]"],
   [/(\b(?:api[_-]?key|access[_-]?token|secret|password|service[_-]?role[_-]?key)\s*[:=]\s*)([^\s,;]+)/gi, "$1[REDACTED]"],
   [/(\b(?:SUPABASE_SERVICE_ROLE_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY)\s*=\s*)([^\s]+)/gi, "$1[REDACTED]"]
 ];
