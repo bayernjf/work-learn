@@ -1,0 +1,14 @@
+{
+  "name": "@work-learn/cli",
+  "private": true,
+  "type": "module",
+  "bin": { "learn": "dist/index.js" },
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": { "@work-learn/learning-core": "workspace:*", "@work-learn/shared-schema": "workspace:*" },
+  "devDependencies": { "@types/node": "^22.10.5", "tsx": "^4.19.2", "typescript": "^5.7.2" }
+}

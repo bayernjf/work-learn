@@ -1,0 +1,13 @@
+node_modules/
+dist/
+/api/
+build/
+.turbo/
+.vercel/
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+.vercel
+.env*
