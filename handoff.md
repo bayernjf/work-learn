@@ -45,8 +45,8 @@ Agent 中调用 Skill
 - [x] 编写 Universal Learning Skill 指令和输出格式
 - [x] 实现连接 Hono API 的 MCP Server
 - [x] 创建基础 Web 语料库页面和登录入口
-- [ ] 实现 `learn capture` CLI
-- [ ] 增加 API Key、Token、密码和绝对路径脱敏
+- [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
+- [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [ ] 用真实 Claude/ChatGPT/终端工作流验证闭环
 
 ## 当前关键决策
@@ -65,3 +65,5 @@ Agent 中调用 Skill
 - 数据是否默认本地优先、云端可选同步；
 - 首个重点 Agent 是 Claude Desktop、终端 Agent，还是两者同时支持；
 - 复习机制先采用简单队列，还是直接引入间隔重复算法。
+
+CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
