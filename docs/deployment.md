@@ -44,7 +44,7 @@
 
 ### Cloudflare Pages（`deploy-web.yml`）
 
-- `CLOUDFLARE_API_TOKEN`（需要 Cloudflare Pages 的 `Pages:Edit` 权限，需在控制台手动创建）
+- `CLOUDFLARE_API_TOKEN`（已配置，具备 Cloudflare Pages 的 `Pages:Edit` 权限）
 - `CLOUDFLARE_ACCOUNT_ID`（`23afa7f0233653f87dc9ceafd02eb79a`）
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`

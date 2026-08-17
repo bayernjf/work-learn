@@ -51,7 +51,7 @@ Agent 中调用 Skill
 - [x] API 部署到 Vercel（`work-learn-api`，health 返回 200）
 - [x] Web 部署到 Cloudflare Pages（`work-learn-web`，dev 预览已上线）
 - [x] 配置 GitHub Actions 部署 workflow，并写入 Vercel / Supabase / Cloudflare 账号 Secrets
-- [ ] 在 Cloudflare 控制台创建 `CLOUDFLARE_API_TOKEN`（Pages:Edit 权限）并写入 Secret
+- [x] 配置 `CLOUDFLARE_API_TOKEN`（Pages:Edit 权限）并写入 Secret
 - [ ] push 到 `main` 触发 GitHub Actions 自动部署（需用户授权 push）
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
