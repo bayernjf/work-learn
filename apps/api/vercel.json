@@ -1,0 +1,6 @@
+{
+  "framework": null,
+  "functions": {
+    "api/[[...route]].ts": { "maxDuration": 10 }
+  }
+}
