@@ -29,6 +29,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 - [v0.1 技术架构](docs/technical-architecture-v0.1.md)：Vercel API、Cloudflare 静态前端、Supabase 数据层和 monorepo 边界。
 - [CLI 与 MCP 接入](docs/cli-and-mcp.md)：本地采集、脱敏和 Agent 配置方式。
 - [MCP Agent 接入](docs/mcp-agent-setup.md)：Claude Desktop、Codex 等 Agent 的具体接入配置。
+- [部署](docs/deployment.md)：GitHub Actions 部署 Vercel API 与 Cloudflare Pages，以及所需 Secrets。
 
 ### 当前实施
 
