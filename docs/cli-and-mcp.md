@@ -16,6 +16,13 @@ learn capture --source claude --topic "database migration"
 
 输出是结构化 JSON，包含 `source`、`topic`、脱敏后的 `content`、脱敏次数和采集时间。API Key、Bearer Token、密码、私钥和常见云平台凭证会在本地先被替换。
 
+## 支持的来源
+
+`source` 支持以下 Agent：
+
+- Claude、ChatGPT、Hermes、OpenClaw、OpenCode、Codex、Pi
+- 终端（`terminal`）与手动（`manual`）
+
 ## MCP Server
 
 本地运行 API 后，配置以下环境变量：
