@@ -48,7 +48,7 @@ Agent 中调用 Skill
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
-- [ ] 在 Claude Desktop / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
+- [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 当前关键决策
 
@@ -68,3 +68,5 @@ Agent 中调用 Skill
 - 复习机制先采用简单队列，还是直接引入间隔重复算法。
 
 CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
+
+Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
