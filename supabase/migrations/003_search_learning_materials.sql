@@ -1,3 +1,4 @@
+-- Migration: 003_search_learning_materials.sql
 -- Date: 2026-08-17
 create or replace function public.search_learning_materials(p_user uuid, p_query text)
 returns setof public.learning_materials

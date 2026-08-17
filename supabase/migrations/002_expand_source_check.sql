@@ -1,3 +1,4 @@
+-- Migration: 002_expand_source_check.sql
 -- Date: 2026-08-17
 alter table public.sessions
   drop constraint sessions_source_check,
