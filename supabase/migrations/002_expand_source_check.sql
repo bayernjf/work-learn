@@ -1,3 +1,4 @@
+-- Date: 2026-08-17
 alter table public.sessions
   drop constraint sessions_source_check,
   add constraint sessions_source_check check (source in ('claude', 'chatgpt', 'hermes', 'openclaw', 'opencode', 'codex', 'pi', 'terminal', 'manual'));

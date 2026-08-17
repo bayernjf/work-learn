@@ -1,3 +1,4 @@
+-- Date: 2026-08-16
 create table if not exists public.sessions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
