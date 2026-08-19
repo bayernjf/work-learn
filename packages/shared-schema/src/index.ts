@@ -1,6 +1,11 @@
 import { z } from "zod";
+import { knownAgents } from "./agents.js";
 
-export const sourceSchema = z.enum(["claude", "chatgpt", "codebuddy", "hermes", "openclaw", "opencode", "codex", "pi", "terminal", "manual"]);
+export { knownAgents };
+
+// Source is an open label, not a closed enum, so new agents work without a
+// schema change or redeploy. Use `knownAgents` for the curated list in UIs/CLI.
+export const sourceSchema = z.string().trim().min(1).max(50);
 export const roleSchema = z.enum(["user", "assistant", "tool"]);
 
 export const createSessionInputSchema = z.object({
