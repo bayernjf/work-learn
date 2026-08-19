@@ -18,7 +18,8 @@ learn capture --source claude --topic "database migration"
 
 ## 支持的来源
 
-`source` 支持以下 Agent：
+`source` 是开放标签，任意非空字符串都可以入库，新增 Agent 无需改代码或跑迁移。
+以下为 UI / CLI 建议展示的参考清单（维护在 `packages/shared-schema/src/agents.ts`）：
 
 - Claude、ChatGPT、CodeBuddy、Hermes、OpenClaw、OpenCode、Codex、Pi
 - 终端（`terminal`）与手动（`manual`）

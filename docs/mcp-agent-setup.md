@@ -93,7 +93,8 @@
 }
 ```
 
-`source` 支持 `codebuddy`。
+`source` 是开放标签，支持任意来源（如 `codebuddy`、`gemini`、`cursor`、`trae`……）。
+参考清单维护在 `packages/shared-schema/src/agents.ts`，新增 Agent 无需改 schema、迁移或重新部署。
 
 ## Codex
 
