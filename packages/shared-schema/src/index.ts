@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const sourceSchema = z.enum(["claude", "chatgpt", "hermes", "openclaw", "opencode", "codex", "pi", "terminal", "manual"]);
+export const sourceSchema = z.enum(["claude", "chatgpt", "codebuddy", "hermes", "openclaw", "opencode", "codex", "pi", "terminal", "manual"]);
 export const roleSchema = z.enum(["user", "assistant", "tool"]);
 
 export const createSessionInputSchema = z.object({
