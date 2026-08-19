@@ -20,7 +20,7 @@ learn capture --source claude --topic "database migration"
 
 `source` 支持以下 Agent：
 
-- Claude、ChatGPT、Hermes、OpenClaw、OpenCode、Codex、Pi
+- Claude、ChatGPT、CodeBuddy、Hermes、OpenClaw、OpenCode、Codex、Pi
 - 终端（`terminal`）与手动（`manual`）
 
 ## MCP Server
@@ -30,7 +30,13 @@ learn capture --source claude --topic "database migration"
 ```env
 WORK_LEARN_API_URL=http://localhost:3000
 WORK_LEARN_ACCESS_TOKEN=<Supabase user access token>
+WORK_LEARN_REFRESH_TOKEN=<Supabase user refresh token>
+SUPABASE_URL=<supabase url>
+SUPABASE_ANON_KEY=<supabase anon key>
 ```
+
+`WORK_LEARN_ACCESS_TOKEN` 过期后，MCP 服务器会用 `WORK_LEARN_REFRESH_TOKEN` 自动续期并持久化，
+无需手动更新 token。
 
 MCP 当前提供：
 
@@ -51,7 +57,10 @@ Claude Desktop 的本地配置示例：
       "cwd": "/absolute/path/to/work-learn",
       "env": {
         "WORK_LEARN_API_URL": "http://localhost:3000",
-        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>"
+        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
+        "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
+        "SUPABASE_URL": "<supabase url>",
+        "SUPABASE_ANON_KEY": "<supabase anon key>"
       }
     }
   }

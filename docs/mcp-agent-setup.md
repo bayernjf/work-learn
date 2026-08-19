@@ -9,6 +9,10 @@
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已拿到一个 Supabase 用户的 access token（从 Web 登录或脚本登录获取）
 
+`WORK_LEARN_ACCESS_TOKEN` 是短期 JWT（约 1 小时过期）。如果同时提供 `WORK_LEARN_REFRESH_TOKEN`、
+`SUPABASE_URL` 和 `SUPABASE_ANON_KEY`，MCP 服务器会在 access token 过期时自动用 refresh token
+续期，并把轮换后的 refresh token 写入 `packages/mcp-server/.session-token.json`，实现长期稳定接入。
+
 ## 运行命令（两种方式）
 
 方式 A：支持 `cwd` 的 Agent 使用 pnpm（推荐，路径无需写死 node_modules）
@@ -20,7 +24,10 @@
   "cwd": "/Users/jiangfeng/000mycodes/work-learn",
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
-    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>"
+    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
+    "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
+    "SUPABASE_URL": "<supabase url>",
+    "SUPABASE_ANON_KEY": "<supabase anon key>"
   }
 }
 ```
@@ -33,7 +40,10 @@
   "args": ["/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/src/server.ts"],
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
-    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>"
+    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
+    "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
+    "SUPABASE_URL": "<supabase url>",
+    "SUPABASE_ANON_KEY": "<supabase anon key>"
   }
 }
 ```
@@ -51,12 +61,39 @@
       "cwd": "/Users/jiangfeng/000mycodes/work-learn",
       "env": {
         "WORK_LEARN_API_URL": "http://localhost:3000",
-        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>"
+        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
+        "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
+        "SUPABASE_URL": "<supabase url>",
+        "SUPABASE_ANON_KEY": "<supabase anon key>"
       }
     }
   }
 }
 ```
+
+## CodeBuddy
+
+编辑 `~/.codebuddy/mcp.json`（CLI 终端与桌面端共用）：
+
+```json
+{
+  "mcpServers": {
+    "work-learn": {
+      "command": "/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/node_modules/.bin/tsx",
+      "args": ["/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/src/server.ts"],
+      "env": {
+        "WORK_LEARN_API_URL": "https://work-learn-api.vercel.app",
+        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
+        "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
+        "SUPABASE_URL": "<supabase url>",
+        "SUPABASE_ANON_KEY": "<supabase anon key>"
+      }
+    }
+  }
+}
+```
+
+`source` 支持 `codebuddy`。
 
 ## Codex
 
@@ -77,7 +114,7 @@ env = { WORK_LEARN_API_URL = "http://localhost:3000", WORK_LEARN_ACCESS_TOKEN = 
 
 配置完成后，在 Agent 里说：
 
-> 用 work-learn 新建一个 session，source 用 claude，topic 用 database migration。
+> 用 work-learn 新建一个 session，source 用 codebuddy，topic 用 database migration。
 
 随后调用：
 
