@@ -11,3 +11,4 @@ coverage/
 .DS_Store
 .vercel
 .env*
+packages/mcp-server/.session-token.json
