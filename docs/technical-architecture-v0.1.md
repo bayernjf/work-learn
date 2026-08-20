@@ -31,9 +31,10 @@ packages/mcp-server      Agent 工具目录和 MCP 适配边界
 - `POST /api/materials`
 - `GET /api/reviews`
 - `POST /api/reviews/:id/complete`
+- `POST /api/mcp`（规划中）：远程 MCP HTTP 端点，供普通用户通过 URL 连接 Agent
 - 所有请求和响应通过 `@work-learn/shared-schema` 校验。
 
-MCP Server 通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 调用上述 API，当前已实现 `create_session`、`save_material`、`search_corpus`、`get_review_items` 和 `mark_mastered` 五个工具。
+MCP Server 提供两种形态：本地 stdio（当前已实现，通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 调用上述 API）与远程 HTTP（规划中，挂载在 `/api/mcp`，普通用户通过 URL + 授权连接 Agent）。两种形态复用同一套工具逻辑，已实现 `create_session`、`save_material`、`search_corpus`、`get_review_items` 和 `mark_mastered` 五个工具。详见 [远程 MCP 方案](remote-mcp.md)。
 
 ## 4. 本地开发
 

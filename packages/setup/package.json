@@ -1,0 +1,27 @@
+{
+  "name": "@work-learn/setup",
+  "version": "0.1.0",
+  "private": false,
+  "description": "One-command installer that wires the Work Learn MCP server into your AI agents.",
+  "publishConfig": { "access": "public" },
+  "keywords": ["work-learn", "mcp", "ai-agent", "english-learning", "installer"],
+  "type": "module",
+  "bin": {
+    "work-learn-setup": "dist/index.js"
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": { "node": ">=18" }
+}

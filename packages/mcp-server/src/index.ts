@@ -89,3 +89,17 @@ export const toolInputSchemas = {
   save_material: saveMaterialInputSchema,
   search_corpus: z.object({ query: z.string().optional() })
 };
+
+import type { WorkLearnContext } from "./tools.js";
+
+/**
+ * Context used by the stdio entry point: it calls the deployed Hono API over
+ * HTTP and refreshes the Supabase access token when needed.
+ */
+export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
+  createSession: (input) => createSession(config, input),
+  saveMaterial: (input) => saveMaterial(config, input),
+  searchCorpus: (query) => searchCorpus(config, query),
+  getReviewItems: () => getReviewItems(config),
+  markMastered: (reviewId) => markMastered(config, reviewId)
+});
