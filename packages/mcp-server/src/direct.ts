@@ -11,8 +11,11 @@ const ok = (result: DbResult) => {
 
 /**
  * Context used by the remote Streamable HTTP endpoint: it runs inside the Vercel
- * function with an already-authenticated Supabase user client, so it writes to
- * the database directly instead of making an HTTP round-trip to itself.
+ * function with the request already authenticated. It receives a service-role
+ * client and the resolved user id and scopes every query to that user. Using the
+ * service role means the context works for both Supabase JWTs and personal
+ * access tokens (which are not Supabase JWTs); authorization is enforced by the
+ * explicit user_id filter on every statement.
  */
 export const createDirectContext = (supabase: SupabaseClient, userId: string): WorkLearnContext => ({
   async createSession(input) {
