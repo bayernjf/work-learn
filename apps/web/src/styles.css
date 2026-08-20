@@ -40,6 +40,7 @@ code { display: inline-block; padding: 9px 11px; border-radius: 5px; background:
 .connect-hint { margin: 10px 0 0 !important; color: #7b877e !important; font-size: 12px !important; line-height: 1.55; }
 .connect-hint code, .agent-connect-body p code { display: inline; padding: 2px 6px; border-radius: 4px; background: #e8eee8; color: #4c5b4e; font: 11px ui-monospace, SFMono-Regular, monospace; }
 .code-block { position: relative; display: flex; align-items: flex-start; gap: 12px; padding: 14px; border: 1px solid #dfe5df; border-radius: 9px; background: #f7f9f5; }
+.code-block + .code-block { margin-top: 8px; }
 .code-block.compact { align-items: center; padding: 10px 12px; }
 .code-pre { margin: 0; flex: 1; overflow-x: auto; color: #3a4a3d; font: 11.5px/1.6 ui-monospace, SFMono-Regular, monospace; white-space: pre; }
 .code-line { flex: 1; display: block; overflow-x: auto; padding: 0; background: transparent; color: #3a4a3d; font: 11.5px ui-monospace, SFMono-Regular, monospace; white-space: nowrap; }

@@ -137,6 +137,8 @@ function AgentConnect({ session }: { session: Session }) {
   );
 
   const setupCommand = `npx -y @work-learn/setup --token "${token}"`;
+  const remoteMcpUrl = `${API_URL}/api/mcp`;
+  const authHeader = `Authorization: Bearer ${token}`;
 
   const skillInstalls = [
     { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: "Installs into every detected skills folder." },
@@ -175,7 +177,26 @@ function AgentConnect({ session }: { session: Session }) {
           for the full product walkthrough.
         </p>
 
-        <p className="connect-step">1. Run the installer. Your access token is already filled in.</p>
+        <p className="connect-step">1. Connect over remote MCP (no local install needed).</p>
+        <div className="code-block compact">
+          <code className="code-line">{remoteMcpUrl}</code>
+          <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
+            {copiedId === "remote-url" ? "Copied" : "Copy URL"}
+          </button>
+        </div>
+        <div className="code-block compact">
+          <code className="code-line">{authHeader}</code>
+          <button type="button" className="copy-chip" onClick={() => copy("remote-auth", authHeader)}>
+            {copiedId === "remote-auth" ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <p className="connect-hint">
+          In agents that support remote MCP (Streamable HTTP), add the URL above and set the
+          {" "}<code>Authorization</code> header to your Bearer token. This access token is short-lived,
+          so long-lived personal access tokens are on the way; for persistent local agents, use option 2.
+        </p>
+
+        <p className="connect-step">2. Or run the local installer. Your access token is already filled in.</p>
         <div className="code-block compact">
           <code className="code-line">{setupCommand}</code>
           <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
@@ -185,7 +206,8 @@ function AgentConnect({ session }: { session: Session }) {
         <p className="connect-hint">
           The installer detects Codex, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the
           correct MCP config for each one (with a backup), and can install the Skill too. When it
-          asks for the repo path, point it at your local <code>work-learn</code> clone.
+          asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for
+          agents that only support stdio MCP.
         </p>
 
         <details className="manual-config">
@@ -205,7 +227,7 @@ function AgentConnect({ session }: { session: Session }) {
           <a className="inline-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.
         </p>
 
-        <p className="connect-step">2. Install the Skill (optional). It tells your agent when to save.</p>
+        <p className="connect-step">3. Install the Skill (optional). It tells your agent when to save.</p>
         <div className="install-card">
           <div className="agent-tabs" role="tablist" aria-label="Install Skill per agent">
             {skillInstalls.map((agent) => (
