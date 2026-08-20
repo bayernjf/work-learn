@@ -58,6 +58,29 @@ code { display: inline-block; padding: 9px 11px; border-radius: 5px; background:
 .manual-config summary::before { content: "+ "; color: #7b877e; }
 .manual-config[open] summary::before { content: "− "; }
 .manual-config .code-block { margin-top: 10px; }
+
+/* Personal access token manager */
+.token-manager { margin: 10px 0 4px; padding: 12px; border: 1px solid #dfe5df; border-radius: 9px; background: #fbfcfa; }
+.token-list { display: grid; gap: 8px; }
+.token-empty { margin: 0; color: #7b877e; font-size: 12px; line-height: 1.5; }
+.token-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 11px; border: 1px solid #e5ebe5; border-radius: 7px; background: #fff; }
+.token-row.revoked { opacity: .55; }
+.token-row strong { display: block; font-size: 12.5px; font-weight: 700; color: #171918; }
+.token-row code { display: inline-block; margin-top: 3px; padding: 1px 6px; border-radius: 4px; background: #eef2ed; color: #4c5b4e; font: 11px ui-monospace, monospace; }
+.token-meta { display: block; margin-top: 3px; color: #8a948c; font-size: 11px; }
+.token-revoke { flex: 0 0 auto; padding: 6px 10px; border: 1px solid #d7ded8; border-radius: 6px; color: #6b4a4a; background: #f7f3f3; cursor: pointer; font-size: 11px; font-weight: 650; }
+.token-revoke:hover { background: #efe4e4; border-color: #c9b4b4; }
+.token-created { margin-top: 10px; padding: 11px; border: 1px solid #cfe3a8; border-radius: 7px; background: #f4fae0; }
+.token-created p { margin: 0 0 8px; color: #46562f; font-size: 12px; font-weight: 650; }
+.created-row { padding: 8px 10px; background: #fff; border-color: #cfe3a8; }
+.token-raw { display: block; overflow-x: auto; padding: 0; background: transparent; color: #2f3a26; font: 11px ui-monospace, monospace; white-space: nowrap; }
+.token-form { display: flex; gap: 8px; margin-top: 10px; }
+.token-form input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid #cdd8cf; border-radius: 6px; outline: none; background: #fbfcfa; color: #171918; font: 13px system-ui, sans-serif; }
+.token-form input:focus { border-color: #6d8b4e; box-shadow: 0 0 0 3px #dff1b7; }
+.token-form button { flex: 0 0 auto; padding: 9px 14px; border: 0; border-radius: 6px; color: #eff5ee; background: #171918; cursor: pointer; font-size: 12px; font-weight: 700; }
+.token-form button:disabled { opacity: .5; cursor: default; }
+.token-error { margin: 8px 0 0; color: #9c3e3e; font-size: 12px; }
+@media (max-width: 680px) { .token-form { flex-direction: column; } }
 @media (max-width: 680px) {
   .code-block { padding: 12px; }
   .code-pre { font-size: 10.5px; }

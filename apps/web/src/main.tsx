@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import type { Session } from "@supabase/supabase-js";
 import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
+import { TokenManager } from "./components/TokenManager";
 import "./styles.css";
 
 function App() {
@@ -119,7 +120,8 @@ function AgentConnect({ session }: { session: Session }) {
   const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
   const RAW_BASE = "https://raw.githubusercontent.com/bayernjf/work-learn/main";
   const API_URL = "https://work-learn-api.vercel.app";
-  const token = session.access_token;
+  const [remoteToken, setRemoteToken] = useState<string | null>(null);
+  const token = remoteToken ?? session.access_token;
 
   const mcpConfig = JSON.stringify(
     {
@@ -178,6 +180,11 @@ function AgentConnect({ session }: { session: Session }) {
         </p>
 
         <p className="connect-step">1. Connect over remote MCP (no local install needed).</p>
+        <p className="connect-hint">
+          Create a personal access token below and use it as the Bearer token. It stays valid until
+          you revoke it, unlike your short-lived session token.
+        </p>
+        <TokenManager session={session} onTokenSelect={setRemoteToken} />
         <div className="code-block compact">
           <code className="code-line">{remoteMcpUrl}</code>
           <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
@@ -192,8 +199,8 @@ function AgentConnect({ session }: { session: Session }) {
         </div>
         <p className="connect-hint">
           In agents that support remote MCP (Streamable HTTP), add the URL above and set the
-          {" "}<code>Authorization</code> header to your Bearer token. This access token is short-lived,
-          so long-lived personal access tokens are on the way; for persistent local agents, use option 2.
+          {" "}<code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>.
+          For persistent local agents that only support stdio, use option 2.
         </p>
 
         <p className="connect-step">2. Or run the local installer. Your access token is already filled in.</p>

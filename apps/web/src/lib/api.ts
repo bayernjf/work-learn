@@ -44,3 +44,41 @@ export const completeReview = async (session: Session, reviewId: string) => {
   });
   if (!response.ok) throw new Error("Could not complete this review");
 };
+
+export type PersonalAccessToken = {
+  id: string;
+  name: string;
+  token_prefix: string;
+  last_used_at: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
+export type CreatedPersonalAccessToken = PersonalAccessToken & { token: string };
+
+export const fetchPersonalAccessTokens = async (session: Session) => {
+  const response = await fetch(`${apiUrl}/api/tokens`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error("Could not load personal access tokens");
+  return (await response.json()) as { data: PersonalAccessToken[] };
+};
+
+export const createPersonalAccessToken = async (session: Session, name: string) => {
+  const response = await fetch(`${apiUrl}/api/tokens`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ name })
+  });
+  if (!response.ok) throw new Error("Could not create personal access token");
+  return (await response.json()) as { data: CreatedPersonalAccessToken };
+};
+
+export const revokePersonalAccessToken = async (session: Session, id: string) => {
+  const response = await fetch(`${apiUrl}/api/tokens/${encodeURIComponent(id)}/revoke`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error("Could not revoke personal access token");
+};
