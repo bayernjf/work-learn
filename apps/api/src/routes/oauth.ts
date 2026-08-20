@@ -90,7 +90,7 @@ oauthRoute.get("/authorize", async (c) => {
     return c.json({ error: "invalid_client" }, 400);
   }
 
-  const webBase = process.env.WORK_LEARN_WEB_URL ?? "https://work-learn-web.pages.dev";
+  const webBase = process.env.WORK_LEARN_WEB_URL ?? "https://work-learn.pages.dev";
   const consent = new URL("/oauth/consent", webBase);
   for (const [key, value] of Object.entries(params)) {
     if (typeof value === "string") consent.searchParams.set(key, value);
