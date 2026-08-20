@@ -19,6 +19,34 @@
 `SUPABASE_URL` 和 `SUPABASE_ANON_KEY`，MCP 服务器会在 access token 过期时自动用 refresh token
 续期，并把轮换后的 refresh token 写入 `packages/mcp-server/.session-token.json`，实现长期稳定接入。
 
+## 一键安装（推荐）
+
+先把本仓库 clone 到本机并执行 `pnpm install`（本地 stdio MCP 仍需要这份代码来启动服务进程）。
+然后在 Web 端登录后复制 access token，运行：
+
+```bash
+npx @work-learn/setup --token <your-access-token> --repo /path/to/work-learn
+```
+
+向导会自动探测 Codex、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
+配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。
+
+想要长期免维护，带上 refresh token：
+
+```bash
+npx @work-learn/setup \
+  --token <access-token> \
+  --refresh-token <refresh-token> \
+  --supabase-url https://<project>.supabase.co \
+  --supabase-anon-key <anon-key> \
+  --repo /path/to/work-learn
+```
+
+只配置指定 Agent 可重复使用 `--agent`：`--agent codex --agent codebuddy`。
+非交互环境加 `-y`。其余选项见 `npx @work-learn/setup --help`。
+
+下文的手动配置仅在你不想使用安装器或需要自定义时参考。
+
 ## 运行命令（两种方式）
 
 方式 A：支持 `cwd` 的 Agent 使用 pnpm（推荐，路径无需写死 node_modules）

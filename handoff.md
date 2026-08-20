@@ -60,7 +60,7 @@ Agent 中调用 Skill
 - [x] 产出独立 `SKILL.md`（`skills/work-learn/SKILL.md`），并提供 `scripts/install-skill.sh` 一键安装到所有检测到的 Agent skills 目录
 - [x] 落地页 `#get-started` 改为实质性接入引导：三步说明 + 可复制 MCP 配置 + SKILL.md/文档链接
 - [x] Web 端登录后提供 access token 折叠面板与一键复制（`Connect an agent`）
-- [ ] 提供 `npx` 一键安装脚本（如 `npx @work-learn/setup`），自动写入各 Agent 的 MCP 配置，免去手动复制 JSON
+- [x] 提供 `npx` 一键安装脚本（`npx @work-learn/setup`），自动探测并写入 Codex/Claude/CodeBuddy/Cursor/OpenCode 的 MCP 配置，写入前备份，可选顺带安装 Skill；发布到 npm 后即可直接用（`packages/setup`，见 `docs/mcp-agent-setup.md`）
 - [ ] 实现远程 MCP（`/api/mcp`，Streamable HTTP + Bearer/OAuth），让普通用户通过 URL 连接 Agent，方案见 [docs/remote-mcp.md](docs/remote-mcp.md)
 
 ## 当前关键决策
