@@ -20,7 +20,7 @@ Authorization: Bearer <your-access-token>
 
 其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里复制的 Supabase access token。
 
-注意：该 token 是短期 JWT（约 1 小时过期）。第一版用它直接接入；长期有效的 Personal Access Token（生成/撤销）和 OAuth 自动授权将在后续版本提供。需要长期免维护的用户，目前请使用下面的本地 stdio + refresh token 方式。
+注意：这个 token 是短期 JWT（约 1 小时过期）。Web 端的 **Personal Access Token** 适合手动填写；支持 OAuth 的 MCP agent 可直接连接 Remote MCP URL，由 agent 触发浏览器授权并自动刷新 token。需要本地 stdio 或终端 agent 时，继续使用下面的 refresh token 方式。
 
 远程端点与本地 MCP 提供完全相同的 5 个工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 

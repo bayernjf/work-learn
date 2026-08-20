@@ -63,8 +63,8 @@ Agent 中调用 Skill
 - [x] 提供 `npx` 一键安装脚本（`npx @work-learn/setup`），自动探测并写入 Codex/Claude/CodeBuddy/Cursor/OpenCode 的 MCP 配置，写入前备份，可选顺带安装 Skill；发布到 npm 后即可直接用（`packages/setup`，见 `docs/mcp-agent-setup.md`）
   - [x] 发布 `@work-learn/setup@0.1.0` 到 npm（公开包，页面：https://www.npmjs.com/package/@work-learn/setup ）；`npx -y @work-learn/setup`、`pnpm dlx @work-learn/setup` 均可直接运行
 - [x] 实现远程 MCP 第一版（`POST /api/mcp`，无状态 Streamable HTTP + Bearer token），复用 `registerTools`，普通用户通过 URL + access token 连接 Agent；已用 initialize/tools/list/create_session 端到端验证（`packages/mcp-server/src/{tools,direct,http}.ts`、`apps/api/src/routes/mcp.ts`）
-  - [ ] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
-  - [ ] 第二版补 MCP OAuth 2.1 授权端点，Agent 内一键授权，免复制 token；实测各 Agent 远程 MCP 兼容性
+  - [x] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
+  - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation；待用户执行 007 SQL、配置 Vercel env 后实测各 Agent 远程 MCP 兼容性
 
 ## 当前关键决策
 

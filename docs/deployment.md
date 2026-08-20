@@ -21,6 +21,10 @@
 - `api/[[...route]].js` 已加入 `.gitignore`，由构建阶段生成。
 - Supabase 环境变量（`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）配置在
   Vercel 项目环境变量（production / preview / development），不放入 workflow。
+- Remote MCP OAuth 还需要：
+  - `WORK_LEARN_PUBLIC_API_URL`：生产 API origin，例如 `https://work-learn-api.vercel.app`
+  - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn-web.pages.dev`
+  - `OAUTH_JWT_SECRET`：OAuth access token 的 HMAC 密钥，可用 `openssl rand -base64 48` 生成
 
 ## Web（Cloudflare Pages）
 
@@ -49,6 +53,7 @@
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_WORK_LEARN_API_URL`
+- `VITE_WORK_LEARN_API_URL` 应指向生产 API（`https://work-learn-api.vercel.app`），OAuth consent 页会调用 `/api/oauth/decision`。
 
 ## 部署触发
 

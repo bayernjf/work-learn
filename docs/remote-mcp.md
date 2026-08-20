@@ -1,6 +1,6 @@
 # 远程 MCP 方案
 
-> 状态：第一版（Bearer token）已上线。`POST /api/mcp` 使用无状态 Streamable HTTP（`enableJsonResponse`，不维持 SSE 长连接），在 Vercel Functions 上即起即销。Personal Access Token 管理与 OAuth 自动授权为后续版本。
+> 状态：Remote MCP v2 已实现。`POST /api/mcp` 使用无状态 Streamable HTTP，并同时支持 Supabase JWT、Personal Access Token 与 OAuth access token。Web 端可生成/撤销 PAT；Hono 提供 MCP OAuth 2.1 动态注册、授权、code exchange、refresh token 与 consent 页面。
 
 ## 1. 背景
 
@@ -32,7 +32,7 @@
         ▼
 Hono API on Vercel
   └─ POST /api/mcp
-        │  Bearer token 校验 (Supabase Auth)
+        │  Bearer token 校验 (Supabase JWT / PAT / OAuth)
         ▼
 packages/mcp-server  (同一套工具逻辑)
         │  service role + RLS
@@ -47,25 +47,34 @@ Supabase
 - 使用 MCP 的 **Streamable HTTP transport**（`StreamableHTTPServerTransport`），不要使用已被取代的 SSE-only 模式。
 - 在 Vercel serverless 上采用**无状态模式**：每个 HTTP 请求新建一个 transport 实例处理完即销毁，不跨请求保持 `session_id`。这避免了 serverless 环境无法维持长连接/进程内会话的问题。
 - 端点只接受 `POST`，`Content-Type: application/json` 或 `application/json-seq`。
-- CORS 仅放行需要直连的 Agent 来源（或按 MCP 客户端约定返回），不使用通配符携带凭证。
+- CORS 放行浏览器 consent/metadata 请求；接口不依赖 Cookie，允许 `Authorization` 与 `Content-Type` 头。
 
 ## 5. 认证
 
-第一版用 **Bearer token**，第二版再补完整 OAuth。
+Remote MCP 支持三种 Bearer token：
 
-### 第一版：Personal Access Token
+### Personal Access Token
 
 - Web 端提供一个“MCP 连接”页面，用户可生成、查看、撤销一个长期 token。
 - token 在服务端只存哈希（或直接签发 Supabase JWT 并设置较长有效期，配合撤销表）。
 - Agent 连接 `https://work-learn-api.vercel.app/api/mcp` 时在 `Authorization: Bearer <token>` 头携带。
-- Hono 中间件校验 token，解析出 `user_id`，以该用户身份调用工具，数据访问受 Supabase RLS 约束。
+- Hono 中间件校验 token，解析出 `user_id`，再用 service-role context 调工具；所有查询都显式限定 `user_id`。
 
-### 第二版：OAuth
+### OAuth 2.1
 
-- 复用 Supabase Auth，在 Hono 上实现 MCP 规范的 OAuth 2.1 授权端点（`/api/mcp/oauth/*`）。
-- Agent 发起 `mcp` URL 连接后，浏览器打开 Work Learn 登录/授权页，授权完成回调 Agent。
-- token 自动刷新，用户无需手动复制。
-- 兼容 Claude Desktop、Cursor 等已支持 remote MCP + OAuth 的客户端。
+- 复用 Supabase Auth，在 Hono 上实现 MCP 规范的 OAuth 2.1 端点：
+  - `GET /api/mcp/.well-known/oauth-protected-resource`
+  - `GET /api/oauth/.well-known/oauth-authorization-server`
+  - `POST /api/oauth/register`
+  - `GET /api/oauth/authorize`
+  - `POST /api/oauth/decision`
+  - `POST /api/oauth/token`
+  - `GET /api/oauth/jwks`
+- Agent 连接 `https://work-learn-api.vercel.app/api/mcp` 后动态注册 client，浏览器跳到 Work Learn consent 页；用户登录并批准后回调 agent。
+- authorization code 必须携带 PKCE S256 `code_verifier`；access token 1 小时过期，refresh token 30 天过期并在刷新时轮转。
+- OAuth token 使用 HMAC HS256 签名，`OAUTH_JWT_SECRET` 只存在服务端。JWKS endpoint 返回空 key 集合，因为对称密钥不能公开。
+
+上线前必须执行 `supabase/migrations/007_oauth.sql`，并在 Vercel 配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`。
 
 ## 6. 代码组织
 
