@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
 import { createSupabaseUserClient, getBearerToken } from "./lib/supabase.js";
+import { mcpRoute } from "./routes/mcp.js";
 
 export const app = new Hono().basePath("/api");
 
 app.get("/health", (c) => c.json({ ok: true, service: "work-learn-api" }));
+
+app.route("/mcp", mcpRoute);
 
 const authenticate = async (authorization: string | undefined) => {
   const accessToken = getBearerToken(authorization);
