@@ -111,6 +111,32 @@ env = { WORK_LEARN_API_URL = "http://localhost:3000", WORK_LEARN_ACCESS_TOKEN = 
 
 这几个平台都支持本地命令型 MCP 服务器，字段名基本一致（`command`、`args`、`env`，部分支持 `cwd`）。请按各平台的实际配置格式套用方式 A 或方式 B，并把 `<Supabase user access token>` 换成你的 token。若某个平台不支持 `env` 字段，可先通过 shell 导出环境变量再启动服务器。
 
+## 安装 Skill（可选）
+
+MCP 提供工具能力，Skill 则告诉 Agent 何时保存、如何整理。两者配合使用；不装 Skill 时 MCP 工具仍然可用，只是需要你手动下指令（例如直接说"调用 save_material"）。
+
+前提：上面的 MCP 服务器已配置并连接成功。
+
+把仓库根目录的 `SKILL.md` 复制到对应 Agent 的 skills 目录，建议放在 `work-learn/` 子目录下：
+
+- Codex：`~/.codex/skills/work-learn/SKILL.md`
+- Claude Code：`~/.claude/skills/work-learn/SKILL.md`
+- CodeBuddy：`~/.codebuddy/skills/work-learn/SKILL.md`
+- 其他支持 Skill 的 Agent：查阅其文档，放入对应的 skills 目录
+
+例如（在仓库根目录执行）：
+
+```bash
+mkdir -p ~/.codex/skills/work-learn
+cp SKILL.md ~/.codex/skills/work-learn/SKILL.md
+```
+
+放置后重启 Agent。之后在对话里用自然语言触发即可：
+
+> 整理刚才这段对话，把有用的英语保存到我的语料库。
+
+Skill 会先挑选高价值表达、给出更自然的说法，并在你确认后才调用 `save_material` 保存。
+
 ## 验证
 
 配置完成后，在 Agent 里说：
