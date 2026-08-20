@@ -49,7 +49,7 @@ Agent 中调用 Skill
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
 - [x] API 部署到 Vercel（`work-learn-api`，health 返回 200）
-- [x] Web 部署到 Cloudflare Pages（`work-learn-web`，dev 预览已上线）
+- [x] Web 部署到 Cloudflare Pages（`work-learn`，dev 预览已上线）
 - [x] 配置 GitHub Actions 部署 workflow，并写入 Vercel / Supabase / Cloudflare 账号 Secrets
 - [x] 配置 `CLOUDFLARE_API_TOKEN`（Pages:Edit 权限）并写入 Secret
 - [x] push 到 `main` 后 GitHub Actions 自动部署到生产（Vercel API + Cloudflare Pages 均已上线）

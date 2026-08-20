@@ -23,14 +23,14 @@
   Vercel 项目环境变量（production / preview / development），不放入 workflow。
 - Remote MCP OAuth 还需要：
   - `WORK_LEARN_PUBLIC_API_URL`：生产 API origin，例如 `https://work-learn-api.vercel.app`
-  - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn-web.pages.dev`
+  - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn.pages.dev`
   - `OAUTH_JWT_SECRET`：OAuth access token 的 HMAC 密钥，可用 `openssl rand -base64 48` 生成
 
 ## Web（Cloudflare Pages）
 
-- Pages 项目：`work-learn-web`
+- Pages 项目：`work-learn`
 - 构建命令：`pnpm --filter @work-learn/web build`，输出目录 `apps/web/dist`
-- 生产域名：`https://work-learn-web.pages.dev`（push 到 `main` 后生效）
+- 生产域名：`https://work-learn.pages.dev`（push 到 `main` 后生效）
 
 ## Workflows
 
