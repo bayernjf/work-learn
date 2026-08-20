@@ -4,7 +4,7 @@ body { margin: 0; }
 .app-shell { width: min(1120px, calc(100% - 48px)); margin: 0 auto; }
 .app-header { height: 76px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #d7ded8; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 700; letter-spacing: -.04em; }
-.brand-mark { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 7px; color: #b8f23e; background: #171918; font-size: 13px; }
+.brand-logo { width: 25px; height: 25px; border-radius: 7px; object-fit: contain; display: block; }
 .status, .eyebrow { color: #68736b; font: 10px/1.2 ui-monospace, SFMono-Regular, monospace; letter-spacing: .12em; text-transform: uppercase; }
 .header-actions { display: flex; align-items: center; gap: 18px; }.text-button { padding: 0; border: 0; color: #68736b; background: transparent; cursor: pointer; font: 12px ui-monospace, SFMono-Regular, monospace; }.text-button:hover { color: #171918; }
 .welcome { padding: 112px 0 140px; }
