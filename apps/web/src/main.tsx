@@ -93,6 +93,7 @@ function App() {
         <p className="eyebrow">Your learning layer</p>
         <h1>Learn from the work already happening.</h1>
         <p className="lede">Your saved conversations, useful expressions, and next practice will live here.</p>
+        <AgentConnect session={session} />
         {loadingMaterials ? <div className="empty-state"><h2>Loading your corpus...</h2></div> : <><ReviewList reviews={reviews} onComplete={handleCompleteReview} />{materials.length === 0 ? <EmptyCorpus /> : <MaterialList materials={materials} />}</>}
       </section>
     </main>
@@ -111,6 +112,32 @@ function AuthScreen({ mode, email, password, message, error, onModeChange, onEma
 
 function EmptyCorpus() {
   return <div className="empty-state"><span className="empty-mark">+</span><h2>Your corpus starts with one conversation.</h2><p>Call the Learning Skill from an AI agent, then confirm what is worth keeping.</p><code>“整理刚才这段对话”</code></div>;
+}
+
+function AgentConnect({ session }: { session: Session }) {
+  const [copied, setCopied] = useState(false);
+  const token = session.access_token;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable */
+    }
+  };
+  return (
+    <details className="agent-connect">
+      <summary>Connect an agent (MCP access token)</summary>
+      <div className="agent-connect-body">
+        <p>Paste this token as <code>WORK_LEARN_ACCESS_TOKEN</code> in your agent&apos;s MCP config, along with <code>WORK_LEARN_API_URL=https://work-learn-api.vercel.app</code>.</p>
+        <div className="token-row">
+          <code className="token-value">{token}</code>
+          <button type="button" className="text-button" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function MaterialList({ materials }: { materials: LearningMaterial[] }) {
