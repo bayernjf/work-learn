@@ -57,7 +57,7 @@ Agent 中调用 Skill
 
 ## 接入分发待办
 
-- [x] 产出独立 `SKILL.md`（根目录），供支持 Skill 的 Agent 直接放入 skills 目录
+- [x] 产出独立 `SKILL.md`（`skills/work-learn/SKILL.md`），并提供 `scripts/install-skill.sh` 一键安装到所有检测到的 Agent skills 目录
 - [x] 落地页 `#get-started` 改为实质性接入引导：三步说明 + 可复制 MCP 配置 + SKILL.md/文档链接
 - [x] Web 端登录后提供 access token 折叠面板与一键复制（`Connect an agent`）
 - [ ] 提供 `npx` 一键安装脚本（如 `npx @work-learn/setup`），自动写入各 Agent 的 MCP 配置，免去手动复制 JSON

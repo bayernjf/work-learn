@@ -117,7 +117,23 @@ MCP 提供工具能力，Skill 则告诉 Agent 何时保存、如何整理。两
 
 前提：上面的 MCP 服务器已配置并连接成功。
 
-把仓库根目录的 `SKILL.md` 复制到对应 Agent 的 skills 目录，建议放在 `work-learn/` 子目录下：
+### 一键安装（推荐）
+
+脚本会自动检测本机所有支持 Skill 的 Agent（Codex、Claude Code、CodeBuddy、Cursor、OpenCode、Pi 等），把 Skill 装进对应的 skills 目录：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bayernjf/work-learn/main/scripts/install-skill.sh | bash
+```
+
+如果已 clone 仓库，也可以直接运行：
+
+```bash
+bash scripts/install-skill.sh
+```
+
+### 手动安装
+
+把仓库里 `skills/work-learn/SKILL.md` 复制到对应 Agent 的 skills 目录：
 
 - Codex：`~/.codex/skills/work-learn/SKILL.md`
 - Claude Code：`~/.claude/skills/work-learn/SKILL.md`
@@ -128,7 +144,7 @@ MCP 提供工具能力，Skill 则告诉 Agent 何时保存、如何整理。两
 
 ```bash
 mkdir -p ~/.codex/skills/work-learn
-cp SKILL.md ~/.codex/skills/work-learn/SKILL.md
+cp skills/work-learn/SKILL.md ~/.codex/skills/work-learn/SKILL.md
 ```
 
 放置后重启 Agent。之后在对话里用自然语言触发即可：
