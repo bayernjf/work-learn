@@ -115,26 +115,105 @@ function EmptyCorpus() {
 }
 
 function AgentConnect({ session }: { session: Session }) {
-  const [copied, setCopied] = useState(false);
+  const LANDING_URL = "https://work-learn.bayjf.com";
+  const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
+  const RAW_BASE = "https://raw.githubusercontent.com/bayernjf/work-learn/main";
+  const API_URL = "https://work-learn-api.vercel.app";
   const token = session.access_token;
-  const copy = async () => {
+
+  const mcpConfig = JSON.stringify(
+    {
+      mcpServers: {
+        "work-learn": {
+          command: "pnpm",
+          args: ["--filter", "@work-learn/mcp-server", "exec", "tsx", "src/server.ts"],
+          cwd: "/path/to/work-learn",
+          env: { WORK_LEARN_API_URL: API_URL, WORK_LEARN_ACCESS_TOKEN: token },
+        },
+      },
+    },
+    null,
+    2
+  );
+
+  const skillInstalls = [
+    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: "Installs into every detected skills folder." },
+    { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: "Restart Codex after installing." },
+    { id: "claude", label: "Claude", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: "Restart Claude Code after installing." },
+    { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: "CLI and desktop share this folder." },
+    { id: "cursor", label: "Cursor", command: `mkdir -p ~/.cursor/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.cursor/skills/work-learn/SKILL.md`, note: "Restart Cursor after installing." },
+    { id: "opencode", label: "OpenCode", command: `mkdir -p ~/.config/opencode/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.config/opencode/skills/work-learn/SKILL.md`, note: "Restart OpenCode after installing." },
+    { id: "pi", label: "Pi", command: `mkdir -p ~/.pi/agent/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.pi/agent/skills/work-learn/SKILL.md`, note: "Restart Pi after installing." },
+  ] as const;
+
+  const [activeAgent, setActiveAgent] = useState<(typeof skillInstalls)[number]["id"]>("universal");
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const active = skillInstalls.find((item) => item.id === activeAgent) ?? skillInstalls[0];
+
+  const copy = async (id: string, value: string) => {
     try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      await navigator.clipboard.writeText(value);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1800);
     } catch {
       /* clipboard unavailable */
     }
   };
+
   return (
-    <details className="agent-connect">
-      <summary>Connect an agent (MCP access token)</summary>
+    <details className="agent-connect" open>
+      <summary>Connect an agent</summary>
       <div className="agent-connect-body">
-        <p>Paste this token as <code>WORK_LEARN_ACCESS_TOKEN</code> in your agent&apos;s MCP config, along with <code>WORK_LEARN_API_URL=https://work-learn-api.vercel.app</code>.</p>
-        <div className="token-row">
-          <code className="token-value">{token}</code>
-          <button type="button" className="text-button" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+        <p>
+          New here? Read the{" "}
+          <a className="inline-link" href={LANDING_URL} target="_blank" rel="noopener noreferrer">
+            Work Learn landing page
+            <span className="external-icon" aria-hidden="true">↗</span>
+          </a>{" "}
+          for the full product walkthrough.
+        </p>
+
+        <p className="connect-step">1. Add the MCP server. Your access token is already filled in.</p>
+        <div className="code-block">
+          <pre className="code-pre">{mcpConfig}</pre>
+          <button type="button" className="copy-chip" onClick={() => copy("mcp", mcpConfig)}>
+            {copiedId === "mcp" ? "Copied" : "Copy"}
+          </button>
         </div>
+        <p className="connect-hint">
+          The token is short-lived. For long-running agents, also set <code>WORK_LEARN_REFRESH_TOKEN</code>,
+          {" "}<code>SUPABASE_URL</code>, and <code>SUPABASE_ANON_KEY</code> as shown in the{" "}
+          <a className="inline-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.
+        </p>
+
+        <p className="connect-step">2. Install the Skill (optional). It tells your agent when to save.</p>
+        <div className="install-card">
+          <div className="agent-tabs" role="tablist" aria-label="Install Skill per agent">
+            {skillInstalls.map((agent) => (
+              <button
+                key={agent.id}
+                type="button"
+                role="tab"
+                aria-selected={agent.id === activeAgent}
+                className={agent.id === activeAgent ? "agent-tab active" : "agent-tab"}
+                onClick={() => setActiveAgent(agent.id)}
+              >
+                {agent.label}
+              </button>
+            ))}
+          </div>
+          <div className="code-block compact">
+            <code className="code-line">{active.command}</code>
+            <button type="button" className="copy-chip" onClick={() => copy(`skill-${active.id}`, active.command)}>
+              {copiedId === `skill-${active.id}` ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="agent-note">{active.note}</p>
+        </div>
+
+        <p className="connect-hint">
+          Restart your agent, then ask: <code>&ldquo;Save the useful English from this conversation.&rdquo;</code>
+        </p>
       </div>
     </details>
   );
