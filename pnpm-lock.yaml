@@ -23,6 +23,9 @@ importers:
       '@work-learn/learning-core':
         specifier: workspace:*
         version: link:../../packages/learning-core
+      '@work-learn/mcp-server':
+        specifier: workspace:*
+        version: link:../../packages/mcp-server
       '@work-learn/shared-schema':
         specifier: workspace:*
         version: link:../../packages/shared-schema
@@ -124,6 +127,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.12.0
         version: 1.30.0(zod@3.25.76)
+      '@supabase/supabase-js':
+        specifier: ^2.48.1
+        version: 2.112.3
       '@work-learn/shared-schema':
         specifier: workspace:*
         version: link:../shared-schema
