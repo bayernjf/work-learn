@@ -136,6 +136,8 @@ function AgentConnect({ session }: { session: Session }) {
     2
   );
 
+  const setupCommand = `npx -y @work-learn/setup --token "${token}"`;
+
   const skillInstalls = [
     { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: "Installs into every detected skills folder." },
     { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: "Restart Codex after installing." },
@@ -173,15 +175,32 @@ function AgentConnect({ session }: { session: Session }) {
           for the full product walkthrough.
         </p>
 
-        <p className="connect-step">1. Add the MCP server. Your access token is already filled in.</p>
+        <p className="connect-step">1. Run the installer. Your access token is already filled in.</p>
+        <div className="code-block compact">
+          <code className="code-line">{setupCommand}</code>
+          <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
+            {copiedId === "setup" ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <p className="connect-hint">
+          The installer detects Codex, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the
+          correct MCP config for each one (with a backup), and can install the Skill too. When it
+          asks for the repo path, point it at your local <code>work-learn</code> clone.
+        </p>
+
+        <details className="manual-config">
+          <summary>Prefer to paste the config yourself?</summary>
         <div className="code-block">
           <pre className="code-pre">{mcpConfig}</pre>
           <button type="button" className="copy-chip" onClick={() => copy("mcp", mcpConfig)}>
             {copiedId === "mcp" ? "Copied" : "Copy"}
           </button>
         </div>
+        </details>
         <p className="connect-hint">
-          The token is short-lived. For long-running agents, also set <code>WORK_LEARN_REFRESH_TOKEN</code>,
+          The token is short-lived. For long-running agents, pass <code>--refresh-token</code>,
+          {" "}<code>--supabase-url</code>, and <code>--supabase-anon-key</code> to the installer (or set{" "}
+          <code>WORK_LEARN_REFRESH_TOKEN</code>,
           {" "}<code>SUPABASE_URL</code>, and <code>SUPABASE_ANON_KEY</code> as shown in the{" "}
           <a className="inline-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.
         </p>
