@@ -61,7 +61,7 @@ Agent 中调用 Skill
 - [x] 落地页 `#get-started` 改为实质性接入引导：三步说明 + 可复制 MCP 配置 + SKILL.md/文档链接
 - [x] Web 端登录后提供 access token 折叠面板与一键复制（`Connect an agent`）
 - [x] 提供 `npx` 一键安装脚本（`npx @work-learn/setup`），自动探测并写入 Codex/Claude/CodeBuddy/Cursor/OpenCode 的 MCP 配置，写入前备份，可选顺带安装 Skill；发布到 npm 后即可直接用（`packages/setup`，见 `docs/mcp-agent-setup.md`）
-  - [ ] 发布 `@work-learn/setup` 到 npm（需本机 `npm login` 后执行 `pnpm --filter @work-learn/setup build && cd packages/setup && npm publish --access public`）；发布后 web 端复制的 npx 命令才能真正跑通
+  - [x] 发布 `@work-learn/setup@0.1.0` 到 npm（公开包，页面：https://www.npmjs.com/package/@work-learn/setup ）；`npx -y @work-learn/setup`、`pnpm dlx @work-learn/setup` 均可直接运行
 - [ ] 实现远程 MCP（`/api/mcp`，Streamable HTTP + Bearer/OAuth），让普通用户通过 URL 连接 Agent，方案见 [docs/remote-mcp.md](docs/remote-mcp.md)
 
 ## 当前关键决策
