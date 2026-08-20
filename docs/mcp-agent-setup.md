@@ -1,5 +1,11 @@
 # MCP Agent 接入配置
 
+本文档描述的是**本地 stdio MCP**（开发者/自托管方式）：用户在本机运行 MCP 进程并手动配置 token。
+
+面向普通用户的**远程 MCP**（在 Agent 里填一条 URL，经授权后连接，无需安装）正在规划中，方案见 [远程 MCP 方案](remote-mcp.md)。
+
+支持远程 MCP 的客户端可在该功能上线后直接连接 `https://work-learn-api.vercel.app/api/mcp`；不支持的客户端继续使用本文的本地方式。
+
 把 Work Learn MCP 服务器接入本地 Agent，让 Agent 能调用 `create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 
 ## 前置条件
