@@ -1,5 +1,7 @@
 # 远程 MCP 方案
 
+> 状态：第一版（Bearer token）已上线。`POST /api/mcp` 使用无状态 Streamable HTTP（`enableJsonResponse`，不维持 SSE 长连接），在 Vercel Functions 上即起即销。Personal Access Token 管理与 OAuth 自动授权为后续版本。
+
 ## 1. 背景
 
 当前 `packages/mcp-server` 只实现了 stdio transport：用户必须在本机 clone 仓库、安装 Node/pnpm、手动获取 Supabase access token 并编辑各 Agent 的配置文件。这条路对开发者成立，但对“通过网页访问 Work Learn 的普通用户”不成立——浏览器无法在用户机器上 spawn 本地进程，也无法修改 Claude、Cursor 等客户端的 MCP 配置。

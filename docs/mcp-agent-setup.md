@@ -2,9 +2,27 @@
 
 本文档描述的是**本地 stdio MCP**（开发者/自托管方式）：用户在本机运行 MCP 进程并手动配置 token。
 
-面向普通用户的**远程 MCP**（在 Agent 里填一条 URL，经授权后连接，无需安装）正在规划中，方案见 [远程 MCP 方案](remote-mcp.md)。
+面向普通用户的**远程 MCP**（在 Agent 里填一条 URL，经授权后连接，无需本地 clone 或安装）已上线第一版，方案见 [远程 MCP 方案](remote-mcp.md)。不支持远程 MCP 的客户端继续使用本文的本地 stdio 方式。
 
-支持远程 MCP 的客户端可在该功能上线后直接连接 `https://work-learn-api.vercel.app/api/mcp`；不支持的客户端继续使用本文的本地方式。
+## 远程 MCP（推荐，最简单）
+
+端点（Streamable HTTP，无状态）：
+
+```text
+https://work-learn-api.vercel.app/api/mcp
+```
+
+在支持远程 MCP 的 Agent（Claude Desktop、Cursor 等）里添加该 URL，并在请求头携带：
+
+```text
+Authorization: Bearer <your-access-token>
+```
+
+其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里复制的 Supabase access token。
+
+注意：该 token 是短期 JWT（约 1 小时过期）。第一版用它直接接入；长期有效的 Personal Access Token（生成/撤销）和 OAuth 自动授权将在后续版本提供。需要长期免维护的用户，目前请使用下面的本地 stdio + refresh token 方式。
+
+远程端点与本地 MCP 提供完全相同的 5 个工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 
 把 Work Learn MCP 服务器接入本地 Agent，让 Agent 能调用 `create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 
