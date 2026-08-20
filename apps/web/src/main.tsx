@@ -4,6 +4,7 @@ import type { Session } from "@supabase/supabase-js";
 import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
 import { isSupabaseConfigured, supabase } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
+import { OAuthConsent } from "./components/OAuthConsent";
 import "./styles.css";
 
 function App() {
@@ -275,4 +276,10 @@ function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete
   return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">Today</p><h2>Review what is still useful.</h2></div><span className="review-count">{reviews.length} due</span></div>{reviews.length === 0 ? <p className="review-empty">No reviews due. Keep working, then save the next useful expression.</p> : <div className="review-list">{reviews.map((review) => <article className="review-card" key={review.id}><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? "Saved expression"}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>Mark mastered</button></article>)}</div>}</section>;
 }
 
-createRoot(document.getElementById("root")!).render(<StrictMode><App /></StrictMode>);
+const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    {isOAuthConsentRoute ? <OAuthConsent /> : <App />}
+  </StrictMode>
+);
