@@ -1,5 +1,6 @@
 import { createSupabaseServiceClient, createSupabaseUserClient, getBearerToken } from "./supabase.js";
 import { hashToken, isPat } from "./pat.js";
+import { verifyOAuthToken } from "./oauth.js";
 
 export type AuthResult =
   | { ok: true; userId: string }
@@ -11,6 +12,7 @@ export type AuthResult =
  * Accepts either:
  *  - a Supabase user JWT (validated with getUser), or
  *  - a Work Learn personal access token (looked up by hash via the service role).
+ *  - a Work Learn OAuth access token (signed HS256 JWT).
  */
 export const authenticate = async (authorization: string | undefined): Promise<AuthResult> => {
   const token = getBearerToken(authorization);
@@ -33,6 +35,9 @@ export const authenticate = async (authorization: string | undefined): Promise<A
     await admin.from("personal_access_tokens").update({ last_used_at: new Date().toISOString() }).eq("id", data.id);
     return { ok: true, userId: data.user_id as string };
   }
+
+  const oauthToken = verifyOAuthToken(token);
+  if (oauthToken) return { ok: true, userId: oauthToken.sub };
 
   const supabase = createSupabaseUserClient(token);
   const { data, error } = await supabase.auth.getUser(token);
