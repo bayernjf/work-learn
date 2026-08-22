@@ -8,7 +8,7 @@ export default {
       const target = new URL(`${API_ORIGIN}${url.pathname}${url.search}`);
       const headers = new Headers(request.headers);
       headers.delete("host");
-      return fetch(
+      const response = await fetch(
         new Request(target, {
           method: request.method,
           headers,
@@ -16,8 +16,26 @@ export default {
           redirect: "manual"
         })
       );
+      const apiHeaders = new Headers(response.headers);
+      apiHeaders.set("Cache-Control", "no-store");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: apiHeaders
+      });
     }
 
-    return env.ASSETS.fetch(request);
+    const response = await env.ASSETS.fetch(request);
+    if (request.mode === "navigate" || (request.headers.get("accept") ?? "").includes("text/html")) {
+      const htmlHeaders = new Headers(response.headers);
+      htmlHeaders.set("Cache-Control", "no-store");
+      return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: htmlHeaders
+      });
+    }
+
+    return response;
   }
 };
