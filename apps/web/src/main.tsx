@@ -1,4 +1,4 @@
-import { FormEvent, StrictMode, useEffect, useState } from "react";
+import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
@@ -18,8 +18,14 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [authError, setAuthError] = useState("");
   const [remember, setRemember] = useState(true);
   const [materials, setMaterials] = useState<LearningMaterial[]>([]);
+  const [results, setResults] = useState<LearningMaterial[] | null>(null);
+  const [query, setQuery] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [topic, setTopic] = useState<string | null>(null);
+  const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const searchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -36,6 +42,47 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       .catch((error: unknown) => setAuthError(error instanceof Error ? error.message : "Could not load materials"))
       .finally(() => setLoadingMaterials(false));
   }, [session]);
+
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (!session || !trimmed) { setResults(null); setSearching(false); return; }
+
+    setSearching(true);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void fetchMaterials(session, trimmed)
+        .then((result) => { if (!cancelled) setResults(result.data); })
+        .catch(() => { if (!cancelled) setResults([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 220);
+
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [query, session]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        searchInput.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  const topics = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const material of materials) counts.set(material.topic, (counts.get(material.topic) ?? 0) + 1);
+    return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [materials]);
+
+  const visible = useMemo(() => {
+    const base = results ?? materials;
+    const filtered = topic ? base.filter((material) => material.topic === topic) : base;
+    return [...filtered].sort((a, b) => sort === "newest"
+      ? b.created_at.localeCompare(a.created_at)
+      : a.created_at.localeCompare(b.created_at));
+  }, [results, materials, topic, sort]);
 
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -60,6 +107,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     await supabase?.auth.signOut();
     setRememberMe(false);
     setMaterials([]);
+    setResults(null);
+    setQuery("");
+    setTopic(null);
     setReviews([]);
   };
 
@@ -96,17 +146,62 @@ function App({ supabase }: { supabase: SupabaseClient }) {
         <div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div>
         <div className="header-actions"><span className="status">{session.user.email}</span><button className="text-button" onClick={signOut}>Sign out</button></div>
       </header>
-      <section className="welcome">
-        <p className="eyebrow">Your learning layer</p>
-        <h1>Learn from the work already happening.</h1>
-        <p className="lede">Your saved conversations, useful expressions, and next practice will live here.</p>
-        <AgentConnect session={session} />
-        <div id="corpus">
-          {loadingMaterials ? <CorpusSkeleton /> : <><ReviewList reviews={reviews} onComplete={handleCompleteReview} />{materials.length === 0 ? <EmptyCorpus /> : <MaterialList materials={materials} />}</>}
+      <section className="desk" id="corpus">
+        <div className="desk-title">
+          <h1>Your corpus</h1>
+          <span>{corpusSummary(materials)}</span>
         </div>
+        {loadingMaterials ? <CorpusSkeleton /> : materials.length === 0 ? <EmptyCorpus /> : <>
+          <label className="search">
+            <SearchIcon />
+            <input
+              ref={searchInput}
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search expressions, topics, corrections…"
+              aria-label="Search your corpus"
+            />
+            <span className="kbd" aria-hidden="true">⌘K</span>
+          </label>
+          <div className="filters">
+            <div className="facets">
+              <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>All <b>{materials.length}</b></button>
+              {topics.map(([name, count]) => <button key={name} className={topic === name ? "facet on" : "facet"} onClick={() => setTopic(name)}>{name} <b>{count}</b></button>)}
+            </div>
+            <div className="sort">
+              <button className={sort === "newest" ? "on" : ""} onClick={() => setSort("newest")}>Newest</button>
+              <button className={sort === "oldest" ? "on" : ""} onClick={() => setSort("oldest")}>Oldest</button>
+            </div>
+          </div>
+          {searching ? <CorpusSkeleton /> : visible.length === 0
+            ? <p className="corpus-empty">Nothing matches {query.trim() ? <>“{query.trim()}”</> : "this topic"} yet.</p>
+            : <MaterialList materials={visible} />}
+        </>}
       </section>
+      <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
+      <AgentConnect session={session} />
     </main>
   );
+}
+
+function SearchIcon() {
+  return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>;
+}
+
+function corpusSummary(materials: LearningMaterial[]) {
+  if (materials.length === 0) return "Nothing saved yet";
+  const sources = new Set(materials.map((material) => material.source)).size;
+  let newest = "";
+  for (const material of materials) if (material.created_at > newest) newest = material.created_at;
+  return `${materials.length} saved · ${sources} source${sources === 1 ? "" : "s"} · last ${relativeTime(newest)}`;
+}
+
+function relativeTime(iso: string) {
+  const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h ago`;
+  return `${Math.round(minutes / (60 * 24))}d ago`;
 }
 
 function CorpusSkeleton() {
@@ -280,7 +375,7 @@ function AgentConnect({ session }: { session: Session }) {
 }
 
 function MaterialList({ materials }: { materials: LearningMaterial[] }) {
-  return <section className="material-section"><div className="section-heading"><div><p className="eyebrow">Corpus</p><h2>Everything you kept.</h2></div><span className="review-count">{materials.length} saved</span></div><div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? "Saved learning material"}</h2><p>{material.original_text}</p><span>{new Date(material.created_at).toLocaleDateString()}</span></article>)}</div></section>;
+  return <div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? "Saved learning material"}</h2><p>{material.original_text}</p><span>{new Date(material.created_at).toLocaleDateString()}</span></article>)}</div>;
 }
 
 function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {

@@ -62,11 +62,9 @@
 
 - `CLOUDFLARE_API_TOKEN`（已配置，具备 Cloudflare Pages 的 `Pages:Edit` 权限）
 - `CLOUDFLARE_ACCOUNT_ID`（`23afa7f0233653f87dc9ceafd02eb79a`）
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
-- `VITE_WORK_LEARN_API_URL`
-- 这些 Web 构建变量用于 CI 构建覆盖；其中 `VITE_WORK_LEARN_API_URL` 应指向生产 API
-  （`https://work-learn-api.vercel.app`），OAuth consent 页会调用 `/api/oauth/decision`。
+- Web 构建**不需要**任何 `VITE_*` 变量：浏览器只走同源 `/api/*`，由 `_worker.js` 代理到
+  Vercel，Supabase 配置在运行时从 `/api/config` 取。曾经注入的 `VITE_WORK_LEARN_API_URL`
+  会被内联进产物并把线上请求指向 `localhost`，已删除，不要再加回来。
 
 ## 部署触发
 
