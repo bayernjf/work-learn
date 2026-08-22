@@ -31,6 +31,10 @@
 - Pages 项目：`work-learn`
 - 构建命令：`pnpm --filter @work-learn/web build`，输出目录 `apps/web/dist`
 - 生产域名：`https://work-learn.pages.dev`（push 到 `main` 后生效）
+- Web 启动时会请求 API 的 `GET /api/config` 获取浏览器端公开 Supabase 配置（URL + anon key），
+  因此不会因为漏配 `VITE_SUPABASE_*` 构建变量而显示 “Supabase is not configured yet”。
+- `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 仍可作为本地/CI 构建覆盖项，但生产主要依赖 API
+  返回的公开配置；`SUPABASE_URL`、`SUPABASE_ANON_KEY` 必须在 Vercel 配置正确。
 
 ## Workflows
 
@@ -53,7 +57,8 @@
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_WORK_LEARN_API_URL`
-- `VITE_WORK_LEARN_API_URL` 应指向生产 API（`https://work-learn-api.vercel.app`），OAuth consent 页会调用 `/api/oauth/decision`。
+- 这些 Web 构建变量用于 CI 构建覆盖；其中 `VITE_WORK_LEARN_API_URL` 应指向生产 API
+  （`https://work-learn-api.vercel.app`），OAuth consent 页会调用 `/api/oauth/decision`。
 
 ## 部署触发
 
