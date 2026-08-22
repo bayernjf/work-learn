@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { locales, type Locale, type Strings } from "./strings";
+import { locales, LOCALE_STORAGE_KEY as STORAGE_KEY, type Locale, type Strings } from "./strings";
 
-const STORAGE_KEY = "work-learn.locale";
 const DATE_LOCALES: Record<Locale, string> = { en: "en-US", zh: "zh-CN" };
 
 type I18n = {

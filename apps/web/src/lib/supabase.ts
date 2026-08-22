@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { activeStrings } from "../i18n/strings";
 
 export type PublicConfig = {
   supabaseUrl: string;
@@ -57,7 +58,7 @@ export const bootstrapSupabase = async (): Promise<BootstrapResult> => {
 
   try {
     const response = await fetch(`/api/config`);
-    if (!response.ok) throw new Error("Could not load Work Learn configuration");
+    if (!response.ok) throw new Error(activeStrings().errors.config);
     const result = (await response.json()) as { data?: PublicConfig; error?: string };
     if (!result.data?.supabaseUrl || !result.data.supabaseAnonKey) {
       throw new Error(result.error ?? "Supabase configuration is incomplete");

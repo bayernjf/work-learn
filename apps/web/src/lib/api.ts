@@ -1,4 +1,5 @@
 import type { Session } from "@supabase/supabase-js";
+import { activeStrings } from "../i18n/strings";
 
 export type LearningMaterial = {
   id: string;
@@ -24,7 +25,7 @@ export const fetchMaterials = async (session: Session, query = "") => {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
 
-  if (!response.ok) throw new Error("Could not load your learning materials");
+  if (!response.ok) throw new Error(activeStrings().errors.materials);
   return (await response.json()) as { data: LearningMaterial[] };
 };
 
@@ -32,7 +33,7 @@ export const fetchReviews = async (session: Session) => {
   const response = await fetch(`/api/reviews`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
-  if (!response.ok) throw new Error("Could not load your review items");
+  if (!response.ok) throw new Error(activeStrings().errors.reviews);
   return (await response.json()) as { data: ReviewItem[] };
 };
 
@@ -41,7 +42,7 @@ export const completeReview = async (session: Session, reviewId: string) => {
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
-  if (!response.ok) throw new Error("Could not complete this review");
+  if (!response.ok) throw new Error(activeStrings().errors.completeReview);
 };
 
 export type PersonalAccessToken = {
@@ -60,7 +61,7 @@ export const fetchPersonalAccessTokens = async (session: Session) => {
   const response = await fetch(`/api/tokens`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
-  if (!response.ok) throw new Error("Could not load personal access tokens");
+  if (!response.ok) throw new Error(activeStrings().errors.tokensLoad);
   return (await response.json()) as { data: PersonalAccessToken[] };
 };
 
@@ -70,7 +71,7 @@ export const createPersonalAccessToken = async (session: Session, name: string) 
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
     body: JSON.stringify({ name })
   });
-  if (!response.ok) throw new Error("Could not create personal access token");
+  if (!response.ok) throw new Error(activeStrings().errors.tokenCreate);
   return (await response.json()) as { data: CreatedPersonalAccessToken };
 };
 
@@ -79,5 +80,5 @@ export const revokePersonalAccessToken = async (session: Session, id: string) =>
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
-  if (!response.ok) throw new Error("Could not revoke personal access token");
+  if (!response.ok) throw new Error(activeStrings().errors.tokenRevoke);
 };

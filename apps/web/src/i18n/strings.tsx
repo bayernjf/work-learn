@@ -53,6 +53,12 @@ export const en = {
   errors: {
     loadCorpus: "Could not load your corpus",
     completeReview: "Could not complete this review",
+    config: "Could not load Work Learn configuration",
+    materials: "Could not load your learning materials",
+    reviews: "Could not load your review items",
+    tokensLoad: "Could not load personal access tokens",
+    tokenCreate: "Could not create personal access token",
+    tokenRevoke: "Could not revoke personal access token",
   },
 
   empty: {
@@ -198,6 +204,12 @@ export const zh: Strings = {
   errors: {
     loadCorpus: "语料加载失败",
     completeReview: "标记复习完成失败",
+    config: "读取 Work Learn 配置失败",
+    materials: "学习材料加载失败",
+    reviews: "复习列表加载失败",
+    tokensLoad: "personal access token 列表加载失败",
+    tokenCreate: "personal access token 创建失败",
+    tokenRevoke: "personal access token 吊销失败",
   },
 
   empty: {
@@ -294,3 +306,10 @@ export const zh: Strings = {
 
 export const locales = { en, zh };
 export type Locale = keyof typeof locales;
+
+export const LOCALE_STORAGE_KEY = "work-learn.locale";
+
+/** For modules that throw outside the React tree and cannot use the hook. */
+export function activeStrings(): Strings {
+  return localStorage.getItem(LOCALE_STORAGE_KEY) === "zh" ? zh : en;
+}
