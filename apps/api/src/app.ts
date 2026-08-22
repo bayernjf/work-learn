@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, materialColumns, saveMaterialInputSchema } from "@work-learn/shared-schema";
 import { createSupabaseUserClient, getBearerToken } from "./lib/supabase.js";
 import { mcpRoute } from "./routes/mcp.js";
 import { patsRoute } from "./routes/pats.js";
@@ -80,7 +80,7 @@ app.post("/materials", async (c) => {
       practice_prompts: parsed.data.practicePrompts,
       tags: parsed.data.tags
     })
-    .select()
+    .select(materialColumns)
     .single();
 
   if (error) return c.json({ error: "Could not save learning material", details: error.message }, 500);
@@ -100,16 +100,20 @@ app.get("/materials", async (c) => {
   if (!auth) return c.json({ error: "Unauthorized" }, 401);
 
   const query = c.req.query("q")?.trim();
-  let request = auth.supabase.from("learning_materials").select("*").order("created_at", { ascending: false });
   if (query) {
-    const { data: rpcData, error: rpcError } = await auth.supabase.rpc("search_learning_materials", { p_user: auth.user.id, p_query: query });
+    const { data: rpcData, error: rpcError } = await auth.supabase
+      .rpc("search_learning_materials", { p_user: auth.user.id, p_query: query })
+      .select(materialColumns);
     if (rpcError) return c.json({ error: "Could not load learning materials", details: rpcError.message }, 500);
     return c.json({ data: rpcData ?? [], query });
   }
 
-  const { data, error } = await request;
+  const { data, error } = await auth.supabase
+    .from("learning_materials")
+    .select(materialColumns)
+    .order("created_at", { ascending: false });
   if (error) return c.json({ error: "Could not load learning materials", details: error.message }, 500);
-  return c.json({ data: data ?? [], query: query ?? "" });
+  return c.json({ data: data ?? [], query: "" });
 });
 
 app.get("/reviews", async (c) => {
@@ -118,7 +122,7 @@ app.get("/reviews", async (c) => {
 
   const { data, error } = await auth.supabase
     .from("review_items")
-    .select("*, learning_materials(*)")
+    .select(`*, learning_materials(${materialColumns})`)
     .eq("status", "pending")
     .lte("due_at", new Date().toISOString())
     .order("due_at", { ascending: true });

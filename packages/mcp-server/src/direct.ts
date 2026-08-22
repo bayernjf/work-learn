@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, materialColumns, saveMaterialInputSchema } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
 
 type DbResult = { data: unknown; error?: { message: string } | null };
@@ -45,7 +45,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
         practice_prompts: parsed.practicePrompts,
         tags: parsed.tags
       })
-      .select()
+      .select(materialColumns)
       .single()
       .then(ok);
 
@@ -63,15 +63,14 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   async searchCorpus(query) {
     const trimmed = query?.trim();
     if (trimmed) {
-      const result = await supabase.rpc("search_learning_materials", {
-        p_user: userId,
-        p_query: trimmed
-      });
+      const result = await supabase
+        .rpc("search_learning_materials", { p_user: userId, p_query: trimmed })
+        .select(materialColumns);
       return ok(result) ?? [];
     }
     const result = await supabase
       .from("learning_materials")
-      .select("*")
+      .select(materialColumns)
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
     return ok(result) ?? [];
@@ -80,7 +79,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   async getReviewItems() {
     const result = await supabase
       .from("review_items")
-      .select("*, learning_materials(*)")
+      .select(`*, learning_materials(${materialColumns})`)
       .eq("user_id", userId)
       .eq("status", "pending")
       .lte("due_at", new Date().toISOString())

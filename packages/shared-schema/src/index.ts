@@ -59,6 +59,12 @@ export const saveMaterialInputSchema = learningMaterialSchema
     practicePrompts: input.practicePrompts.map((value) => redactSecrets(value).text)
   }));
 
+// The columns the API returns for a material. Explicit rather than "*", because
+// the table also carries search_text -- a denormalised copy of every searchable
+// field, kept for the trigram index. Selecting "*" would double every payload.
+export const materialColumns =
+  "id,session_id,source,topic,original_text,explanation,useful_expressions,corrections,vocabulary,practice_prompts,tags,created_at";
+
 export type Source = z.infer<typeof sourceSchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { materialColumns } from "@work-learn/shared-schema";
 import { createDirectContext } from "./direct.js";
 
-type Call = { table: string; verb: string; filters: Array<[string, unknown]> };
+type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string };
 
 /**
  * Records the query chain instead of talking to Postgres. The service role
@@ -15,9 +16,13 @@ function stubClient() {
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["select", "order", "lte", "single"]) {
+    for (const method of ["order", "lte", "single"]) {
       builder[method] = () => builder;
     }
+    builder.select = (columns?: string) => {
+      call.columns = columns;
+      return builder;
+    };
     builder.eq = (column: string, value: unknown) => {
       call.filters.push([column, value]);
       return builder;
@@ -27,30 +32,28 @@ function stubClient() {
     return builder;
   };
 
+  const record = (table: string, verb: string) => {
+    const call: Call = { table, verb, filters: [] };
+    calls.push(call);
+    return call;
+  };
+
   const client = {
     from(table: string) {
       return {
-        select: (...args: unknown[]) => {
-          const call: Call = { table, verb: "select", filters: [] };
-          calls.push(call);
-          void args;
+        select: (columns?: string) => {
+          const call = record(table, "select");
+          call.columns = columns;
           return chain(call);
         },
-        update: () => {
-          const call: Call = { table, verb: "update", filters: [] };
-          calls.push(call);
-          return chain(call);
-        },
-        insert: () => {
-          const call: Call = { table, verb: "insert", filters: [] };
-          calls.push(call);
-          return chain(call);
-        }
+        update: () => chain(record(table, "update")),
+        insert: () => chain(record(table, "insert"))
       };
     },
     rpc: (name: string, params: Record<string, unknown>) => {
-      calls.push({ table: name, verb: "rpc", filters: Object.entries(params) });
-      return Promise.resolve({ data: [], error: null });
+      const call = record(name, "rpc");
+      call.filters.push(...Object.entries(params));
+      return chain(call);
     }
   };
 
@@ -86,4 +89,22 @@ test("markMastered cannot complete another user's review item", async () => {
   await createDirectContext(client, USER).markMastered("review-owned-by-someone-else");
   assert.equal(calls[0]?.verb, "update");
   assert.ok(calls[0]?.filters.some(([column, value]) => column === "user_id" && value === USER));
+});
+
+test("no read hands the internal search column to a client", async () => {
+  const { client, calls } = stubClient();
+  const ctx = createDirectContext(client, USER);
+  await ctx.searchCorpus(undefined);
+  await ctx.searchCorpus("shipping");
+  await ctx.getReviewItems();
+
+  const columns = calls.map((call) => call.columns);
+  assert.equal(columns.length, 3);
+  for (const selected of columns) {
+    assert.ok(selected, "every read must name its columns rather than selecting *");
+    assert.ok(!selected.includes("search_text"), `search_text leaked: ${selected}`);
+  }
+  assert.equal(columns[0], materialColumns);
+  assert.equal(columns[1], materialColumns);
+  assert.ok(columns[2]?.includes(`learning_materials(${materialColumns})`));
 });
