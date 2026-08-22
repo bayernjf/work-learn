@@ -55,6 +55,7 @@ Agent 中调用 Skill
 - [x] push 到 `main` 后 GitHub Actions 自动部署到生产（Vercel API + Cloudflare Pages 均已上线）
 - [x] Cloudflare Pages 项目改名为 `work-learn`，生产默认域名为 `https://work-learn.pages.dev`
 - [x] Web 改为运行时从 `/api/config` 拉取公开 Supabase 配置，修复 Pages 漏配 `VITE_SUPABASE_*` 导致的白屏
+- [x] Pages 同源代理 `/api/*` 到 Vercel；`vercel.json` 补 `/api/*` routes，修复生产 API 平台级 404
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 接入分发待办
