@@ -282,9 +282,9 @@ function EmptyCorpus() {
 
 function AgentConnect({ session, initialOpen }: { session: Session; initialOpen: boolean }) {
   const { t } = useI18n();
-  const LANDING_URL = "https://work-learn.bayjf.com";
-  const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
-  const RAW_BASE = "https://raw.githubusercontent.com/bayernjf/work-learn/main";
+  // Served by this app (see vite.config.ts) rather than raw.githubusercontent.com,
+  // which is unreachable on the networks these commands get pasted into.
+  const RAW_BASE = window.location.origin;
   const API_URL = "https://work-learn-api.vercel.app";
   const [remoteToken, setRemoteToken] = useState<string | null>(null);
   const token = remoteToken ?? session.access_token;
@@ -309,7 +309,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const authHeader = `Authorization: Bearer ${token}`;
 
   const skillInstalls = [
-    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: t.connect.notes.universal },
+    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal },
     { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: t.connect.notes.codex },
     { id: "claude", label: "Claude", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: t.connect.notes.claude },
     { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: t.connect.notes.codebuddy },

@@ -174,8 +174,10 @@ MCP 提供工具能力，Skill 则告诉 Agent 何时保存、如何整理。两
 脚本会自动检测本机所有支持 Skill 的 Agent（Codex、Claude Code、CodeBuddy、Cursor、OpenCode、Pi 等），把 Skill 装进对应的 skills 目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bayernjf/work-learn/main/scripts/install-skill.sh | bash
+curl -fsSL https://work-learn.pages.dev/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=https://work-learn.pages.dev bash
 ```
+
+> 命令从 Work Learn 站点自身取脚本，而不是 `raw.githubusercontent.com` —— 后者在部分网络下无法访问。
 
 如果已 clone 仓库，也可以直接运行：
 

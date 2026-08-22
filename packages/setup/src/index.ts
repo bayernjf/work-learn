@@ -14,8 +14,6 @@ import {
 } from "./agents.js";
 
 const DEFAULT_API_URL = "https://work-learn-api.vercel.app";
-const SKILL_INSTALL_CMD =
-  "curl -fsSL https://raw.githubusercontent.com/bayernjf/work-learn/main/scripts/install-skill.sh | bash";
 
 type CliFlags = {
   token?: string;
@@ -254,14 +252,12 @@ function main() {
       }
 
       if (answers.installSkill) {
+        const script = join(answers.repoPath, "scripts", "install-skill.sh");
         console.log("\n  Installing the Work Learn Skill...");
-        const result = spawnSync("bash", ["-c", SKILL_INSTALL_CMD], {
-          stdio: "inherit",
-          cwd: homedir(),
-        });
+        const result = spawnSync("bash", [script], { stdio: "inherit", cwd: homedir() });
         if (result.status !== 0) {
           console.log("  Skill install could not complete. You can run it manually:");
-          console.log(`    ${SKILL_INSTALL_CMD}`);
+          console.log(`    bash ${script}`);
         }
       }
 
