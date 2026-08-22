@@ -423,9 +423,34 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   );
 }
 
+function MaterialDetail({ label, value }: { label: string; value: string | undefined }) {
+  if (!value) return null;
+  return (
+    <p className="material-detail">
+      <span className="material-detail-label">{label}</span>
+      {value}
+    </p>
+  );
+}
+
 function MaterialList({ materials }: { materials: LearningMaterial[] }) {
   const { t, formatDate } = useI18n();
-  return <div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? t.material.fallback}</h2><p>{material.original_text}</p><span>{formatDate(material.created_at)}</span></article>)}</div>;
+  return (
+    <div className="material-list">
+      {materials.map((material, index) => (
+        <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}>
+          <p className="material-topic">{material.topic}</p>
+          <h2>{material.useful_expressions[0] ?? t.material.fallback}</h2>
+          <p>{material.original_text}</p>
+          <MaterialDetail label={t.material.better} value={material.corrections[0]} />
+          <MaterialDetail label={t.material.why} value={material.explanation} />
+          <MaterialDetail label={t.material.reuse} value={material.practice_prompts[0]} />
+          <MaterialDetail label={t.material.vocabulary} value={material.vocabulary.join(", ")} />
+          <span>{formatDate(material.created_at)}</span>
+        </article>
+      ))}
+    </div>
+  );
 }
 
 function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {

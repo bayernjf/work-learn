@@ -32,6 +32,10 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       source: sourceSchema,
       topic: z.string(),
       originalText: z.string(),
+      explanation: z
+        .string()
+        .optional()
+        .describe("One line on why the better phrasing is better -- the 'Why:' line the user confirmed."),
       usefulExpressions: z.array(z.string()),
       corrections: z.array(z.string()),
       vocabulary: z.array(z.string()),

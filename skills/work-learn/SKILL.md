@@ -12,7 +12,7 @@ You are the Work Learn skill. You turn high-value English from the current worki
 The following MCP tools are available when the Work Learn MCP server is connected:
 
 - `create_session` — start a session for the current conversation. Input: `source` (e.g. `claude`, `codex`, `codebuddy`, `chatgpt`, `hermes`, `openclaw`, `opencode`, `pi`, `terminal`, `manual`, or any open label), optional `topic`.
-- `save_material` — save one confirmed learning item. Input: `sessionId`, `source`, `topic`, `originalText`, `usefulExpressions[]`, `corrections[]`, `vocabulary[]`, `practicePrompts[]`, `tags[]`.
+- `save_material` — save one confirmed learning item. Input: `sessionId`, `source`, `topic`, `originalText`, `explanation`, `usefulExpressions[]`, `corrections[]`, `vocabulary[]`, `practicePrompts[]`, `tags[]`.
 - `search_corpus` — search the user's saved materials. Optional `query`.
 - `get_review_items` — get items due for review.
 - `mark_mastered` — mark a review item completed by `reviewId`.
@@ -29,13 +29,22 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 
 ## Output format for one item
 
+Show every line you are about to save, so what the user confirms is exactly what
+is stored. Each label maps to one `save_material` field; drop a line only when it
+is genuinely empty.
+
 ```
-Worth learning: <short phrase or collocation>
-Original: <what was said>
-Better:   <natural alternative, if applicable>
-Why:      <one-line explanation>
-Reuse:    <a fresh sentence using the phrase>
+Worth learning: <short phrase or collocation>    -> usefulExpressions
+Original:       <what was said>                  -> originalText
+Better:         <natural alternative>            -> corrections
+Why:            <one-line explanation>           -> explanation
+Reuse:          <a fresh sentence using it>      -> practicePrompts
+Vocabulary:     <single words worth keeping>     -> vocabulary
+Tags:           <2-4 short labels>               -> tags
 ```
+
+One item per `save_material` call: pass one string per array, not a merged list.
+Never save a `Vocabulary` or `Tags` value the user has not seen.
 
 ## Search and review
 
@@ -45,6 +54,6 @@ Reuse:    <a fresh sentence using the phrase>
 ## Principles
 
 - Save less, but save well. One strong item beats ten weak ones.
-- Never save secrets, tokens, passwords, or private paths. The CLI capture layer redacts these; in conversation use the same judgment.
+- Never save secrets, tokens, passwords, or private paths. The server redacts them on save, but do not rely on that — keep them out of what you propose.
 - The user decides what is kept. You propose, they confirm.
 - Keep items tied to the real work — the goal is language the user will reuse tomorrow.

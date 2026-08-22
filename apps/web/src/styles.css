@@ -464,11 +464,30 @@ code {
 }
 .material-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-2); }
 .material-card h2 { margin: 10px 0 12px; font-size: 18px; }
-.material-card p:not(.material-topic) {
+.material-card p:not(.material-topic):not(.material-detail) {
   margin: 0 0 18px;
   color: var(--ink-2);
   font-size: 14px;
   line-height: 1.6;
+}
+/* The Skill has the user confirm these lines before saving, so the card owes
+   them back -- otherwise they are written and never seen again. */
+.material-detail {
+  margin: 0 0 8px;
+  padding-left: 11px;
+  border-left: 2px solid var(--line);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.material-detail:last-of-type { margin-bottom: 18px; }
+.material-detail-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: .1em;
+  text-transform: uppercase;
 }
 .material-card span,
 .material-topic {
@@ -490,7 +509,7 @@ code {
     line-height: 1.28;
     letter-spacing: -.01em;
   }
-  .material-card.featured p:not(.material-topic) { max-width: 60ch; font-size: 14.5px; }
+  .material-card.featured p:not(.material-topic):not(.material-detail) { max-width: 60ch; font-size: 14.5px; }
 }
 
 .empty-state {

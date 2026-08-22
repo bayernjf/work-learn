@@ -73,6 +73,7 @@ app.post("/materials", async (c) => {
       source: parsed.data.source,
       topic: parsed.data.topic,
       original_text: parsed.data.originalText,
+      explanation: parsed.data.explanation,
       useful_expressions: parsed.data.usefulExpressions,
       corrections: parsed.data.corrections,
       vocabulary: parsed.data.vocabulary,

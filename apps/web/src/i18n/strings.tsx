@@ -149,7 +149,13 @@ Do this:
     fallback: "Saved expression",
   },
 
-  material: { fallback: "Saved learning material" },
+  material: {
+    fallback: "Saved learning material",
+    better: "Better",
+    why: "Why",
+    reuse: "Reuse",
+    vocabulary: "Vocabulary",
+  },
 
   footer: {
     landing: "Product overview",
@@ -323,7 +329,13 @@ export const zh: Strings = {
     fallback: "已保存的表达",
   },
 
-  material: { fallback: "已保存的学习材料" },
+  material: {
+    fallback: "已保存的学习材料",
+    better: "更自然的说法",
+    why: "为什么",
+    reuse: "造句练习",
+    vocabulary: "词汇",
+  },
 
   footer: {
     landing: "介绍页",

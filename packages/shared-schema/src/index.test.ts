@@ -29,6 +29,7 @@ test("redaction reaches every free-text field, not just the transcript", () => {
     ...base,
     topic: `Rotating ${secret}`,
     originalText: "clean",
+    explanation: `because ${secret} is a token`,
     usefulExpressions: [`say "rotate ${secret}"`],
     corrections: [`not ${secret}`],
     vocabulary: [secret],
@@ -36,12 +37,22 @@ test("redaction reaches every free-text field, not just the transcript", () => {
   });
   const leaked = [
     parsed.topic,
+    parsed.explanation,
     ...parsed.usefulExpressions,
     ...parsed.corrections,
     ...parsed.vocabulary,
     ...parsed.practicePrompts
   ].filter((value) => value.includes(secret));
   assert.deepEqual(leaked, []);
+});
+
+test("an explanation survives the save it is confirmed for", () => {
+  const explanation = "'roll back' is the verb; 'rollback' is the noun.";
+  assert.equal(saveMaterialInputSchema.parse({ ...base, explanation }).explanation, explanation);
+});
+
+test("a Skill copy predating the explanation field still saves", () => {
+  assert.equal(saveMaterialInputSchema.parse(base).explanation, "");
 });
 
 test("home directory paths do not survive into stored material", () => {

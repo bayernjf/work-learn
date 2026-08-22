@@ -6,10 +6,12 @@ export type LearningMaterial = {
   topic: string;
   source: string;
   original_text: string;
+  explanation: string;
   useful_expressions: string[];
   corrections: string[];
   vocabulary: string[];
   practice_prompts: string[];
+  tags: string[];
   created_at: string;
 };
 

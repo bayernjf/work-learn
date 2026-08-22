@@ -31,6 +31,9 @@ export const learningMaterialSchema = z.object({
   source: sourceSchema,
   topic: z.string().min(1),
   originalText: z.string().min(1),
+  // Defaulted, not required: Skill copies already installed in users' agent
+  // folders predate this field and must keep saving.
+  explanation: z.string().default(""),
   usefulExpressions: z.array(z.string()),
   corrections: z.array(z.string()),
   vocabulary: z.array(z.string()),
@@ -49,6 +52,7 @@ export const saveMaterialInputSchema = learningMaterialSchema
     ...input,
     topic: redactSecrets(input.topic).text,
     originalText: redactSecrets(input.originalText).text,
+    explanation: redactSecrets(input.explanation).text,
     usefulExpressions: input.usefulExpressions.map((value) => redactSecrets(value).text),
     corrections: input.corrections.map((value) => redactSecrets(value).text),
     vocabulary: input.vocabulary.map((value) => redactSecrets(value).text),

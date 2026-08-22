@@ -38,6 +38,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
         source: parsed.source,
         topic: parsed.topic,
         original_text: parsed.originalText,
+        explanation: parsed.explanation,
         useful_expressions: parsed.usefulExpressions,
         corrections: parsed.corrections,
         vocabulary: parsed.vocabulary,
