@@ -1,13 +1,13 @@
 import { FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { Session } from "@supabase/supabase-js";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
-import { isSupabaseConfigured, supabase } from "./lib/supabase";
+import { bootstrapSupabase } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
 import "./styles.css";
 
-function App() {
+function App({ supabase }: { supabase: SupabaseClient }) {
   const [session, setSession] = useState<Session | null>(null);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
@@ -69,8 +69,6 @@ function App() {
     }
   };
 
-  if (!isSupabaseConfigured) return <ConfigurationNotice />;
-
   if (!session) {
     return <AuthScreen
       mode={authMode}
@@ -103,7 +101,7 @@ function App() {
 }
 
 function ConfigurationNotice() {
-  return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Supabase is not configured yet.</h2><p>Copy the Supabase URL and publishable key into <code>apps/web/.env.local</code>, then restart Vite.</p></div></section></main>;
+  return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Work Learn could not load its configuration.</h2><p>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</p></div></section></main>;
 }
 
 type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: string; message: string; error: string; onModeChange: (mode: "sign-in" | "sign-up") => void; onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void };
@@ -278,8 +276,12 @@ function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete
 
 const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    {isOAuthConsentRoute ? <OAuthConsent /> : <App />}
-  </StrictMode>
-);
+const root = createRoot(document.getElementById("root")!);
+
+void bootstrapSupabase().then(({ client }) => {
+  root.render(
+    <StrictMode>
+      {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice />}
+    </StrictMode>
+  );
+});

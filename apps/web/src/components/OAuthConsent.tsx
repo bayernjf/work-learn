@@ -1,8 +1,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
-import { isSupabaseConfigured, supabase } from "../lib/supabase";
-
-const apiUrl = import.meta.env.VITE_WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
+import type { Session, SupabaseClient } from "@supabase/supabase-js";
+import { apiUrl } from "../lib/supabase";
 
 type DecisionResponse = { redirect?: string; error?: string; error_description?: string };
 
@@ -11,7 +9,7 @@ function requiredParam(value: string | null, name: string): string {
   return value;
 }
 
-export function OAuthConsent() {
+export function OAuthConsent({ supabase }: { supabase: SupabaseClient }) {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const [session, setSession] = useState<Session | null>(null);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
@@ -22,23 +20,10 @@ export function OAuthConsent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!supabase) return;
     void supabase.auth.getSession().then(({ data }) => setSession(data.session));
     const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession));
     return () => listener.subscription.unsubscribe();
   }, []);
-
-  if (!isSupabaseConfigured) {
-    return (
-      <main className="app-shell consent-shell">
-        <section className="welcome consent-welcome">
-          <p className="eyebrow">Setup required</p>
-          <h1>Connect Work Learn first.</h1>
-          <div className="empty-state"><p>Configure Supabase environment variables before approving MCP access.</p></div>
-        </section>
-      </main>
-    );
-  }
 
   let clientId = "";
   let redirectUri = "";
@@ -91,7 +76,6 @@ export function OAuthConsent() {
 
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!supabase) return;
     setAuthError("");
     const result = authMode === "sign-in"
       ? await supabase.auth.signInWithPassword({ email, password })

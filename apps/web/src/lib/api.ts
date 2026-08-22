@@ -1,6 +1,6 @@
 import type { Session } from "@supabase/supabase-js";
 
-const apiUrl = import.meta.env.VITE_WORK_LEARN_API_URL ?? "http://localhost:3000";
+const apiUrl = import.meta.env.VITE_WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
 
 export type LearningMaterial = {
   id: string;
