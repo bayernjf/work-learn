@@ -1,7 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
-export const apiUrl = import.meta.env.VITE_WORK_LEARN_API_URL
-  ?? (import.meta.env.DEV ? "http://localhost:3017" : "");
+export const apiUrl = import.meta.env.DEV
+  ? import.meta.env.VITE_WORK_LEARN_API_URL ?? "http://localhost:3017"
+  : "";
 
 export type PublicConfig = {
   supabaseUrl: string;

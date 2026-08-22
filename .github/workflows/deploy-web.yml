@@ -19,10 +19,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Build web
         run: pnpm --filter @work-learn/web build
-        env:
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_WORK_LEARN_API_URL: ${{ secrets.VITE_WORK_LEARN_API_URL }}
+      - name: Verify build is same-origin
+        run: "! grep -rq 'localhost:30' apps/web/dist/assets"
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
