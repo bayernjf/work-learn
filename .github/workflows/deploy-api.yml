@@ -17,12 +17,16 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Bundle API function
+        run: pnpm --filter @work-learn/api build:function
       - name: Build Vercel output
         run: pnpm dlx vercel@latest build --prod --yes
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Verify function was built
+        run: test -d ".vercel/output/functions/api/[[...route]].js.func"
       - name: Deploy API to Vercel
         run: pnpm dlx vercel@latest deploy --prebuilt --prod --yes
         env:
