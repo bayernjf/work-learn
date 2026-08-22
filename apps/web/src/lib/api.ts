@@ -1,12 +1,9 @@
 import type { Session } from "@supabase/supabase-js";
 
-const apiUrl = import.meta.env.DEV
-  ? import.meta.env.VITE_WORK_LEARN_API_URL ?? "http://localhost:3017"
-  : "";
-
 export type LearningMaterial = {
   id: string;
   topic: string;
+  source: string;
   original_text: string;
   useful_expressions: string[];
   corrections: string[];
@@ -23,7 +20,7 @@ export type ReviewItem = {
 
 export const fetchMaterials = async (session: Session, query = "") => {
   const search = query ? `?q=${encodeURIComponent(query)}` : "";
-  const response = await fetch(`${apiUrl}/api/materials${search}`, {
+  const response = await fetch(`/api/materials${search}`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
 
@@ -32,7 +29,7 @@ export const fetchMaterials = async (session: Session, query = "") => {
 };
 
 export const fetchReviews = async (session: Session) => {
-  const response = await fetch(`${apiUrl}/api/reviews`, {
+  const response = await fetch(`/api/reviews`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
   if (!response.ok) throw new Error("Could not load your review items");
@@ -40,7 +37,7 @@ export const fetchReviews = async (session: Session) => {
 };
 
 export const completeReview = async (session: Session, reviewId: string) => {
-  const response = await fetch(`${apiUrl}/api/reviews/${encodeURIComponent(reviewId)}/complete`, {
+  const response = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/complete`, {
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
@@ -60,7 +57,7 @@ export type PersonalAccessToken = {
 export type CreatedPersonalAccessToken = PersonalAccessToken & { token: string };
 
 export const fetchPersonalAccessTokens = async (session: Session) => {
-  const response = await fetch(`${apiUrl}/api/tokens`, {
+  const response = await fetch(`/api/tokens`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
   if (!response.ok) throw new Error("Could not load personal access tokens");
@@ -68,7 +65,7 @@ export const fetchPersonalAccessTokens = async (session: Session) => {
 };
 
 export const createPersonalAccessToken = async (session: Session, name: string) => {
-  const response = await fetch(`${apiUrl}/api/tokens`, {
+  const response = await fetch(`/api/tokens`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
     body: JSON.stringify({ name })
@@ -78,7 +75,7 @@ export const createPersonalAccessToken = async (session: Session, name: string) 
 };
 
 export const revokePersonalAccessToken = async (session: Session, id: string) => {
-  const response = await fetch(`${apiUrl}/api/tokens/${encodeURIComponent(id)}/revoke`, {
+  const response = await fetch(`/api/tokens/${encodeURIComponent(id)}/revoke`, {
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` }
   });

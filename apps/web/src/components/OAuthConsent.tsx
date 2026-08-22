@@ -1,6 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { apiUrl } from "../lib/supabase";
 
 type DecisionResponse = { redirect?: string; error?: string; error_description?: string };
 
@@ -58,7 +57,7 @@ export function OAuthConsent({ supabase }: { supabase: SupabaseClient }) {
     setSubmitting(approve ? "approve" : "deny");
     setError("");
     try {
-      const response = await fetch(`${apiUrl}/api/oauth/decision`, {
+      const response = await fetch(`/api/oauth/decision`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
         body: JSON.stringify({ client_id: clientId, redirect_uri: redirectUri, code_challenge: codeChallenge, state, scope, approve })

@@ -80,8 +80,7 @@ body::after {
   align-items: center;
   justify-content: space-between;
   gap: 24px;
-  height: 72px;
-  border-bottom: 1px solid var(--line);
+  height: 60px;
 }
 .brand {
   display: flex;
@@ -169,7 +168,6 @@ code {
 }
 .section-heading h2 { margin: 0; }
 .section-heading .eyebrow { margin: 0 0 5px; }
-.material-section { margin-bottom: 24px; }
 .review-count {
   color: var(--ink-3);
   font-family: var(--font-mono);
@@ -177,7 +175,7 @@ code {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.review-section { margin-bottom: 72px; }
+.review-section { margin: 76px 0 0; }
 
 /* Review rows: hairline list, not boxed cards. */
 .review-list { display: grid; }
@@ -239,11 +237,136 @@ code {
 
 /* Corpus ----------------------------------------------------------------- */
 
+/* Corpus desk ------------------------------------------------------------ */
+
+.desk { padding: 34px 0 0; }
+.desk-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+.desk-title h1 {
+  max-width: none;
+  margin: 0;
+  font-size: clamp(1.9rem, 3.4vw, 2.4rem);
+  letter-spacing: -.03em;
+  line-height: 1;
+}
+.desk-title span {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px 18px;
+  border-radius: var(--r-md);
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+  cursor: text;
+  transition: box-shadow .18s ease;
+}
+.search:focus-within { box-shadow: var(--shadow-1), 0 0 0 3px var(--accent-soft); }
+.search svg { flex: 0 0 auto; color: var(--ink-3); }
+.search input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15.5px;
+}
+.search input::placeholder { color: var(--ink-3); }
+.search input::-webkit-search-cancel-button { -webkit-appearance: none; }
+.kbd {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  margin-top: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.facets { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.facet {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  font-weight: 550;
+  transition: background .18s ease, color .18s ease;
+}
+.facet:hover { background: var(--bg-sunken); }
+.facet b {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+}
+.facet.on { color: #f4f6f1; background: var(--ink); }
+.facet.on b { color: var(--accent-bright); }
+.sort {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--bg-sunken);
+  white-space: nowrap;
+}
+.sort button {
+  padding: 6px 11px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 550;
+  transition: background .18s ease, color .18s ease;
+}
+.sort button:hover { color: var(--ink); }
+.sort button.on { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-1); }
+.corpus-empty {
+  margin: 26px 0 0;
+  max-width: 52ch;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
 .material-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
   grid-auto-flow: dense;
   gap: 14px;
+  margin-top: 22px;
 }
 .material-card {
   display: flex;
@@ -439,7 +562,7 @@ code {
 
 .agent-connect {
   max-width: 720px;
-  margin: 0 0 52px;
+  margin: 56px 0 96px;
   border-radius: var(--r-lg);
   background: var(--surface);
   box-shadow: var(--shadow-1);
