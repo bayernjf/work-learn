@@ -5,6 +5,8 @@ import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewI
 import { bootstrapSupabase } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./styles.css";
 
 function App({ supabase }: { supabase: SupabaseClient }) {
@@ -85,6 +87,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
 
   return (
     <main className="app-shell">
+      <a className="skip-link" href="#corpus">Skip to your corpus</a>
       <header className="app-header">
         <div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div>
         <div className="header-actions"><span className="status">{session.user.email}</span><button className="text-button" onClick={signOut}>Sign out</button></div>
@@ -94,14 +97,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
         <h1>Learn from the work already happening.</h1>
         <p className="lede">Your saved conversations, useful expressions, and next practice will live here.</p>
         <AgentConnect session={session} />
-        {loadingMaterials ? <div className="empty-state"><h2>Loading your corpus...</h2></div> : <><ReviewList reviews={reviews} onComplete={handleCompleteReview} />{materials.length === 0 ? <EmptyCorpus /> : <MaterialList materials={materials} />}</>}
+        <div id="corpus">
+          {loadingMaterials ? <CorpusSkeleton /> : <><ReviewList reviews={reviews} onComplete={handleCompleteReview} />{materials.length === 0 ? <EmptyCorpus /> : <MaterialList materials={materials} />}</>}
+        </div>
       </section>
     </main>
   );
 }
 
-function ConfigurationNotice() {
-  return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Work Learn could not load its configuration.</h2><p>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</p></div></section></main>;
+function CorpusSkeleton() {
+  return <div className="skeleton-list" role="status" aria-label="Loading your corpus"><div className="skeleton-row" /><div className="skeleton-row" /><div className="skeleton-row" /></div>;
+}
+
+function ConfigurationNotice({ error }: { error?: string }) {
+  return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Work Learn could not load its configuration.</h2>{error && <p className="notice-error">{error}</p>}<p>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</p></div></section></main>;
 }
 
 type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: string; message: string; error: string; onModeChange: (mode: "sign-in" | "sign-up") => void; onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void };
@@ -267,21 +276,21 @@ function AgentConnect({ session }: { session: Session }) {
 }
 
 function MaterialList({ materials }: { materials: LearningMaterial[] }) {
-  return <div className="material-list">{materials.map((material) => <article className="material-card" key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? "Saved learning material"}</h2><p>{material.original_text}</p><span>{new Date(material.created_at).toLocaleDateString()}</span></article>)}</div>;
+  return <section className="material-section"><div className="section-heading"><div><p className="eyebrow">Corpus</p><h2>Everything you kept.</h2></div><span className="review-count">{materials.length} saved</span></div><div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? "Saved learning material"}</h2><p>{material.original_text}</p><span>{new Date(material.created_at).toLocaleDateString()}</span></article>)}</div></section>;
 }
 
 function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {
-  return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">Today</p><h2>Review what is still useful.</h2></div><span className="review-count">{reviews.length} due</span></div>{reviews.length === 0 ? <p className="review-empty">No reviews due. Keep working, then save the next useful expression.</p> : <div className="review-list">{reviews.map((review) => <article className="review-card" key={review.id}><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? "Saved expression"}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>Mark mastered</button></article>)}</div>}</section>;
+  return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">Today</p><h2>Review what is still useful.</h2></div><span className="review-count">{reviews.length} due</span></div>{reviews.length === 0 ? <p className="review-empty">No reviews due. Keep working, then save the next useful expression.</p> : <div className="review-list">{reviews.map((review, index) => <article className="review-card" key={review.id}><span className="review-index">{String(index + 1).padStart(2, "0")}</span><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? "Saved expression"}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>Mark mastered</button></article>)}</div>}</section>;
 }
 
 const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
 
 const root = createRoot(document.getElementById("root")!);
 
-void bootstrapSupabase().then(({ client }) => {
+void bootstrapSupabase().then(({ client, error }) => {
   root.render(
     <StrictMode>
-      {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice />}
+      {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice error={error} />}
     </StrictMode>
   );
 });
