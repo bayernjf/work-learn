@@ -134,6 +134,12 @@ export const en = {
 
   material: { fallback: "Saved learning material" },
 
+  footer: {
+    landing: "Product overview",
+    repo: "GitHub",
+    docs: "Setup docs",
+  },
+
   consent: {
     invalidEyebrow: "Invalid request",
     invalidHeadline: "That OAuth link is incomplete.",
@@ -284,6 +290,12 @@ export const zh: Strings = {
   },
 
   material: { fallback: "已保存的学习材料" },
+
+  footer: {
+    landing: "介绍页",
+    repo: "GitHub",
+    docs: "配置文档",
+  },
 
   consent: {
     invalidEyebrow: "请求无效",

@@ -413,6 +413,25 @@ code {
 .lang-switch button:hover { color: var(--ink); }
 .lang-switch button[aria-pressed="true"] { color: var(--ink); background: var(--surface); box-shadow: var(--shadow-1); }
 
+.app-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 72px;
+  padding: 22px 0 30px;
+  border-top: 1px solid var(--line);
+}
+.footer-brand { color: var(--ink-3); font-size: 12px; letter-spacing: .01em; }
+.footer-links { display: flex; flex-wrap: wrap; gap: 20px; }
+.footer-links a {
+  color: var(--ink-3);
+  font-size: 12px;
+  text-decoration: none;
+  transition: color .18s ease;
+}
+.footer-links a:hover { color: var(--ink); }
+
 .desk-error {
   display: flex;
   align-items: baseline;
