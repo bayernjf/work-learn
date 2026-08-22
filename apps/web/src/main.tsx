@@ -153,6 +153,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <header className="app-header">
         <div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div>
         <div className="header-actions">
+          <LanguageSwitch />
           <span className="avatar" title={session.user.email} aria-label={t.header.account(session.user.email ?? t.header.unknownAccount)}>{(session.user.email ?? "?").slice(0, 1).toUpperCase()}</span>
           <button className="ghost-button" onClick={signOut}>{t.common.signOut}</button>
         </div>
@@ -213,6 +214,16 @@ function SearchIcon() {
   return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>;
 }
 
+function LanguageSwitch() {
+  const { locale, setLocale, t } = useI18n();
+  return (
+    <div className="lang-switch" role="group" aria-label={t.common.language}>
+      <button type="button" aria-pressed={locale === "en"} onClick={() => setLocale("en")}>EN</button>
+      <button type="button" aria-pressed={locale === "zh"} onClick={() => setLocale("zh")}>中文</button>
+    </div>
+  );
+}
+
 function corpusSummary(materials: LearningMaterial[], t: Strings) {
   if (materials.length === 0) return t.desk.summaryEmpty;
   const sources = new Set(materials.map((material) => material.source)).size;
@@ -242,7 +253,7 @@ type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: s
 
 function AuthScreen({ mode, email, password, message, error, remember, onModeChange, onEmailChange, onPasswordChange, onRememberChange, onSubmit }: AuthScreenProps) {
   const { t } = useI18n();
-  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><span className="status">{t.header.tagline}</span></header><section className="auth-layout"><div><p className="eyebrow">{t.auth.eyebrow}</p><h1>{t.auth.headline}</h1><p className="lede">{t.auth.lede}</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>{t.common.signIn}</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>{t.common.createAccount}</button></div><label>{t.common.email}<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>{t.common.password}<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => onRememberChange(event.target.checked)} /><span>{t.auth.remember}</span></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? t.common.signIn : t.common.createAccount}</button></form></section></main>;
+  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><div className="header-actions"><LanguageSwitch /><span className="status">{t.header.tagline}</span></div></header><section className="auth-layout"><div><p className="eyebrow">{t.auth.eyebrow}</p><h1>{t.auth.headline}</h1><p className="lede">{t.auth.lede}</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>{t.common.signIn}</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>{t.common.createAccount}</button></div><label>{t.common.email}<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>{t.common.password}<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => onRememberChange(event.target.checked)} /><span>{t.auth.remember}</span></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? t.common.signIn : t.common.createAccount}</button></form></section></main>;
 }
 
 function EmptyCorpus() {
