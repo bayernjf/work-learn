@@ -25,6 +25,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
+  const [loadError, setLoadError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
   const searchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -37,11 +39,12 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   useEffect(() => {
     if (!session) return;
     setLoadingMaterials(true);
+    setLoadError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session)])
       .then(([materialResult, reviewResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); })
-      .catch((error: unknown) => setAuthError(error instanceof Error ? error.message : "Could not load materials"))
+      .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Could not load your corpus"))
       .finally(() => setLoadingMaterials(false));
-  }, [session]);
+  }, [session, reloadKey]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -84,6 +87,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       : a.created_at.localeCompare(b.created_at));
   }, [results, materials, topic, sort]);
 
+  const empty = materials.length === 0;
+
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!supabase) return;
@@ -119,7 +124,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       await completeReview(session, reviewId);
       setReviews((current) => current.filter((review) => review.id !== reviewId));
     } catch (error) {
-      setAuthError(error instanceof Error ? error.message : "Could not complete this review");
+      setLoadError(error instanceof Error ? error.message : "Could not complete this review");
     }
   };
 
@@ -149,17 +154,23 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <section className="desk" id="corpus">
         <div className="desk-title">
           <h1>Your corpus</h1>
-          <span>{corpusSummary(materials)}</span>
+          <span>{loadError ? "Could not load" : corpusSummary(materials)}</span>
         </div>
-        {loadingMaterials ? <CorpusSkeleton /> : materials.length === 0 ? <EmptyCorpus /> : <>
-          <label className="search">
+        {loadError ? (
+          <div className="desk-error" role="alert">
+            <p>{loadError}</p>
+            <button className="text-button" onClick={() => setReloadKey((key) => key + 1)}>Try again</button>
+          </div>
+        ) : <>
+          <label className="search" data-empty={empty}>
             <SearchIcon />
             <input
               ref={searchInput}
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search expressions, topics, corrections…"
+              disabled={empty}
+              placeholder={empty ? "Search opens once you save your first expression" : "Search expressions, topics, corrections…"}
               aria-label="Search your corpus"
             />
             <span className="kbd" aria-hidden="true">⌘K</span>
@@ -169,14 +180,16 @@ function App({ supabase }: { supabase: SupabaseClient }) {
               <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>All <b>{materials.length}</b></button>
               {topics.map(([name, count]) => <button key={name} className={topic === name ? "facet on" : "facet"} onClick={() => setTopic(name)}>{name} <b>{count}</b></button>)}
             </div>
-            <div className="sort">
+            <div className="sort" data-empty={empty}>
               <button className={sort === "newest" ? "on" : ""} onClick={() => setSort("newest")}>Newest</button>
               <button className={sort === "oldest" ? "on" : ""} onClick={() => setSort("oldest")}>Oldest</button>
             </div>
           </div>
-          {searching ? <CorpusSkeleton /> : visible.length === 0
-            ? <p className="corpus-empty">Nothing matches {query.trim() ? <>“{query.trim()}”</> : "this topic"} yet.</p>
-            : <MaterialList materials={visible} />}
+          {loadingMaterials || searching ? <CorpusSkeleton />
+            : empty ? <EmptyCorpus />
+            : visible.length === 0
+              ? <p className="corpus-empty">Nothing matches {query.trim() ? <>“{query.trim()}”</> : "this topic"} yet.</p>
+              : <MaterialList materials={visible} />}
         </>}
       </section>
       <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
