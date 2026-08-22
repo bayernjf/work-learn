@@ -1,29 +1,8 @@
 const API_ORIGIN = "https://work-learn-api.vercel.app";
-const PUBLIC_SUPABASE_URL = "https://rsisqfetqdohqfdtlqqn.supabase.co";
-const PUBLIC_SUPABASE_ANON_KEY = "sb_publishable_AaqjUfH0H0Ev6oNbMtSuoA_w9agmcLe";
-
-const jsonResponse = (body, status = 200) =>
-  new Response(JSON.stringify(body), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "Access-Control-Allow-Origin": "*"
-    }
-  });
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
-    if ((url.pathname === "/api/config" || url.pathname === "/api/config/") && request.method === "GET") {
-      return jsonResponse({
-        data: {
-          supabaseUrl: PUBLIC_SUPABASE_URL,
-          supabaseAnonKey: PUBLIC_SUPABASE_ANON_KEY
-        }
-      });
-    }
 
     if (url.pathname.startsWith("/api/")) {
       const target = new URL(`${API_ORIGIN}${url.pathname}${url.search}`);

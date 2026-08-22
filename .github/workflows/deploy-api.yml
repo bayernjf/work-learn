@@ -33,3 +33,7 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Smoke test production API
+        run: curl -fsS --retry 5 --retry-all-errors --retry-delay 3 https://work-learn-api.vercel.app/api/health
+      - name: Smoke test public config
+        run: curl -fsS https://work-learn-api.vercel.app/api/config
