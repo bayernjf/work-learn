@@ -1,7 +1,8 @@
 import type { Session } from "@supabase/supabase-js";
 
-const apiUrl = import.meta.env.VITE_WORK_LEARN_API_URL
-  ?? (import.meta.env.DEV ? "http://localhost:3017" : "");
+const apiUrl = import.meta.env.DEV
+  ? import.meta.env.VITE_WORK_LEARN_API_URL ?? "http://localhost:3017"
+  : "";
 
 export type LearningMaterial = {
   id: string;
