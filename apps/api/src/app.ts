@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { createSessionInputSchema, saveMaterialInputSchema } from "@work-learn/shared-schema";
 import { createSupabaseUserClient, getBearerToken } from "./lib/supabase.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -8,6 +9,23 @@ import { oauthRoute } from "./routes/oauth.js";
 export const app = new Hono().basePath("/api");
 
 app.get("/health", (c) => c.json({ ok: true, service: "work-learn-api" }));
+
+app.get(
+  "/config",
+  cors({
+    origin: "*",
+    allowMethods: ["GET"],
+    allowHeaders: ["Content-Type", "Authorization"]
+  }),
+  (c) => {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+    if (!supabaseUrl || !supabaseAnonKey) {
+      return c.json({ error: "Public Supabase configuration is missing" }, 500);
+    }
+    return c.json({ data: { supabaseUrl, supabaseAnonKey } });
+  }
+);
 
 app.route("/mcp", mcpRoute);
 app.route("/tokens", patsRoute);
