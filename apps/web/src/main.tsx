@@ -149,7 +149,10 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <a className="skip-link" href="#corpus">Skip to your corpus</a>
       <header className="app-header">
         <div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div>
-        <div className="header-actions"><span className="status">{session.user.email}</span><button className="text-button" onClick={signOut}>Sign out</button></div>
+        <div className="header-actions">
+          <span className="avatar" title={session.user.email} aria-label={`Signed in as ${session.user.email ?? "unknown account"}`}>{(session.user.email ?? "?").slice(0, 1).toUpperCase()}</span>
+          <button className="ghost-button" onClick={signOut}>Sign out</button>
+        </div>
       </header>
       <section className="desk" id="corpus">
         <div className="desk-title">
@@ -192,8 +195,13 @@ function App({ supabase }: { supabase: SupabaseClient }) {
               : <MaterialList materials={visible} />}
         </>}
       </section>
-      <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
-      <AgentConnect session={session} />
+      {empty && !loadError ? <>
+        <AgentConnect key="empty" session={session} initialOpen />
+        <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
+      </> : <>
+        <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
+        <AgentConnect key="filled" session={session} initialOpen={false} />
+      </>}
     </main>
   );
 }
@@ -232,10 +240,10 @@ function AuthScreen({ mode, email, password, message, error, remember, onModeCha
 }
 
 function EmptyCorpus() {
-  return <div className="empty-state"><span className="empty-mark">+</span><h2>Your corpus starts with one conversation.</h2><p>Call the Learning Skill from an AI agent, then confirm what is worth keeping.</p><code>“整理刚才这段对话”</code></div>;
+  return <div className="empty-state"><span className="empty-mark">+</span><h2>Your corpus starts with one conversation.</h2><p>Connect an agent below — add the MCP server, install the Skill, then ask it to save the useful English from a conversation.</p><code>“整理刚才这段对话”</code><a className="empty-cta" href="#connect">Set up your agent<span aria-hidden="true"> →</span></a></div>;
 }
 
-function AgentConnect({ session }: { session: Session }) {
+function AgentConnect({ session, initialOpen }: { session: Session; initialOpen: boolean }) {
   const LANDING_URL = "https://work-learn.bayjf.com";
   const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
   const RAW_BASE = "https://raw.githubusercontent.com/bayernjf/work-learn/main";
@@ -274,6 +282,7 @@ function AgentConnect({ session }: { session: Session }) {
 
   const [activeAgent, setActiveAgent] = useState<(typeof skillInstalls)[number]["id"]>("universal");
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [open, setOpen] = useState(initialOpen);
   const active = skillInstalls.find((item) => item.id === activeAgent) ?? skillInstalls[0];
 
   const copy = async (id: string, value: string) => {
@@ -287,7 +296,7 @@ function AgentConnect({ session }: { session: Session }) {
   };
 
   return (
-    <details className="agent-connect" open>
+    <details className="agent-connect" id="connect" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
       <summary>Connect an agent</summary>
       <div className="agent-connect-body">
         <p>
