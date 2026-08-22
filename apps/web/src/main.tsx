@@ -307,6 +307,8 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const setupCommand = `npx -y @work-learn/setup --token "${token}"`;
   const remoteMcpUrl = `${API_URL}/api/mcp`;
   const authHeader = `Authorization: Bearer ${token}`;
+  const skillUrl = `${RAW_BASE}/skills/work-learn/SKILL.md`;
+  const agentPrompt = t.connect.autoPrompt(remoteMcpUrl, token, skillUrl);
 
   const skillInstalls = [
     { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal },
@@ -338,6 +340,20 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
       <summary>{t.connect.summary}</summary>
       <div className="agent-connect-body">
         <p>{t.connect.intro(LANDING_URL)}</p>
+
+        <div className="auto-setup">
+          <div className="auto-setup-head">
+            <span className="auto-setup-label">{t.connect.autoLabel}</span>
+            <button type="button" className="copy-chip" onClick={() => copy("auto-prompt", agentPrompt)}>
+              {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
+            </button>
+          </div>
+          <p className="auto-setup-copy">{t.connect.autoCopy}</p>
+          <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
+          <p className="auto-setup-note">{t.connect.autoNote}</p>
+        </div>
+
+        <p className="connect-lane">{t.connect.manualLabel}</p>
 
         <p className="connect-step">{t.connect.step1}</p>
         <p className="connect-hint">{t.connect.hint1}</p>

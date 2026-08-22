@@ -86,6 +86,23 @@ export const en = {
   connect: {
     summary: "Connect an agent",
     intro: (landingUrl: string): ReactNode => <>New here? Read the <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn landing page<span className="external-icon" aria-hidden="true">↗</span></a> for the full product walkthrough.</>,
+    autoLabel: "Let your agent set it up",
+    autoCopy: "Paste this into the agent you want to connect. Your endpoint and token are already filled in.",
+    autoNote: "The prompt carries a live token. If you have not created a personal access token below, it is your session token and expires in about an hour — create one first, then copy again.",
+    autoPrompt: (endpoint: string, token: string, skillUrl: string) => `Set up the Work Learn MCP server in the agent client you are running right now.
+
+Endpoint: ${endpoint} (remote MCP over Streamable HTTP, stateless)
+Auth header: Authorization: Bearer ${token}
+Server name: work-learn
+
+Do this:
+1. Work out which client this is and find its MCP config file (for example ~/.codex/config.toml, ~/.claude.json, ~/.cursor/mcp.json, ~/.config/opencode/opencode.json). Ask me if you cannot tell.
+2. Back that file up, then add "work-learn" with the endpoint and auth header above. Leave every other MCP server in the file exactly as it is.
+3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
+4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
+5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
+6. Tell me to restart the client, then confirm these five tools are available: create_session, save_material, search_corpus, get_review_items, mark_mastered.`,
+    manualLabel: "Manual setup",
     step1: "1. Connect over remote MCP (no local install needed).",
     hint1: "Create a personal access token below and use it as the Bearer token. It stays valid until you revoke it, unlike your short-lived session token.",
     hint1b: (): ReactNode => <>In agents that support remote MCP (Streamable HTTP), add the URL above and set the <code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>. For persistent local agents that only support stdio, use option 2.</>,
@@ -243,6 +260,23 @@ export const zh: Strings = {
   connect: {
     summary: "接入 agent",
     intro: (landingUrl: string): ReactNode => <>第一次用？先看 <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn 介绍页<span className="external-icon" aria-hidden="true">↗</span></a>，那里有完整的产品说明。</>,
+    autoLabel: "让 Agent 帮你配置",
+    autoCopy: "把这段粘给你想接入的 Agent，端点和 token 都已经填好了。",
+    autoNote: "这段提示里带着一个真实可用的 token。如果你还没在下面创建 personal access token，它就是你的会话 token，约 1 小时后过期 —— 建议先创建一个，再重新复制。",
+    autoPrompt: (endpoint: string, token: string, skillUrl: string) => `帮我在你现在运行的这个 Agent 客户端里接入 Work Learn 的 MCP 服务器。
+
+端点：${endpoint}（远程 MCP，Streamable HTTP，无状态）
+认证请求头：Authorization: Bearer ${token}
+服务器名称：work-learn
+
+请按以下步骤做：
+1. 判断这是哪个客户端，找到它的 MCP 配置文件（例如 ~/.codex/config.toml、~/.claude.json、~/.cursor/mcp.json、~/.config/opencode/opencode.json）。判断不出来就先问我。
+2. 先备份该文件，再以 "work-learn" 为名写入上面的端点和认证请求头。文件里已有的其他 MCP 服务器一个都不要改。
+3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
+4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
+5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
+6. 告诉我需要重启客户端，然后确认这 5 个工具可用：create_session、save_material、search_corpus、get_review_items、mark_mastered。`,
+    manualLabel: "手动配置",
     step1: "1. 用远程 MCP 接入（不用装任何东西）。",
     hint1: "在下面创建一个 personal access token，拿它当 Bearer token。它在你主动吊销前一直有效，不像会话 token 那样很快过期。",
     hint1b: (): ReactNode => <>在支持远程 MCP（Streamable HTTP）的 agent 里，填上面那个地址，并把 <code>Authorization</code> 请求头设成 <code>Bearer &lt;personal-access-token&gt;</code>。只支持 stdio 的常驻本地 agent 请用方式 2。</>,
