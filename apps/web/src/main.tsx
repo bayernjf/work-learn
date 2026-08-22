@@ -5,11 +5,14 @@ import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewI
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
+import { LocaleProvider, useI18n } from "./i18n/context";
+import type { Strings } from "./i18n/strings";
 import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./styles.css";
 
 function App({ supabase }: { supabase: SupabaseClient }) {
+  const { t } = useI18n();
   const [session, setSession] = useState<Session | null>(null);
   const [authMode, setAuthMode] = useState<"sign-in" | "sign-up">("sign-in");
   const [email, setEmail] = useState("");
@@ -42,7 +45,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setLoadError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session)])
       .then(([materialResult, reviewResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); })
-      .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : "Could not load your corpus"))
+      .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
   }, [session, reloadKey]);
 
@@ -104,7 +107,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       return;
     }
     if (authMode === "sign-up" && !result.data.session) {
-      setAuthMessage("Check your email to confirm your account, then sign in.");
+      setAuthMessage(t.auth.confirmEmail);
     }
   };
 
@@ -124,7 +127,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       await completeReview(session, reviewId);
       setReviews((current) => current.filter((review) => review.id !== reviewId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not complete this review");
+      setLoadError(error instanceof Error ? error.message : t.errors.completeReview);
     }
   };
 
@@ -146,23 +149,23 @@ function App({ supabase }: { supabase: SupabaseClient }) {
 
   return (
     <main className="app-shell">
-      <a className="skip-link" href="#corpus">Skip to your corpus</a>
+      <a className="skip-link" href="#corpus">{t.desk.skip}</a>
       <header className="app-header">
         <div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div>
         <div className="header-actions">
-          <span className="avatar" title={session.user.email} aria-label={`Signed in as ${session.user.email ?? "unknown account"}`}>{(session.user.email ?? "?").slice(0, 1).toUpperCase()}</span>
-          <button className="ghost-button" onClick={signOut}>Sign out</button>
+          <span className="avatar" title={session.user.email} aria-label={t.header.account(session.user.email ?? t.header.unknownAccount)}>{(session.user.email ?? "?").slice(0, 1).toUpperCase()}</span>
+          <button className="ghost-button" onClick={signOut}>{t.common.signOut}</button>
         </div>
       </header>
       <section className="desk" id="corpus">
         <div className="desk-title">
-          <h1>Your corpus</h1>
-          <span>{loadError ? "Could not load" : corpusSummary(materials)}</span>
+          <h1>{t.desk.title}</h1>
+          <span>{loadError ? t.desk.couldNotLoad : corpusSummary(materials, t)}</span>
         </div>
         {loadError ? (
           <div className="desk-error" role="alert">
             <p>{loadError}</p>
-            <button className="text-button" onClick={() => setReloadKey((key) => key + 1)}>Try again</button>
+            <button className="text-button" onClick={() => setReloadKey((key) => key + 1)}>{t.common.tryAgain}</button>
           </div>
         ) : <>
           <label className="search" data-empty={empty}>
@@ -173,25 +176,25 @@ function App({ supabase }: { supabase: SupabaseClient }) {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               disabled={empty}
-              placeholder={empty ? "Search opens once you save your first expression" : "Search expressions, topics, corrections…"}
-              aria-label="Search your corpus"
+              placeholder={empty ? t.desk.searchPlaceholderEmpty : t.desk.searchPlaceholder}
+              aria-label={t.desk.searchLabel}
             />
             <span className="kbd" aria-hidden="true">⌘K</span>
           </label>
           <div className="filters">
             <div className="facets">
-              <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>All <b>{materials.length}</b></button>
+              <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>{t.desk.all} <b>{materials.length}</b></button>
               {topics.map(([name, count]) => <button key={name} className={topic === name ? "facet on" : "facet"} onClick={() => setTopic(name)}>{name} <b>{count}</b></button>)}
             </div>
             <div className="sort" data-empty={empty}>
-              <button className={sort === "newest" ? "on" : ""} onClick={() => setSort("newest")}>Newest</button>
-              <button className={sort === "oldest" ? "on" : ""} onClick={() => setSort("oldest")}>Oldest</button>
+              <button className={sort === "newest" ? "on" : ""} onClick={() => setSort("newest")}>{t.desk.newest}</button>
+              <button className={sort === "oldest" ? "on" : ""} onClick={() => setSort("oldest")}>{t.desk.oldest}</button>
             </div>
           </div>
           {loadingMaterials || searching ? <CorpusSkeleton />
             : empty ? <EmptyCorpus />
             : visible.length === 0
-              ? <p className="corpus-empty">Nothing matches {query.trim() ? <>“{query.trim()}”</> : "this topic"} yet.</p>
+              ? <p className="corpus-empty">{query.trim() ? t.desk.noMatchQuery(query.trim()) : t.desk.noMatchTopic}</p>
               : <MaterialList materials={visible} />}
         </>}
       </section>
@@ -210,40 +213,45 @@ function SearchIcon() {
   return <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="M20 20l-4.2-4.2" /></svg>;
 }
 
-function corpusSummary(materials: LearningMaterial[]) {
-  if (materials.length === 0) return "Nothing saved yet";
+function corpusSummary(materials: LearningMaterial[], t: Strings) {
+  if (materials.length === 0) return t.desk.summaryEmpty;
   const sources = new Set(materials.map((material) => material.source)).size;
   let newest = "";
   for (const material of materials) if (material.created_at > newest) newest = material.created_at;
-  return `${materials.length} saved · ${sources} source${sources === 1 ? "" : "s"} · last ${relativeTime(newest)}`;
+  return t.desk.summary(materials.length, sources, relativeTime(newest, t));
 }
 
-function relativeTime(iso: string) {
+function relativeTime(iso: string, t: Strings) {
   const minutes = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
-  if (minutes < 60 * 24) return `${Math.round(minutes / 60)}h ago`;
-  return `${Math.round(minutes / (60 * 24))}d ago`;
+  if (minutes < 60) return t.time.minutes(minutes);
+  if (minutes < 60 * 24) return t.time.hours(Math.round(minutes / 60));
+  return t.time.days(Math.round(minutes / (60 * 24)));
 }
 
 function CorpusSkeleton() {
-  return <div className="skeleton-list" role="status" aria-label="Loading your corpus"><div className="skeleton-row" /><div className="skeleton-row" /><div className="skeleton-row" /></div>;
+  const { t } = useI18n();
+  return <div className="skeleton-list" role="status" aria-label={t.desk.loadingLabel}><div className="skeleton-row" /><div className="skeleton-row" /><div className="skeleton-row" /></div>;
 }
 
 function ConfigurationNotice({ error }: { error?: string }) {
-  return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Work Learn could not load its configuration.</h2>{error && <p className="notice-error">{error}</p>}<p>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</p></div></section></main>;
+  const { t } = useI18n();
+  return <main className="app-shell"><section className="welcome"><p className="eyebrow">{t.config.eyebrow}</p><h1>{t.config.headline}</h1><div className="empty-state"><h2>{t.config.heading}</h2>{error && <p className="notice-error">{error}</p>}<p>{t.config.body()}</p></div></section></main>;
 }
 
 type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: string; message: string; error: string; remember: boolean; onModeChange: (mode: "sign-in" | "sign-up") => void; onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void; onRememberChange: (value: boolean) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void };
 
 function AuthScreen({ mode, email, password, message, error, remember, onModeChange, onEmailChange, onPasswordChange, onRememberChange, onSubmit }: AuthScreenProps) {
-  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><span className="status">Personal learning layer</span></header><section className="auth-layout"><div><p className="eyebrow">Start with your work</p><h1>Keep the English that moves your work forward.</h1><p className="lede">Save useful moments from your AI conversations, then turn them into practice.</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>Sign in</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>Create account</button></div><label>Email<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>Password<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => onRememberChange(event.target.checked)} /><span>Keep me signed in for 7 days</span></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? "Sign in" : "Create account"}</button></form></section></main>;
+  const { t } = useI18n();
+  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><span className="status">{t.header.tagline}</span></header><section className="auth-layout"><div><p className="eyebrow">{t.auth.eyebrow}</p><h1>{t.auth.headline}</h1><p className="lede">{t.auth.lede}</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>{t.common.signIn}</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>{t.common.createAccount}</button></div><label>{t.common.email}<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>{t.common.password}<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => onRememberChange(event.target.checked)} /><span>{t.auth.remember}</span></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? t.common.signIn : t.common.createAccount}</button></form></section></main>;
 }
 
 function EmptyCorpus() {
-  return <div className="empty-state"><span className="empty-mark">+</span><h2>Your corpus starts with one conversation.</h2><p>Connect an agent below — add the MCP server, install the Skill, then ask it to save the useful English from a conversation.</p><code>“整理刚才这段对话”</code><a className="empty-cta" href="#connect">Set up your agent<span aria-hidden="true"> →</span></a></div>;
+  const { t } = useI18n();
+  return <div className="empty-state"><span className="empty-mark">+</span><h2>{t.empty.heading}</h2><p>{t.empty.body}</p><code>{t.empty.prompt}</code><a className="empty-cta" href="#connect">{t.empty.cta}<span aria-hidden="true"> →</span></a></div>;
 }
 
 function AgentConnect({ session, initialOpen }: { session: Session; initialOpen: boolean }) {
+  const { t } = useI18n();
   const LANDING_URL = "https://work-learn.bayjf.com";
   const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
   const RAW_BASE = "https://raw.githubusercontent.com/bayernjf/work-learn/main";
@@ -271,13 +279,13 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const authHeader = `Authorization: Bearer ${token}`;
 
   const skillInstalls = [
-    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: "Installs into every detected skills folder." },
-    { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: "Restart Codex after installing." },
-    { id: "claude", label: "Claude", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: "Restart Claude Code after installing." },
-    { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: "CLI and desktop share this folder." },
-    { id: "cursor", label: "Cursor", command: `mkdir -p ~/.cursor/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.cursor/skills/work-learn/SKILL.md`, note: "Restart Cursor after installing." },
-    { id: "opencode", label: "OpenCode", command: `mkdir -p ~/.config/opencode/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.config/opencode/skills/work-learn/SKILL.md`, note: "Restart OpenCode after installing." },
-    { id: "pi", label: "Pi", command: `mkdir -p ~/.pi/agent/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.pi/agent/skills/work-learn/SKILL.md`, note: "Restart Pi after installing." },
+    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | bash`, note: t.connect.notes.universal },
+    { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: t.connect.notes.codex },
+    { id: "claude", label: "Claude", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: t.connect.notes.claude },
+    { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: t.connect.notes.codebuddy },
+    { id: "cursor", label: "Cursor", command: `mkdir -p ~/.cursor/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.cursor/skills/work-learn/SKILL.md`, note: t.connect.notes.cursor },
+    { id: "opencode", label: "OpenCode", command: `mkdir -p ~/.config/opencode/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.config/opencode/skills/work-learn/SKILL.md`, note: t.connect.notes.opencode },
+    { id: "pi", label: "Pi", command: `mkdir -p ~/.pi/agent/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.pi/agent/skills/work-learn/SKILL.md`, note: t.connect.notes.pi },
   ] as const;
 
   const [activeAgent, setActiveAgent] = useState<(typeof skillInstalls)[number]["id"]>("universal");
@@ -297,75 +305,50 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
 
   return (
     <details className="agent-connect" id="connect" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
-      <summary>Connect an agent</summary>
+      <summary>{t.connect.summary}</summary>
       <div className="agent-connect-body">
-        <p>
-          New here? Read the{" "}
-          <a className="inline-link" href={LANDING_URL} target="_blank" rel="noopener noreferrer">
-            Work Learn landing page
-            <span className="external-icon" aria-hidden="true">↗</span>
-          </a>{" "}
-          for the full product walkthrough.
-        </p>
+        <p>{t.connect.intro(LANDING_URL)}</p>
 
-        <p className="connect-step">1. Connect over remote MCP (no local install needed).</p>
-        <p className="connect-hint">
-          Create a personal access token below and use it as the Bearer token. It stays valid until
-          you revoke it, unlike your short-lived session token.
-        </p>
+        <p className="connect-step">{t.connect.step1}</p>
+        <p className="connect-hint">{t.connect.hint1}</p>
         <TokenManager session={session} onTokenSelect={setRemoteToken} />
         <div className="code-block compact">
           <code className="code-line">{remoteMcpUrl}</code>
           <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
-            {copiedId === "remote-url" ? "Copied" : "Copy URL"}
+            {copiedId === "remote-url" ? t.common.copied : t.common.copyUrl}
           </button>
         </div>
         <div className="code-block compact">
           <code className="code-line">{authHeader}</code>
           <button type="button" className="copy-chip" onClick={() => copy("remote-auth", authHeader)}>
-            {copiedId === "remote-auth" ? "Copied" : "Copy"}
+            {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
           </button>
         </div>
-        <p className="connect-hint">
-          In agents that support remote MCP (Streamable HTTP), add the URL above and set the
-          {" "}<code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>.
-          For persistent local agents that only support stdio, use option 2.
-        </p>
+        <p className="connect-hint">{t.connect.hint1b()}</p>
 
-        <p className="connect-step">2. Or run the local installer. Your access token is already filled in.</p>
+        <p className="connect-step">{t.connect.step2}</p>
         <div className="code-block compact">
           <code className="code-line">{setupCommand}</code>
           <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
-            {copiedId === "setup" ? "Copied" : "Copy"}
+            {copiedId === "setup" ? t.common.copied : t.common.copy}
           </button>
         </div>
-        <p className="connect-hint">
-          The installer detects Codex, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the
-          correct MCP config for each one (with a backup), and can install the Skill too. When it
-          asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for
-          agents that only support stdio MCP.
-        </p>
+        <p className="connect-hint">{t.connect.hint2()}</p>
 
         <details className="manual-config">
-          <summary>Prefer to paste the config yourself?</summary>
+          <summary>{t.connect.manualSummary}</summary>
         <div className="code-block">
           <pre className="code-pre">{mcpConfig}</pre>
           <button type="button" className="copy-chip" onClick={() => copy("mcp", mcpConfig)}>
-            {copiedId === "mcp" ? "Copied" : "Copy"}
+            {copiedId === "mcp" ? t.common.copied : t.common.copy}
           </button>
         </div>
         </details>
-        <p className="connect-hint">
-          The token is short-lived. For long-running agents, pass <code>--refresh-token</code>,
-          {" "}<code>--supabase-url</code>, and <code>--supabase-anon-key</code> to the installer (or set{" "}
-          <code>WORK_LEARN_REFRESH_TOKEN</code>,
-          {" "}<code>SUPABASE_URL</code>, and <code>SUPABASE_ANON_KEY</code> as shown in the{" "}
-          <a className="inline-link" href={DOCS_URL} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.
-        </p>
+        <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
 
-        <p className="connect-step">3. Install the Skill (optional). It tells your agent when to save.</p>
+        <p className="connect-step">{t.connect.step3}</p>
         <div className="install-card">
-          <div className="agent-tabs" role="tablist" aria-label="Install Skill per agent">
+          <div className="agent-tabs" role="tablist" aria-label={t.connect.tabsLabel}>
             {skillInstalls.map((agent) => (
               <button
                 key={agent.id}
@@ -382,26 +365,26 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
           <div className="code-block compact">
             <code className="code-line">{active.command}</code>
             <button type="button" className="copy-chip" onClick={() => copy(`skill-${active.id}`, active.command)}>
-              {copiedId === `skill-${active.id}` ? "Copied" : "Copy"}
+              {copiedId === `skill-${active.id}` ? t.common.copied : t.common.copy}
             </button>
           </div>
           <p className="agent-note">{active.note}</p>
         </div>
 
-        <p className="connect-hint">
-          Restart your agent, then ask: <code>&ldquo;Save the useful English from this conversation.&rdquo;</code>
-        </p>
+        <p className="connect-hint">{t.connect.restart()}</p>
       </div>
     </details>
   );
 }
 
 function MaterialList({ materials }: { materials: LearningMaterial[] }) {
-  return <div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? "Saved learning material"}</h2><p>{material.original_text}</p><span>{new Date(material.created_at).toLocaleDateString()}</span></article>)}</div>;
+  const { t, formatDate } = useI18n();
+  return <div className="material-list">{materials.map((material, index) => <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}><p className="material-topic">{material.topic}</p><h2>{material.useful_expressions[0] ?? t.material.fallback}</h2><p>{material.original_text}</p><span>{formatDate(material.created_at)}</span></article>)}</div>;
 }
 
 function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {
-  return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">Today</p><h2>Review what is still useful.</h2></div><span className="review-count">{reviews.length} due</span></div>{reviews.length === 0 ? <p className="review-empty">No reviews due. Keep working, then save the next useful expression.</p> : <div className="review-list">{reviews.map((review, index) => <article className="review-card" key={review.id}><span className="review-index">{String(index + 1).padStart(2, "0")}</span><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? "Saved expression"}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>Mark mastered</button></article>)}</div>}</section>;
+  const { t } = useI18n();
+  return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">{t.review.eyebrow}</p><h2>{t.review.heading}</h2></div><span className="review-count">{t.review.due(reviews.length)}</span></div>{reviews.length === 0 ? <p className="review-empty">{t.review.empty}</p> : <div className="review-list">{reviews.map((review, index) => <article className="review-card" key={review.id}><span className="review-index">{String(index + 1).padStart(2, "0")}</span><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? t.review.fallback}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button></article>)}</div>}</section>;
 }
 
 const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
@@ -411,7 +394,9 @@ const root = createRoot(document.getElementById("root")!);
 void bootstrapSupabase().then(({ client, error }) => {
   root.render(
     <StrictMode>
-      {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice error={error} />}
+      <LocaleProvider>
+        {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice error={error} />}
+      </LocaleProvider>
     </StrictMode>
   );
 });
