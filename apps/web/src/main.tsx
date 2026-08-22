@@ -2,7 +2,7 @@ import { FormEvent, StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
-import { bootstrapSupabase } from "./lib/supabase";
+import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
 import "@fontsource-variable/geist";
@@ -16,6 +16,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [password, setPassword] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [authError, setAuthError] = useState("");
+  const [remember, setRemember] = useState(true);
   const [materials, setMaterials] = useState<LearningMaterial[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
@@ -41,7 +42,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     if (!supabase) return;
     setAuthMessage("");
     setAuthError("");
-
+    setRememberMe(remember);
     const result = authMode === "sign-in"
       ? await supabase.auth.signInWithPassword({ email, password })
       : await supabase.auth.signUp({ email, password });
@@ -57,6 +58,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
 
   const signOut = async () => {
     await supabase?.auth.signOut();
+    setRememberMe(false);
     setMaterials([]);
     setReviews([]);
   };
@@ -78,9 +80,11 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       password={password}
       message={authMessage}
       error={authError}
+      remember={remember}
       onModeChange={(mode) => { setAuthMode(mode); setAuthMessage(""); setAuthError(""); }}
       onEmailChange={setEmail}
       onPasswordChange={setPassword}
+      onRememberChange={setRemember}
       onSubmit={handleAuth}
     />;
   }
@@ -113,10 +117,10 @@ function ConfigurationNotice({ error }: { error?: string }) {
   return <main className="app-shell"><section className="welcome"><p className="eyebrow">Setup required</p><h1>Connect your learning layer.</h1><div className="empty-state"><h2>Work Learn could not load its configuration.</h2>{error && <p className="notice-error">{error}</p>}<p>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</p></div></section></main>;
 }
 
-type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: string; message: string; error: string; onModeChange: (mode: "sign-in" | "sign-up") => void; onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void };
+type AuthScreenProps = { mode: "sign-in" | "sign-up"; email: string; password: string; message: string; error: string; remember: boolean; onModeChange: (mode: "sign-in" | "sign-up") => void; onEmailChange: (value: string) => void; onPasswordChange: (value: string) => void; onRememberChange: (value: boolean) => void; onSubmit: (event: FormEvent<HTMLFormElement>) => void };
 
-function AuthScreen({ mode, email, password, message, error, onModeChange, onEmailChange, onPasswordChange, onSubmit }: AuthScreenProps) {
-  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><span className="status">Personal learning layer</span></header><section className="auth-layout"><div><p className="eyebrow">Start with your work</p><h1>Keep the English that moves your work forward.</h1><p className="lede">Save useful moments from your AI conversations, then turn them into practice.</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>Sign in</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>Create account</button></div><label>Email<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>Password<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? "Sign in" : "Create account"}</button></form></section></main>;
+function AuthScreen({ mode, email, password, message, error, remember, onModeChange, onEmailChange, onPasswordChange, onRememberChange, onSubmit }: AuthScreenProps) {
+  return <main className="app-shell"><header className="app-header"><div className="brand"><img className="brand-logo" src="/brand/work-learn-mark.svg" alt="" width="25" height="25" /><span>work learn</span></div><span className="status">Personal learning layer</span></header><section className="auth-layout"><div><p className="eyebrow">Start with your work</p><h1>Keep the English that moves your work forward.</h1><p className="lede">Save useful moments from your AI conversations, then turn them into practice.</p></div><form className="auth-card" onSubmit={onSubmit}><div className="auth-tabs"><button type="button" className={mode === "sign-in" ? "active" : ""} onClick={() => onModeChange("sign-in")}>Sign in</button><button type="button" className={mode === "sign-up" ? "active" : ""} onClick={() => onModeChange("sign-up")}>Create account</button></div><label>Email<input type="email" value={email} onChange={(event) => onEmailChange(event.target.value)} autoComplete="email" required /></label><label>Password<input type="password" value={password} onChange={(event) => onPasswordChange(event.target.value)} autoComplete={mode === "sign-in" ? "current-password" : "new-password"} minLength={6} required /></label><label className="remember-row"><input type="checkbox" checked={remember} onChange={(event) => onRememberChange(event.target.checked)} /><span>Keep me signed in for 7 days</span></label>{message && <p className="form-message">{message}</p>}{error && <p className="form-error">{error}</p>}<button className="primary-button" type="submit">{mode === "sign-in" ? "Sign in" : "Create account"}</button></form></section></main>;
 }
 
 function EmptyCorpus() {
