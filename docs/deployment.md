@@ -43,7 +43,12 @@
 
 - `.github/workflows/ci.yml`：push/PR 时跑全仓 `typecheck` 与 `build`
 - `.github/workflows/deploy-api.yml`：push 到 `main` 时部署 API 到 Vercel（从仓库根）
-- `.github/workflows/deploy-web.yml`：push 到 `main` 时部署 Web 到 Cloudflare Pages
+  - 必须先跑 `pnpm --filter @work-learn/api build:function`：`vercel.json` 里存在 `builds`，
+    Vercel 会忽略项目设置里的 buildCommand，而 `api/[[...route]].js` 是 gitignore 的构建产物。
+    漏掉这一步时 `vercel build` 只会打一行 warning，仍然部署成功，但 `/api/*` 全部 404。
+  - 部署后用 `/api/health` 和 `/api/config` 做 smoke test，空函数会让 workflow 直接失败。
+- `.github/workflows/deploy-web.yml`：push 到 `main` / `dev` 时部署 Web 到 Cloudflare Pages
+  （`main` 为生产 `work-learn.pages.dev`，`dev` 为预览 `dev.work-learn.pages.dev`）
 
 ## 需要的 GitHub Secrets
 
