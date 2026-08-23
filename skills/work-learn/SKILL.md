@@ -13,9 +13,27 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 
 - `create_session` — start a session for the current conversation. Input: `source` (e.g. `claude`, `codex`, `codebuddy`, `chatgpt`, `hermes`, `openclaw`, `opencode`, `pi`, `terminal`, `manual`, or any open label), optional `topic`.
 - `save_material` — save one confirmed learning item. Input: `sessionId`, `source`, `topic`, `originalText`, `explanation`, `usefulExpressions[]`, `corrections[]`, `vocabulary[]`, `practicePrompts[]`, `tags[]`.
+- `save_question_translation` — save a user's original question verbatim plus the idiomatic English translation you produced for it. Input: `sessionId`, `source`, `question`, `translation`, optional `topic`.
 - `search_corpus` — search the user's saved materials. Optional `query`.
 - `get_review_items` — get items due for review.
 - `mark_mastered` — mark a review item completed by `reviewId`.
+
+## Saving a question and its translation
+
+`save_question_translation` is a separate archival feature from `save_material`. It keeps the user's original question (often in Chinese) together with the idiomatic English rendering you produced. This is independent of the review queue — it is meant to be searched and recalled later.
+
+Three trigger modes, all at the user's discretion:
+
+1. **Single save** — when the user says something like "save this question and its translation", call `save_question_translation` with exactly that question and your natural English rendering.
+2. **Session mode (auto)** — when the user says "from now on, save every question I ask", switch into auto mode: for each subsequent user question, produce the idiomatic English translation and call `save_question_translation` once, without asking again. Keep the same `sessionId`.
+3. **Interrupt** — when the user says "stop", "enough", or otherwise asks to end auto mode, turn it off and go back to only saving on explicit request.
+
+Rules for every save:
+
+- Keep `question` verbatim — the user's exact wording, in whatever language they used. Do not clean it up or paraphrase it.
+- `translation` should be the idiomatic, natural English a fluent speaker would actually ask, not a literal word-for-word rendering.
+- Show what you are about to save and get confirmation before saving, **except** in session/auto mode where the user has already opted in — there you save directly.
+- Never save secrets, tokens, passwords, or private paths; keep them out of what you propose, and redaction also applies on save.
 
 ## When the user asks to save something
 

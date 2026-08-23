@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, saveMaterialInputSchema, sourceSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -13,6 +13,7 @@ import { createSessionInputSchema, saveMaterialInputSchema, sourceSchema } from 
 export interface WorkLearnContext {
   createSession(input: unknown): Promise<unknown>;
   saveMaterial(input: unknown): Promise<unknown>;
+  saveQuestionTranslation(input: unknown): Promise<unknown>;
   searchCorpus(query?: string): Promise<unknown>;
   getReviewItems(): Promise<unknown>;
   markMastered(reviewId: string): Promise<unknown>;
@@ -44,6 +45,17 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.saveMaterial(input)) }] }));
 
+  server.registerTool("save_question_translation", {
+    description: "Save a user's original question together with the idiomatic English translation the agent produced for it. Use when the user wants to keep a real question and its natural English rendering, whether saved one at a time or automatically during a session.",
+    inputSchema: {
+      sessionId: z.string(),
+      source: sourceSchema,
+      question: z.string().describe("The user's original question, verbatim -- usually Chinese, exactly as they asked it."),
+      translation: z.string().describe("The idiomatic, natural English rendering the agent produced for that question."),
+      topic: z.string().optional()
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.saveQuestionTranslation(input)) }] }));
+
   server.registerTool("search_corpus", {
     description: "Search the user's saved Work Learn corpus.",
     inputSchema: { query: z.string().optional() }
@@ -60,4 +72,4 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
   }, async ({ reviewId }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.markMastered(reviewId)) }] }));
 };
 
-export { createSessionInputSchema, saveMaterialInputSchema };
+export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

@@ -59,6 +59,35 @@ export const saveMaterialInputSchema = learningMaterialSchema
     practicePrompts: input.practicePrompts.map((value) => redactSecrets(value).text)
   }));
 
+// A question/translation pair: the user's original question (often in Chinese)
+// together with the idiomatic English rendering an agent produced. Kept as a
+// separate material type from learning_materials; it is NOT wired into the
+// review queue -- it exists to be searched and recalled.
+export const questionTranslationSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  source: sourceSchema,
+  question: z.string().min(1),
+  translation: z.string().min(1),
+  topic: z.string().trim().max(200).optional(),
+  createdAt: z.string().datetime()
+});
+
+export const saveQuestionTranslationInputSchema = questionTranslationSchema
+  .omit({ id: true, createdAt: true })
+  .transform((input) => ({
+    ...input,
+    source: redactSecrets(input.source).text,
+    question: redactSecrets(input.question).text,
+    translation: redactSecrets(input.translation).text,
+    topic: input.topic ? redactSecrets(input.topic).text : input.topic
+  }));
+
+// The columns the API returns for a question translation. Explicit rather than
+// "*", so the payload stays stable if search columns are added later.
+export const questionTranslationColumns =
+  "id,session_id,source,question,translation,topic,created_at";
+
 // The columns the API returns for a material. Explicit rather than "*", because
 // the table also carries search_text -- a denormalised copy of every searchable
 // field, kept for the trigram index. Selecting "*" would double every payload.
@@ -71,3 +100,5 @@ export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 export type LearningMaterial = z.infer<typeof learningMaterialSchema>;
 export type SaveMaterialInput = z.infer<typeof saveMaterialInputSchema>;
+export type QuestionTranslation = z.infer<typeof questionTranslationSchema>;
+export type SaveQuestionTranslationInput = z.infer<typeof saveQuestionTranslationInputSchema>;

@@ -1,5 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createSessionInputSchema, materialColumns, saveMaterialInputSchema } from "@work-learn/shared-schema";
+import {
+  createSessionInputSchema,
+  materialColumns,
+  questionTranslationColumns,
+  saveMaterialInputSchema,
+  saveQuestionTranslationInputSchema
+} from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
 
 type DbResult = { data: unknown; error?: { message: string } | null };
@@ -58,6 +64,25 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
     if (review.error) throw new Error(review.error.message);
 
     return material;
+  },
+
+  async saveQuestionTranslation(input) {
+    const parsed = saveQuestionTranslationInputSchema.parse(input);
+    // Deliberately no review_item row: question/translation pairs are archival
+    // (recall and search), not queue items. Save them plainly.
+    const result = await supabase
+      .from("question_translations")
+      .insert({
+        user_id: userId,
+        session_id: parsed.sessionId,
+        source: parsed.source,
+        question: parsed.question,
+        translation: parsed.translation,
+        topic: parsed.topic ?? null
+      })
+      .select(questionTranslationColumns)
+      .single();
+    return ok(result);
   },
 
   async searchCorpus(query) {
