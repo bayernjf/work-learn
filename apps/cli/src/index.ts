@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { redactSecrets } from "@work-learn/learning-core";
-import { LocalStore } from "@work-learn/local-store";
+import { DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
 
 const execFileAsync = promisify(execFile);
 const [command, ...args] = process.argv.slice(2);
@@ -26,7 +26,7 @@ if (command === "capture") {
 } else if (command === "sync") {
   await sync(args);
 } else if (command === "export") {
-  console.log("learn export: ready for implementation (Phase 4)");
+  await exportNotes(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -146,6 +146,30 @@ async function sync(args: string[]) {
 
     const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number } };
     console.log(JSON.stringify({ synced: result.data }, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function exportNotes(args: string[]) {
+  const notesDir = option(args, "--out") ?? DEFAULT_NOTES_DIR;
+  const from = option(args, "--from");
+  const to = option(args, "--to");
+
+  const store = openStore();
+  try {
+    let dates = store.listDates();
+    if (from) dates = dates.filter((d) => d >= from);
+    if (to) dates = dates.filter((d) => d <= to);
+    if (dates.length === 0) {
+      console.log("Nothing to export.");
+      return;
+    }
+
+    const written: string[] = [];
+    for (const date of dates) written.push(store.exportMarkdown(date, notesDir));
+
+    console.log(JSON.stringify({ exported: written.length, files: written }, null, 2));
   } finally {
     store.close();
   }

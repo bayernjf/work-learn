@@ -290,6 +290,19 @@ export class LocalStore {
     tx();
   }
 
+  /** Distinct dates that have at least one material or question, ascending. */
+  listDates(): string[] {
+    const rows = this.db
+      .prepare(
+        `SELECT substr(created_at, 1, 10) AS d FROM learning_materials
+         UNION
+         SELECT substr(created_at, 1, 10) AS d FROM question_translations
+         ORDER BY d`
+      )
+      .all() as Array<{ d: string }>;
+    return rows.map((r) => r.d);
+  }
+
   /** Regenerate a day's markdown mirror, overwriting any existing file. */
   exportMarkdown(date: string, notesDir = DEFAULT_NOTES_DIR): string {
     const like = `${date}%`;
