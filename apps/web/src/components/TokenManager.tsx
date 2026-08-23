@@ -12,9 +12,10 @@ import { useI18n } from "../i18n/context";
 type Props = {
   session: Session;
   onTokenSelect: (token: string | null) => void;
+  tokenFilePath: string;
 };
 
-export function TokenManager({ session, onTokenSelect }: Props) {
+export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
   const { t, formatDate: formatIso } = useI18n();
   const formatDate = (value: string | null) => (value ? formatIso(value) : t.tokens.never);
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
@@ -24,17 +25,35 @@ export function TokenManager({ session, onTokenSelect }: Props) {
   const [expiresInDays, setExpiresInDays] = useState(90);
   const [created, setCreated] = useState<CreatedPersonalAccessToken | null>(null);
   const [loading, setLoading] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
 
-  const copyCreated = async (token: string) => {
+  const copy = async (id: string, value: string) => {
     try {
-      await navigator.clipboard.writeText(token);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
+      await navigator.clipboard.writeText(value);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((current) => (current === id ? null : current)), 1800);
     } catch {
-      // The token is on screen either way, so a failed copy is not worth an error.
+      // The value is on screen either way, so a failed copy is not worth an error.
     }
+  };
+
+  /**
+   * A download, because a token shown once is a token you can lose between
+   * reading it and reaching a terminal.
+   *
+   * No trailing newline: it matches what the terminal recipe writes, and the MCP
+   * server trims anyway.
+   */
+  const saveCreated = (token: string) => {
+    const url = URL.createObjectURL(new Blob([token], { type: "text/plain" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "work-learn-token.txt";
+    link.click();
+    URL.revokeObjectURL(url);
+    setSaved(true);
   };
 
   const load = async () => {
@@ -58,7 +77,8 @@ export function TokenManager({ session, onTokenSelect }: Props) {
     try {
       const result = await createPersonalAccessToken(session, name.trim(), expiresInDays || undefined);
       setCreated(result.data);
-      setCopied(false);
+      setCopiedId(null);
+      setSaved(false);
       setName("");
       onTokenSelect(result.data.token);
       await load();
@@ -108,6 +128,9 @@ export function TokenManager({ session, onTokenSelect }: Props) {
           ))
         )}
       </div>
+      {tokens.some((token) => !token.revoked_at && !token.last_used_at) && (
+        <p className="token-hint">{t.tokens.lastUsedHint}</p>
+      )}
 
       {created && (
         <div className="token-created">
@@ -116,10 +139,28 @@ export function TokenManager({ session, onTokenSelect }: Props) {
           </p>
           <div className="token-row created-row">
             <code className="token-raw">{created.token}</code>
-            <button type="button" className="copy-chip" onClick={() => void copyCreated(created.token)}>
-              {copied ? t.common.copied : t.common.copy}
+            <button type="button" className="copy-chip" onClick={() => void copy("token", created.token)}>
+              {copiedId === "token" ? t.common.copied : t.common.copy}
+            </button>
+            <button type="button" className="copy-chip" onClick={() => saveCreated(created.token)}>
+              {saved ? t.tokens.saved : t.tokens.save}
             </button>
           </div>
+          {saved && (
+            <>
+              <p className="token-save-hint">{t.tokens.saveHint}</p>
+              <div className="code-block compact">
+                <code className="code-line">{t.tokens.moveCommand(tokenFilePath)}</code>
+                <button
+                  type="button"
+                  className="copy-chip"
+                  onClick={() => void copy("move", t.tokens.moveCommand(tokenFilePath))}
+                >
+                  {copiedId === "move" ? t.common.copied : t.common.copy}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
