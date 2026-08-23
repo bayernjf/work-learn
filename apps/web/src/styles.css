@@ -851,7 +851,8 @@ code {
 .agent-note { margin: 10px 0 0 !important; color: var(--ink-3) !important; font-size: 12px !important; }
 
 .manual-config { margin-top: 12px; }
-.manual-config summary {
+.manual-config summary,
+.token-file-lane summary {
   cursor: pointer;
   color: var(--ink-3);
   font-size: 12.5px;
@@ -864,6 +865,14 @@ code {
 .manual-config summary::before { content: "+ "; }
 .manual-config[open] summary::before { content: "− "; }
 .manual-config .code-block { margin-top: 10px; }
+
+.token-file-lane { margin: 10px 0 20px; }
+.token-file-lane summary:hover { color: var(--ink); }
+.token-file-lane summary::-webkit-details-marker { display: none; }
+.token-file-lane summary::before { content: "+ "; }
+.token-file-lane[open] summary::before { content: "− "; }
+.agent-connect-body .token-file-lane .connect-hint { margin: 10px 0 0; }
+.token-file-step { margin: 14px 0 8px; color: var(--ink-2); font-size: 12.5px; line-height: 1.55; }
 
 /* Personal access tokens -------------------------------------------------- */
 
@@ -930,6 +939,9 @@ code {
 .created-row { padding: 9px 11px; }
 .token-raw {
   display: block;
+  /* Shrinkable so the copy button keeps its place instead of being pushed out. */
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   padding: 0;
   background: transparent;
@@ -953,6 +965,19 @@ code {
   transition: border-color .18s ease, box-shadow .18s ease;
 }
 .token-form input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.token-form select {
+  flex: 0 0 auto;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm);
+  color: var(--ink);
+  background: var(--surface);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  cursor: pointer;
+}
+.token-form select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); outline: none; }
+.token-hint { margin: 8px 0 0; color: var(--ink-3); font-size: 12px; line-height: 1.5; }
 .token-form button {
   flex: 0 0 auto;
   padding: 10px 15px;

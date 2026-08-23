@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join, isAbsolute, resolve } from "node:path";
 import { homedir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -17,6 +17,7 @@ const DEFAULT_API_URL = "https://work-learn-api.vercel.app";
 
 type CliFlags = {
   token?: string;
+  tokenFile?: string;
   apiUrl?: string;
   repo?: string;
   agents?: string[];
@@ -31,6 +32,7 @@ function parseArgs(argv: string[]): CliFlags {
     const next = () => argv[++i];
     switch (arg) {
       case "--token": flags.token = next(); break;
+      case "--token-file": flags.tokenFile = next(); break;
       case "--api-url": flags.apiUrl = next(); break;
       case "--repo": flags.repo = next(); break;
       // Removed rather than ignored: the default branch below swallows unknown flags,
@@ -70,6 +72,10 @@ Options:
   --token <token>            Work Learn personal access token (WORK_LEARN_ACCESS_TOKEN).
                              Prefer the interactive prompt: a token passed here
                              lands in your shell history. Use this only with -y.
+  --token-file <path>        Read the token from this file at startup instead of
+                             writing it into the agent config. Only the path is
+                             stored, so nothing secret has to be pasted -- useful
+                             when an agent is doing this setup for you.
   --api-url <url>            Work Learn API URL (default: ${DEFAULT_API_URL})
   --repo <path>              Path to a local clone of work-learn
   --agent <id>               Only configure this agent (repeatable): codex, claude-code, claude-desktop, codebuddy, cursor, opencode
@@ -78,7 +84,9 @@ Options:
 `;
 
 type Answers = {
+  /** Empty when tokenFile is set: the config then stores a path, not the token. */
   token: string;
+  tokenFile?: string;
   apiUrl: string;
   repoPath: string;
   selected: AgentTarget[];
@@ -145,10 +153,11 @@ async function gather(flags: CliFlags): Promise<Answers> {
     const repoPath = flags.repo
       ? resolve(flags.repo)
       : detectRepoPath() ?? "";
-    if (!flags.token) throw new Error("--token is required in --yes mode");
+    if (!flags.token && !flags.tokenFile) throw new Error("--token or --token-file is required in --yes mode");
     if (!repoPath) throw new Error("--repo <path> is required when no local clone is detected");
     return {
-      token: flags.token,
+      token: flags.token ?? "",
+      tokenFile: resolveTokenFile(flags.tokenFile),
       apiUrl: flags.apiUrl ?? DEFAULT_API_URL,
       repoPath,
       selected: selected.length ? selected : ALL_AGENTS,
@@ -165,8 +174,11 @@ async function gather(flags: CliFlags): Promise<Answers> {
       console.log(`  Detected: ${detected.map((agent) => agent.label).join(", ")}\n`);
     }
 
-    const token = flags.token ?? (await prompt(rl, "  Work Learn personal access token: "));
-    if (!token) throw new Error("An access token is required. Create one in the Work Learn web app.");
+    const tokenFile = resolveTokenFile(flags.tokenFile);
+    const token = tokenFile
+      ? ""
+      : flags.token ?? (await prompt(rl, "  Work Learn personal access token: "));
+    if (!tokenFile && !token) throw new Error("An access token is required. Create one in the Work Learn web app.");
 
     const apiUrl = flags.apiUrl ?? (await prompt(rl, `  API URL [${DEFAULT_API_URL}]: `, DEFAULT_API_URL));
 
@@ -198,10 +210,28 @@ async function gather(flags: CliFlags): Promise<Answers> {
 
     const installSkill = bool(await prompt(rl, "  Also install the Work Learn Skill? [Y/n]: "), true);
 
-    return { token, apiUrl, repoPath, selected: chosen, installSkill };
+    return { token, tokenFile, apiUrl, repoPath, selected: chosen, installSkill };
   } finally {
     rl.close();
   }
+}
+
+/**
+ * Absolute, existing, and non-empty -- checked here rather than at first use.
+ *
+ * The agent config records only this path, so a typo would not surface until the
+ * MCP server failed to start, which reads as "the install did not work".
+ */
+function resolveTokenFile(path: string | undefined): string | undefined {
+  if (!path) return undefined;
+  // Expanded here because the flag is often copied out of a doc as ~/..., and an
+  // agent that spawns us without a shell passes the tilde through literally --
+  // which then reads as "the file is missing" while the user can see it is there.
+  const expanded = path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path;
+  const resolved = isAbsolute(expanded) ? expanded : resolve(expanded);
+  if (!existsSync(resolved)) throw new Error(`--token-file ${resolved} does not exist`);
+  if (!readFileSync(resolved, "utf8").trim()) throw new Error(`--token-file ${resolved} is empty`);
+  return resolved;
 }
 
 function buildEntry(answers: Answers): McpEntry {
@@ -212,10 +242,9 @@ function buildEntry(answers: Answers): McpEntry {
     );
   }
   const serverTs = join(answers.repoPath, "packages", "mcp-server", "src", "server.ts");
-  const env: Record<string, string> = {
-    WORK_LEARN_API_URL: answers.apiUrl,
-    WORK_LEARN_ACCESS_TOKEN: answers.token,
-  };
+  const env: Record<string, string> = answers.tokenFile
+    ? { WORK_LEARN_API_URL: answers.apiUrl, WORK_LEARN_ACCESS_TOKEN_FILE: answers.tokenFile }
+    : { WORK_LEARN_API_URL: answers.apiUrl, WORK_LEARN_ACCESS_TOKEN: answers.token };
 
   return { command: tsx, args: [serverTs], env };
 }

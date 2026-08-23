@@ -18,7 +18,7 @@ https://work-learn-api.vercel.app/api/mcp
 Authorization: Bearer <your-access-token>
 ```
 
-其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。它在你吊销之前一直有效，所以本地 stdio agent 填一次就不用再管；建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
+其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。创建时可以选有效期（默认 90 天，也可以选永久）；在过期或吊销之前不需要做任何续期。建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
 
 远程端点与本地 MCP 提供完全相同的 5 个工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 
@@ -31,7 +31,9 @@ Authorization: Bearer <your-access-token>
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已在 Web 端创建一个 personal access token
 
-`WORK_LEARN_ACCESS_TOKEN` 只接受 personal access token。早期版本支持的
+`WORK_LEARN_ACCESS_TOKEN` 只接受 personal access token。也可以改用
+`WORK_LEARN_ACCESS_TOKEN_FILE` 指向一个存着 token 的文件，配置里就只留路径（见下文
+「不想让 token 出现在对话里」）。两个都设时以文件为准。早期版本支持的
 `WORK_LEARN_REFRESH_TOKEN` / `SUPABASE_URL` / `SUPABASE_ANON_KEY` 已移除：它们把账号级凭证写进
 agent 的配置文件，而 personal access token 本身就长期有效、可单独吊销。旧配置里如果还留着这三个
 变量，删掉即可；MCP 服务器启动时会顺手清理遗留的 `packages/mcp-server/.session-token.json`。
@@ -47,6 +49,32 @@ npx @work-learn/setup --repo /path/to/work-learn
 
 安装器会问你要 token，粘贴进去即可。不要用 `--token` 传:命令行参数会进 shell 历史文件，
 执行瞬间也能在 `ps` 里看到。`--token` 只留给 `-y` 非交互场景（CI 之类）。
+
+### 不想让 token 出现在对话里
+
+如果是让 agent 帮你装，粘贴 token 就等于把它说给 agent 听，而对话是会被记录的（发给模型
+提供方，也落在本地 transcript 里）。这种情况用 `--token-file`。
+
+第一条自己在终端里跑。它是问你要 token，所以 token 也不会进 shell 历史；`umask 077`
+让文件在创建时就是 `0600`，不存在先可读再 `chmod` 的窗口：
+
+```bash
+umask 077 && printf 'Paste your token: ' && read -rs t && printf '%s' "$t" > ~/.work-learn-token && unset t && echo
+```
+
+（提示语单独 `printf`，不用 `read -p`——在 zsh 里 `-p` 表示"从协程读"，会直接报错。）
+
+第二条可以交给 agent，因为路径不是秘密：
+
+```bash
+npx @work-learn/setup --repo /path/to/work-learn --token-file ~/.work-learn-token
+```
+
+配置文件里存的也是路径，MCP 服务器每次启动时才去读。所以整条链上没有任何环节接触到
+token 本身。
+
+注意：让 agent 去 `cat` 这个文件同样是泄漏——工具返回的内容一样进对话。有用的只是"只给路径"
+这一层间接。
 
 向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。

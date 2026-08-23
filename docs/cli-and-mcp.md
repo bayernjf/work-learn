@@ -33,8 +33,8 @@ WORK_LEARN_API_URL=http://localhost:3000
 WORK_LEARN_ACCESS_TOKEN=<your Work Learn personal access token>
 ```
 
-在 Web 端的 “Connect an agent” 面板创建 personal access token。它在你吊销之前一直有效，
-所以不需要续期机制。建议每个 agent 单独发一个，这样吊销时只影响那一个。
+在 Web 端的 “Connect an agent” 面板创建 personal access token，创建时可以选有效期（默认 90 天，
+也可以选永久）。在过期或吊销之前不需要续期机制。建议每个 agent 单独发一个，这样吊销时只影响那一个。
 
 MCP 当前提供：
 
@@ -63,3 +63,5 @@ Claude Desktop 的本地配置示例：
 ```
 
 `WORK_LEARN_ACCESS_TOKEN` 只放在本机 Agent 配置中，不提交到 Git，也不使用 service role key 代替用户 token。
+如果不想让 token 出现在配置文件里，用 `WORK_LEARN_ACCESS_TOKEN_FILE` 指向一个存着它的文件，
+配置里就只留路径；两个都设时以文件为准。

@@ -4,12 +4,11 @@ import { existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMcpEndpoint, createHttpContext } from "./index.js";
+import { readAccessToken } from "./token.js";
 import { registerTools } from "./tools.js";
 
 const apiUrl = process.env.WORK_LEARN_API_URL ?? "http://localhost:3000";
-const accessToken = process.env.WORK_LEARN_ACCESS_TOKEN;
-
-if (!accessToken) throw new Error("WORK_LEARN_ACCESS_TOKEN is required");
+const accessToken = readAccessToken(process.env);
 
 // Left behind by the removed refresh flow. It holds a Supabase refresh token, which
 // is a far broader credential than the access token this server now uses.
