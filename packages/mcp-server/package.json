@@ -22,6 +22,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
+    "@work-learn/local-store": "workspace:*",
     "@work-learn/shared-schema": "workspace:*",
     "zod": "^3.24.1",
     "@supabase/supabase-js": "^2.48.1"

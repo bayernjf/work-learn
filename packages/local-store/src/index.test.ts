@@ -32,7 +32,7 @@ test("a question/translation pair is saved and searchable", () => {
     assert.ok(saved.id);
     const { questions } = store.searchCorpus("数据库");
     assert.equal(questions.length, 1);
-    assert.equal(questions[0].question, "怎么优化数据库查询性能？");
+    assert.equal(questions[0]?.question, "怎么优化数据库查询性能？");
   });
 });
 
