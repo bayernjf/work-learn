@@ -31,6 +31,25 @@ export const fetchMaterials = async (session: Session, query = "") => {
   return (await response.json()) as { data: LearningMaterial[] };
 };
 
+export type QuestionTranslation = {
+  id: string;
+  session_id: string;
+  source: string;
+  question: string;
+  translation: string;
+  topic: string | null;
+  created_at: string;
+};
+
+export const fetchQuestionTranslations = async (session: Session, query = "") => {
+  const search = query ? `?q=${encodeURIComponent(query)}` : "";
+  const response = await fetch(`/api/question-translations${search}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.materials);
+  return (await response.json()) as { data: QuestionTranslation[] };
+};
+
 export const fetchReviews = async (session: Session) => {
   const response = await fetch(`/api/reviews`, {
     headers: { Authorization: `Bearer ${session.access_token}` }

@@ -203,6 +203,56 @@ code {
 }
 .review-section { margin: 76px 0 0; }
 
+/* Question & translation pairs ------------------------------------------- */
+
+.qa-section { margin: 76px 0 0; }
+.qa-count {
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.qa-list { display: grid; gap: 14px; margin-top: 22px; }
+.qa-card {
+  padding: 20px 22px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-1);
+}
+.qa-question {
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 600;
+}
+.qa-translation-label {
+  margin: 0 0 2px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.qa-translation {
+  margin: 0 0 14px;
+  color: var(--ink-2);
+  font-size: 15px;
+  font-family: var(--font-serif);
+}
+.qa-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.qa-meta .material-topic { color: var(--ink-3); }
+
 /* Review rows: hairline list, not boxed cards. */
 .review-list { display: grid; }
 .review-card {
