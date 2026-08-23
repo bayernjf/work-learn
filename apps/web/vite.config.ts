@@ -14,6 +14,28 @@ const installAssets = [
   { url: "scripts/install-skill.sh", type: "text/x-shellscript; charset=utf-8" },
 ] as const;
 
+// The per-agent Skill tabs are derived from this list instead of repeating it in
+// the UI, so adding an agent means editing the script alone. The script keeps its
+// own embedded copy because it also runs standalone through `curl | bash`, with no
+// checkout to read a shared list from.
+function readAgentSkillDirs(): string[] {
+  const path = "scripts/install-skill.sh";
+  const block = /^AGENT_DIRS=\(\n([\s\S]*?)^\)$/m.exec(readFileSync(resolve(repoRoot, path), "utf8"))?.[1];
+  if (block === undefined) throw new Error(`${path}: no AGENT_DIRS=( ... ) block to derive the Skill tabs from`);
+  const entries = block
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "" && !line.startsWith("#"));
+  if (entries.length === 0) throw new Error(`${path}: AGENT_DIRS is empty`);
+  return entries.map((entry) => {
+    // Anything the loop below would install into but this cannot read is a silent
+    // gap in the UI, so refuse to build rather than drop the entry.
+    const dir = /^"\$HOME\/([^"]+)"$/.exec(entry);
+    if (!dir) throw new Error(`${path}: AGENT_DIRS entry is not a "$HOME/..." path: ${entry}`);
+    return `~/${dir[1]}`;
+  });
+}
+
 function serveInstallAssets(): Plugin {
   const read = (url: string) => readFileSync(resolve(repoRoot, url), "utf8");
   return {
@@ -41,6 +63,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
     plugins: [react(), serveInstallAssets()],
+    define: { __AGENT_SKILL_DIRS__: JSON.stringify(readAgentSkillDirs()) },
     server: {
       port: 5173,
       proxy: { "/api": { target: env.WORK_LEARN_API_TARGET ?? "http://localhost:3000", changeOrigin: true } }

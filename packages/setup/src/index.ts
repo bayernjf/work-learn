@@ -71,7 +71,7 @@ Options:
   --repo <path>              Path to a local clone of work-learn
   --supabase-url <url>       Supabase project URL (needed for token auto-refresh)
   --supabase-anon-key <key>  Supabase anon key (needed for token auto-refresh)
-  --agent <id>               Only configure this agent (repeatable): codex, claude, codebuddy, cursor, opencode
+  --agent <id>               Only configure this agent (repeatable): codex, claude-code, claude-desktop, codebuddy, cursor, opencode
   -y, --yes                  Non-interactive; use provided flags and defaults
   -h, --help                 Show this help
 `;
@@ -131,10 +131,14 @@ async function gather(flags: CliFlags): Promise<Answers> {
 
   let selected: AgentTarget[];
   if (flags.agents?.length) {
-    selected = flags.agents
-      .filter((id) => knownIds.has(id))
-      .map((id) => ALL_AGENTS.find((agent) => agent.id === id)!)
-      .filter(Boolean);
+    const unknown = flags.agents.filter((id) => !knownIds.has(id));
+    if (unknown.length > 0) {
+      // Silently dropping these would configure nothing and still exit 0.
+      throw new Error(
+        `Unknown --agent: ${unknown.join(", ")}. Known ids: ${[...knownIds].join(", ")}`,
+      );
+    }
+    selected = flags.agents.map((id) => ALL_AGENTS.find((agent) => agent.id === id)!);
   } else {
     selected = detected;
   }

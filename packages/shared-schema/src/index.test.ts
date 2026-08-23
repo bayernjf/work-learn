@@ -69,3 +69,25 @@ test("ordinary learning material passes through untouched", () => {
   assert.equal(parsed.originalText, originalText);
   assert.equal(parsed.topic, base.topic);
 });
+
+test("a work learn token does not survive being pasted into a conversation", () => {
+  const token = "wlpat_HGnQ3xLp0aVzYt7RkD2mBcXfJw9sUe4T";
+  const parsed = saveMaterialInputSchema.parse({ ...base, originalText: `Config says ${token} now.` });
+  assert.ok(!parsed.originalText.includes(token));
+});
+
+test("a session jwt does not survive being pasted into a conversation", () => {
+  const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEyMyJ9.QmxhaEJsYWhTaWduYXR1cmU";
+  const parsed = saveMaterialInputSchema.parse({ ...base, originalText: `Bearerless: ${jwt}` });
+  assert.ok(!parsed.originalText.includes(jwt));
+});
+
+test("the env var name the installer actually writes is redacted", () => {
+  // WORK_LEARN_ACCESS_TOKEN begins with an underscore boundary, which a \b before
+  // the keyword would miss.
+  const parsed = saveMaterialInputSchema.parse({
+    ...base,
+    originalText: '"WORK_LEARN_ACCESS_TOKEN": "wlpat_short"',
+  });
+  assert.ok(!parsed.originalText.includes("wlpat_short"));
+});

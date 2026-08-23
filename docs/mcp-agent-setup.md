@@ -29,7 +29,7 @@ Authorization: Bearer <your-access-token>
 ## 前置条件
 
 - 已把本仓库 clone 到本机。下文示例统一用 `/path/to/work-learn` 代指这个目录，照抄时替换成你自己的路径
-- 本机已安装 pnpm 和 Node 20+
+- 本机已安装 pnpm 和 Node 22+（`@supabase/supabase-js` 在 `createClient` 就要求 22，Node 20 会直接报错）
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已拿到一个 Supabase 用户的 access token（从 Web 登录或脚本登录获取）
 
@@ -46,7 +46,7 @@ Authorization: Bearer <your-access-token>
 npx @work-learn/setup --token <your-access-token> --repo /path/to/work-learn
 ```
 
-向导会自动探测 Codex、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
+向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。
 
 想要长期免维护，带上 refresh token：
@@ -60,7 +60,9 @@ npx @work-learn/setup \
   --repo /path/to/work-learn
 ```
 
-只配置指定 Agent 可重复使用 `--agent`：`--agent codex --agent codebuddy`。
+只配置指定 Agent 可重复使用 `--agent`：`--agent codex --agent codebuddy`。可用的 id 是
+`codex`、`claude-code`、`claude-desktop`、`codebuddy`、`cursor`、`opencode`——Claude Code 和
+Claude Desktop 是两个产品、两个配置文件，要分别指定。
 非交互环境加 `-y`。其余选项见 `npx @work-learn/setup --help`。
 
 下文的手动配置仅在你不想使用安装器或需要自定义时参考。
@@ -100,9 +102,10 @@ npx @work-learn/setup \
 }
 ```
 
-## Claude Desktop
+## Claude Code / Claude Desktop
 
-编辑 `~/Library/Application Support/Claude/claude_desktop_config.json`：
+两个产品的配置文件不同，但结构一样。Claude Code 编辑 `~/.claude.json`，Claude Desktop 编辑
+`~/Library/Application Support/Claude/claude_desktop_config.json`，都在顶层的 `mcpServers` 下加：
 
 ```json
 {
