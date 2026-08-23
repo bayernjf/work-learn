@@ -108,3 +108,26 @@ test("no read hands the internal search column to a client", async () => {
   assert.equal(columns[1], materialColumns);
   assert.ok(columns[2]?.includes(`learning_materials(${materialColumns})`));
 });
+
+test("a read-only token cannot write", async () => {
+  const { client } = stubClient();
+  const ctx = createDirectContext(client, USER, ["read"]);
+  await assert.rejects(async () => { await ctx.createSession({ source: "claude", topic: "Review" }); }, /write/);
+  await assert.rejects(async () => { await ctx.markMastered("review-id"); }, /write/);
+});
+
+test("a write token can still read", async () => {
+  const { client, calls } = stubClient();
+  const ctx = createDirectContext(client, USER, ["write"]);
+  await ctx.searchCorpus(undefined);
+  await ctx.getReviewItems();
+  assert.equal(calls.length, 2);
+});
+
+test("no scopes keeps the legacy full-access behavior", async () => {
+  const { client, calls } = stubClient();
+  const ctx = createDirectContext(client, USER);
+  await ctx.createSession({ source: "claude", topic: "Review" });
+  await ctx.searchCorpus(undefined);
+  assert.equal(calls.length, 2);
+});

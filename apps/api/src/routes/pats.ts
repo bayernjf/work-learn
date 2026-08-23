@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { PAT_SCOPES } from "@work-learn/shared-schema";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 import { generatePat } from "../lib/pat.js";
 
@@ -23,7 +24,8 @@ const requireUser = async (authorization: string | undefined) => {
 
 const createSchema = z.object({
   name: z.string().trim().min(1).max(80),
-  expiresInDays: z.number().int().min(1).max(3650).optional()
+  expiresInDays: z.number().int().min(1).max(3650).optional(),
+  scopes: z.array(z.enum(PAT_SCOPES)).min(1).max(PAT_SCOPES.length).optional()
 });
 
 patsRoute.get("/", async (c) => {
@@ -32,7 +34,7 @@ patsRoute.get("/", async (c) => {
 
   const { data, error } = await auth.supabase
     .from("personal_access_tokens")
-    .select("id,name,token_prefix,last_used_at,expires_at,revoked_at,created_at")
+    .select("id,name,token_prefix,scopes,last_used_at,expires_at,revoked_at,created_at")
     .eq("user_id", auth.userId)
     .order("created_at", { ascending: false });
 
@@ -51,6 +53,8 @@ patsRoute.post("/", async (c) => {
   const expiresAt = parsed.data.expiresInDays
     ? new Date(Date.now() + parsed.data.expiresInDays * 86_400_000).toISOString()
     : null;
+  // Callers that predate scoping get a full-access token, same as before.
+  const scopes = parsed.data.scopes ?? ["read", "write"];
 
   const { data, error } = await auth.supabase
     .from("personal_access_tokens")
@@ -59,9 +63,10 @@ patsRoute.post("/", async (c) => {
       name: parsed.data.name,
       token_prefix: generated.prefix,
       token_hash: generated.hash,
+      scopes,
       expires_at: expiresAt
     })
-    .select("id,name,token_prefix,expires_at,created_at")
+    .select("id,name,token_prefix,scopes,expires_at,created_at")
     .single();
 
   if (error) return c.json({ error: "Could not create token", details: error.message }, 500);

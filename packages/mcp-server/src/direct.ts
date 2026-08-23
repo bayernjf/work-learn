@@ -1,11 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createSessionInputSchema,
+  hasScope,
   materialColumns,
   questionTranslationColumns,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
-  syncBatchInputSchema
+  syncBatchInputSchema,
+  type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
 
@@ -17,6 +19,23 @@ const ok = (result: DbResult) => {
 };
 
 /**
+ * Raised when a token's scopes do not cover an operation. The REST routes map
+ * it to 403; the remote MCP endpoint lets it surface as an MCP tool error.
+ */
+export class ScopeError extends Error {
+  readonly status = 403;
+  constructor(scope: PatScope) {
+    super(`This token only has read access; the "${scope}" scope is required for this operation.`);
+    this.name = "ScopeError";
+  }
+}
+
+/** Throw unless the token's scopes cover the given operation. */
+export const requireScope = (scopes: string[] | undefined, scope: PatScope): void => {
+  if (!hasScope(scopes, scope)) throw new ScopeError(scope);
+};
+
+/**
  * Context used by the remote Streamable HTTP endpoint: it runs inside the Vercel
  * function with the request already authenticated. It receives a service-role
  * client and the resolved user id. Using the service role means the context works
@@ -24,8 +43,9 @@ const ok = (result: DbResult) => {
  * -- but it also bypasses RLS, so every statement here must carry its own
  * user_id filter. Nothing downstream will catch a missing one.
  */
-export const createDirectContext = (supabase: SupabaseClient, userId: string): WorkLearnContext => ({
+export const createDirectContext = (supabase: SupabaseClient, userId: string, scopes?: string[]): WorkLearnContext => ({
   async createSession(input) {
+    requireScope(scopes, "write");
     const parsed = createSessionInputSchema.parse(input);
     const result = await supabase
       .from("sessions")
@@ -36,6 +56,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   },
 
   async saveMaterial(input) {
+    requireScope(scopes, "write");
     const parsed = saveMaterialInputSchema.parse(input);
     const material = await supabase
       .from("learning_materials")
@@ -68,6 +89,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   },
 
   async saveQuestionTranslation(input) {
+    requireScope(scopes, "write");
     const parsed = saveQuestionTranslationInputSchema.parse(input);
     // Deliberately no review_item row: question/translation pairs are archival
     // (recall and search), not queue items. Save them plainly.
@@ -87,6 +109,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   },
 
   async searchCorpus(query) {
+    requireScope(scopes, "read");
     const trimmed = query?.trim();
     if (trimmed) {
       const result = await supabase
@@ -103,6 +126,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   },
 
   async getReviewItems() {
+    requireScope(scopes, "read");
     const result = await supabase
       .from("review_items")
       .select(`*, learning_materials(${materialColumns})`)
@@ -114,6 +138,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
   },
 
   async markMastered(reviewId) {
+    requireScope(scopes, "write");
     const result = await supabase
       .from("review_items")
       .update({ status: "completed", completed_at: new Date().toISOString(), interval_days: 1 })

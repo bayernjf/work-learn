@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { saveMaterialInputSchema } from "./index.js";
+import { hasScope, saveMaterialInputSchema } from "./index.js";
 
 const base = {
   sessionId: "sess_1",
@@ -13,6 +13,19 @@ const base = {
   practicePrompts: [] as string[],
   tags: ["deploy"]
 };
+
+test("a missing or empty scope list keeps full access", () => {
+  assert.equal(hasScope(undefined, "read"), true);
+  assert.equal(hasScope(undefined, "write"), true);
+  assert.equal(hasScope([], "write"), true);
+});
+
+test("write implies read but read alone cannot write", () => {
+  assert.equal(hasScope(["read"], "read"), true);
+  assert.equal(hasScope(["read"], "write"), false);
+  assert.equal(hasScope(["write"], "read"), true);
+  assert.equal(hasScope(["read", "write"], "write"), true);
+});
 
 test("a material carrying an api key is redacted before it can be stored", () => {
   const parsed = saveMaterialInputSchema.parse({

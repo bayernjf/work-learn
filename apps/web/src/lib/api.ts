@@ -70,6 +70,7 @@ export type PersonalAccessToken = {
   id: string;
   name: string;
   token_prefix: string;
+  scopes: string[];
   last_used_at: string | null;
   expires_at: string | null;
   revoked_at: string | null;
@@ -86,13 +87,18 @@ export const fetchPersonalAccessTokens = async (session: Session) => {
   return (await response.json()) as { data: PersonalAccessToken[] };
 };
 
-export const createPersonalAccessToken = async (session: Session, name: string, expiresInDays?: number) => {
+export const createPersonalAccessToken = async (
+  session: Session,
+  name: string,
+  expiresInDays?: number,
+  scopes: string[] = ["read", "write"]
+) => {
   const response = await fetch(`/api/tokens`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
     // Omitted rather than sent as null when the user picks "no expiry": the
     // schema treats the field as optional, not nullable.
-    body: JSON.stringify(expiresInDays ? { name, expiresInDays } : { name })
+    body: JSON.stringify({ name, ...(expiresInDays ? { expiresInDays } : {}), scopes })
   });
   if (!response.ok) throw new Error(activeStrings().errors.tokenCreate);
   return (await response.json()) as { data: CreatedPersonalAccessToken };

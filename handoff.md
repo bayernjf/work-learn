@@ -67,8 +67,32 @@ Agent 中调用 Skill
   - [x] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
   - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation
   - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`
-  - [ ] 实测各 Agent 远程 MCP OAuth 兼容性
-  - [ ] 给 Personal Access Token 加 scope（当前一个 token 就是全量读写权限）
+  - [x] OAuth 代码层面排查完成（见下方「OAuth 兼容性排查结论与实测清单」），并修复一处缺口：`authenticate` 现在会把 OAuth token 的 `scope` 解析后传下去（`scope=read` 的 OAuth token 同样禁止写操作），与 PAT scope 行为一致
+  - [ ] 实测各 Agent 远程 MCP OAuth 兼容性（清单见下）
+  - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；需在目标环境执行该 migration
+
+### OAuth 兼容性排查结论与实测清单
+
+**代码层面已确认符合规范的点**
+- `issuer` 从请求 URL 推导，与 protected-resource metadata 的 `authorization_servers[0]` 完全一致，严格客户端不会因 issuer 不匹配而拒绝；
+- PKCE S256 强制，`code_challenge_methods_supported: ["S256"]`；
+- 动态注册强制 public client（`token_endpoint_auth_method: "none"`），注册响应与 metadata 一致；
+- token 端点同时支持 `application/json` 与表单编码 body，支持 `authorization_code` / `refresh_token` 两种 grant；
+- MCP 401 返回 `WWW-Authenticate: Bearer resource_metadata="..."`（RFC 9728 风格），CORS 已 `exposeHeaders` 该头；
+- refresh token 轮换并吊销旧 token。
+
+**已知风险点（需实测或决策）**
+1. `/jwks` 返回空 `keys: []`（我们发 HS256 JWT）。真实客户端（Claude/Codex/Cursor 等）只把 access token 当 opaque Bearer 透传，不受影响；但 **MCP 官方一致性测试套件**会拉 JWKS 本地验 JWT，空 keys 会失败。若要与这些套件兼容，需改为发 opaque token（推荐）或补 JWKS。
+2. `/authorize` 参数缺失时返回 JSON 400，而非按规范带 `error` 参数重定向回 `redirect_uri`。多数客户端不会触发，但一致性套件可能要求重定向。
+3. `/token` 的 `redirect_uri` 客户端不传就不校验（传了才比对），属轻微偏差，可接受。
+
+**待实测清单（需真实客户端）**
+- [ ] Claude Desktop / Claude Code 远程 MCP：URL 指向 `https://work-learn-api.vercel.app/api/mcp`，验证无 token 时 401 → 自动拉起浏览器 OAuth → 授权后 `search_corpus` / `save_material` 可用
+- [ ] Codex（OpenAI）远程 MCP 走 OAuth
+- [ ] Cursor / VS Code 类客户端远程 MCP 走 OAuth
+- [ ] MCP Inspector（官方调试工具）连远程端点 + OAuth 流程
+- [ ] 手机/无本地进程场景：授权码流程端到端（这是做 OAuth 的初衷）
+- [ ] refresh token 过期 / 吊销后客户端行为（应静默重授权）
 
 ## Token 交付体验
 

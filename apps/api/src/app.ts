@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema } from "@work-learn/shared-schema";
-import { createDirectContext, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
+import { ScopeError, createDirectContext, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -45,10 +45,18 @@ app.route("/oauth", oauthRoute);
 const contextFor = async (authorization: string | undefined) => {
   const auth = await authenticate(authorization);
   if (!auth.ok) return null;
-  return createDirectContext(createSupabaseServiceClient(), auth.userId);
+  return createDirectContext(createSupabaseServiceClient(), auth.userId, auth.scopes);
 };
 
 const detail = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+/**
+ * Scope violations surface as 403, everything else stays a 500.
+ */
+const errorResponse = (message: string, error: unknown) =>
+  error instanceof ScopeError
+    ? { error: message, details: detail(error), status: 403 as const }
+    : { error: message, details: detail(error), status: 500 as const };
 
 app.post("/sessions", async (c) => {
   const ctx = await contextFor(c.req.header("Authorization"));
@@ -60,7 +68,7 @@ app.post("/sessions", async (c) => {
   try {
     return c.json({ data: await ctx.createSession(parsed.data) }, 201);
   } catch (error) {
-    return c.json({ error: "Could not create session", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not create session", error));
   }
 });
 
@@ -74,7 +82,7 @@ app.post("/materials", async (c) => {
   try {
     return c.json({ data: await ctx.saveMaterial(parsed.data) }, 201);
   } catch (error) {
-    return c.json({ error: "Could not save learning material", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not save learning material", error));
   }
 });
 
@@ -88,7 +96,7 @@ app.post("/question-translations", async (c) => {
   try {
     return c.json({ data: await ctx.saveQuestionTranslation(parsed.data) }, 201);
   } catch (error) {
-    return c.json({ error: "Could not save question translation", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not save question translation", error));
   }
 });
 
@@ -98,9 +106,10 @@ app.get("/question-translations", async (c) => {
 
   const query = c.req.query("q")?.trim();
   try {
+    requireScope(auth.scopes, "read");
     return c.json({ data: await searchQuestionTranslations(createSupabaseServiceClient(), auth.userId, query), query: query ?? "" });
   } catch (error) {
-    return c.json({ error: "Could not load question translations", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not load question translations", error));
   }
 });
 
@@ -112,9 +121,10 @@ app.post("/sync", async (c) => {
   if (!parsed.success) return c.json({ error: "Invalid sync batch", issues: parsed.error.issues }, 400);
 
   try {
+    requireScope(auth.scopes, "write");
     return c.json({ data: await syncToCloud(createSupabaseServiceClient(), auth.userId, parsed.data) });
   } catch (error) {
-    return c.json({ error: "Could not sync", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not sync", error));
   }
 });
 
@@ -126,7 +136,7 @@ app.get("/materials", async (c) => {
   try {
     return c.json({ data: await ctx.searchCorpus(query), query: query ?? "" });
   } catch (error) {
-    return c.json({ error: "Could not load learning materials", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not load learning materials", error));
   }
 });
 
@@ -137,7 +147,7 @@ app.get("/reviews", async (c) => {
   try {
     return c.json({ data: await ctx.getReviewItems() });
   } catch (error) {
-    return c.json({ error: "Could not load review items", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not load review items", error));
   }
 });
 
@@ -148,7 +158,7 @@ app.post("/reviews/:id/complete", async (c) => {
   try {
     return c.json({ data: await ctx.markMastered(c.req.param("id")) });
   } catch (error) {
-    return c.json({ error: "Could not complete review item", details: detail(error) }, 500);
+    return c.json(errorResponse("Could not complete review item", error));
   }
 });
 

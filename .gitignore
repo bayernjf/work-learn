@@ -10,5 +10,6 @@ build/
 coverage/
 .DS_Store
 .vercel
+.claude/
 .env*
 packages/mcp-server/.session-token.json
