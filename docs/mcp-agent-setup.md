@@ -18,9 +18,7 @@ https://work-learn-api.vercel.app/api/mcp
 Authorization: Bearer <your-access-token>
 ```
 
-其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里复制的 Supabase access token。
-
-注意：这个 token 是短期 JWT（约 1 小时过期）。Web 端的 **Personal Access Token** 适合手动填写；支持 OAuth 的 MCP agent 可直接连接 Remote MCP URL，由 agent 触发浏览器授权并自动刷新 token。需要本地 stdio 或终端 agent 时，继续使用下面的 refresh token 方式。
+其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。它在你吊销之前一直有效，所以本地 stdio agent 填一次就不用再管；建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
 
 远程端点与本地 MCP 提供完全相同的 5 个工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 
@@ -31,34 +29,27 @@ Authorization: Bearer <your-access-token>
 - 已把本仓库 clone 到本机。下文示例统一用 `/path/to/work-learn` 代指这个目录，照抄时替换成你自己的路径
 - 本机已安装 pnpm 和 Node 22+（`@supabase/supabase-js` 在 `createClient` 就要求 22，Node 20 会直接报错）
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
-- 已拿到一个 Supabase 用户的 access token（从 Web 登录或脚本登录获取）
+- 已在 Web 端创建一个 personal access token
 
-`WORK_LEARN_ACCESS_TOKEN` 是短期 JWT（约 1 小时过期）。如果同时提供 `WORK_LEARN_REFRESH_TOKEN`、
-`SUPABASE_URL` 和 `SUPABASE_ANON_KEY`，MCP 服务器会在 access token 过期时自动用 refresh token
-续期，并把轮换后的 refresh token 写入 `packages/mcp-server/.session-token.json`，实现长期稳定接入。
+`WORK_LEARN_ACCESS_TOKEN` 只接受 personal access token。早期版本支持的
+`WORK_LEARN_REFRESH_TOKEN` / `SUPABASE_URL` / `SUPABASE_ANON_KEY` 已移除：它们把账号级凭证写进
+agent 的配置文件，而 personal access token 本身就长期有效、可单独吊销。旧配置里如果还留着这三个
+变量，删掉即可；MCP 服务器启动时会顺手清理遗留的 `packages/mcp-server/.session-token.json`。
 
 ## 一键安装（推荐）
 
 先把本仓库 clone 到本机并执行 `pnpm install`（本地 stdio MCP 仍需要这份代码来启动服务进程）。
-然后在 Web 端登录后复制 access token，运行：
+然后在 Web 端登录后创建 token，运行：
 
 ```bash
-npx @work-learn/setup --token <your-access-token> --repo /path/to/work-learn
+npx @work-learn/setup --repo /path/to/work-learn
 ```
+
+安装器会问你要 token，粘贴进去即可。不要用 `--token` 传:命令行参数会进 shell 历史文件，
+执行瞬间也能在 `ps` 里看到。`--token` 只留给 `-y` 非交互场景（CI 之类）。
 
 向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。
-
-想要长期免维护，带上 refresh token：
-
-```bash
-npx @work-learn/setup \
-  --token <access-token> \
-  --refresh-token <refresh-token> \
-  --supabase-url https://<project>.supabase.co \
-  --supabase-anon-key <anon-key> \
-  --repo /path/to/work-learn
-```
 
 只配置指定 Agent 可重复使用 `--agent`：`--agent codex --agent codebuddy`。可用的 id 是
 `codex`、`claude-code`、`claude-desktop`、`codebuddy`、`cursor`、`opencode`——Claude Code 和
@@ -78,10 +69,7 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
   "cwd": "/path/to/work-learn",
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
-    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
-    "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
-    "SUPABASE_URL": "<supabase url>",
-    "SUPABASE_ANON_KEY": "<supabase anon key>"
+    "WORK_LEARN_ACCESS_TOKEN": "<your Work Learn personal access token>"
   }
 }
 ```
@@ -94,10 +82,7 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
   "args": ["/path/to/work-learn/packages/mcp-server/src/server.ts"],
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
-    "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
-    "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
-    "SUPABASE_URL": "<supabase url>",
-    "SUPABASE_ANON_KEY": "<supabase anon key>"
+    "WORK_LEARN_ACCESS_TOKEN": "<your Work Learn personal access token>"
   }
 }
 ```
@@ -116,10 +101,7 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
       "cwd": "/path/to/work-learn",
       "env": {
         "WORK_LEARN_API_URL": "http://localhost:3000",
-        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
-        "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
-        "SUPABASE_URL": "<supabase url>",
-        "SUPABASE_ANON_KEY": "<supabase anon key>"
+        "WORK_LEARN_ACCESS_TOKEN": "<your Work Learn personal access token>"
       }
     }
   }
@@ -138,10 +120,7 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
       "args": ["/path/to/work-learn/packages/mcp-server/src/server.ts"],
       "env": {
         "WORK_LEARN_API_URL": "https://work-learn-api.vercel.app",
-        "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
-        "WORK_LEARN_REFRESH_TOKEN": "<Supabase user refresh token>",
-        "SUPABASE_URL": "<supabase url>",
-        "SUPABASE_ANON_KEY": "<supabase anon key>"
+        "WORK_LEARN_ACCESS_TOKEN": "<your Work Learn personal access token>"
       }
     }
   }
@@ -159,12 +138,12 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
 [mcp_servers.work-learn]
 command = "/path/to/work-learn/packages/mcp-server/node_modules/.bin/tsx"
 args = ["/path/to/work-learn/packages/mcp-server/src/server.ts"]
-env = { WORK_LEARN_API_URL = "http://localhost:3000", WORK_LEARN_ACCESS_TOKEN = "<Supabase user access token>" }
+env = { WORK_LEARN_API_URL = "http://localhost:3000", WORK_LEARN_ACCESS_TOKEN = "<your Work Learn personal access token>" }
 ```
 
 ## Hermes / OpenClaw / OpenCode / Pi
 
-这几个平台都支持本地命令型 MCP 服务器，字段名基本一致（`command`、`args`、`env`，部分支持 `cwd`）。请按各平台的实际配置格式套用方式 A 或方式 B，并把 `<Supabase user access token>` 换成你的 token。若某个平台不支持 `env` 字段，可先通过 shell 导出环境变量再启动服务器。
+这几个平台都支持本地命令型 MCP 服务器，字段名基本一致（`command`、`args`、`env`，部分支持 `cwd`）。请按各平台的实际配置格式套用方式 A 或方式 B，并把 `<your Work Learn personal access token>` 换成你的 token。若某个平台不支持 `env` 字段，可先通过 shell 导出环境变量再启动服务器。
 
 ## 安装 Skill（可选）
 

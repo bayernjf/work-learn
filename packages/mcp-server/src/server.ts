@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMcpEndpoint, createHttpContext } from "./index.js";
@@ -11,36 +11,17 @@ const accessToken = process.env.WORK_LEARN_ACCESS_TOKEN;
 
 if (!accessToken) throw new Error("WORK_LEARN_ACCESS_TOKEN is required");
 
-const packageDir = join(dirname(fileURLToPath(import.meta.url)), "..");
-const sessionFile = process.env.WORK_LEARN_SESSION_FILE ?? join(packageDir, ".session-token.json");
-
-let refreshToken = process.env.WORK_LEARN_REFRESH_TOKEN;
+// Left behind by the removed refresh flow. It holds a Supabase refresh token, which
+// is a far broader credential than the access token this server now uses.
+const staleSessionFile =
+  process.env.WORK_LEARN_SESSION_FILE ?? join(dirname(fileURLToPath(import.meta.url)), "..", ".session-token.json");
 try {
-  if (existsSync(sessionFile)) {
-    const saved = JSON.parse(readFileSync(sessionFile, "utf8"));
-    if (saved.refreshToken) refreshToken = saved.refreshToken;
-  }
+  if (existsSync(staleSessionFile)) unlinkSync(staleSessionFile);
 } catch {
-  // ignore unreadable/corrupt session file and fall back to env
+  console.error(`Work Learn: could not remove ${staleSessionFile}; it holds an unused refresh token, delete it yourself`);
 }
 
-const persistRefreshToken = (token: string) => {
-  refreshToken = token;
-  try {
-    writeFileSync(sessionFile, JSON.stringify({ refreshToken: token }, null, 2), { mode: 0o600 });
-  } catch {
-    // best-effort persistence; refresh still works for the lifetime of the process
-  }
-};
-
-const endpoint = createMcpEndpoint({
-  apiUrl,
-  accessToken,
-  refreshToken: refreshToken || undefined,
-  supabaseUrl: process.env.SUPABASE_URL,
-  supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
-  persistRefreshToken
-});
+const endpoint = createMcpEndpoint({ apiUrl, accessToken });
 
 const server = new McpServer({ name: "work-learn", version: "0.1.0" });
 registerTools(server, createHttpContext(endpoint.config));

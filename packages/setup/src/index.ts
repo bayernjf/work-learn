@@ -17,11 +17,8 @@ const DEFAULT_API_URL = "https://work-learn-api.vercel.app";
 
 type CliFlags = {
   token?: string;
-  refreshToken?: string;
   apiUrl?: string;
   repo?: string;
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
   agents?: string[];
   yes?: boolean;
   help?: boolean;
@@ -34,11 +31,16 @@ function parseArgs(argv: string[]): CliFlags {
     const next = () => argv[++i];
     switch (arg) {
       case "--token": flags.token = next(); break;
-      case "--refresh-token": flags.refreshToken = next(); break;
       case "--api-url": flags.apiUrl = next(); break;
       case "--repo": flags.repo = next(); break;
-      case "--supabase-url": flags.supabaseUrl = next(); break;
-      case "--supabase-anon-key": flags.supabaseAnonKey = next(); break;
+      // Removed rather than ignored: the default branch below swallows unknown flags,
+      // so silently dropping these would look like they still worked.
+      case "--refresh-token":
+      case "--supabase-url":
+      case "--supabase-anon-key":
+        throw new Error(
+          `${arg} is gone. It wrote an account-wide Supabase credential into your agent's config file. Use a personal access token with --token instead; it stays valid until you revoke it.`
+        );
       case "--agent": {
         const id = next();
         if (id) flags.agents = [...(flags.agents ?? []), id];
@@ -65,12 +67,11 @@ Usage:
   npx @work-learn/setup [options]
 
 Options:
-  --token <token>            Supabase access token (WORK_LEARN_ACCESS_TOKEN)
-  --refresh-token <token>    Supabase refresh token for auto-renewal (recommended)
+  --token <token>            Work Learn personal access token (WORK_LEARN_ACCESS_TOKEN).
+                             Prefer the interactive prompt: a token passed here
+                             lands in your shell history. Use this only with -y.
   --api-url <url>            Work Learn API URL (default: ${DEFAULT_API_URL})
   --repo <path>              Path to a local clone of work-learn
-  --supabase-url <url>       Supabase project URL (needed for token auto-refresh)
-  --supabase-anon-key <key>  Supabase anon key (needed for token auto-refresh)
   --agent <id>               Only configure this agent (repeatable): codex, claude-code, claude-desktop, codebuddy, cursor, opencode
   -y, --yes                  Non-interactive; use provided flags and defaults
   -h, --help                 Show this help
@@ -78,11 +79,8 @@ Options:
 
 type Answers = {
   token: string;
-  refreshToken?: string;
   apiUrl: string;
   repoPath: string;
-  supabaseUrl?: string;
-  supabaseAnonKey?: string;
   selected: AgentTarget[];
   installSkill: boolean;
 };
@@ -151,11 +149,8 @@ async function gather(flags: CliFlags): Promise<Answers> {
     if (!repoPath) throw new Error("--repo <path> is required when no local clone is detected");
     return {
       token: flags.token,
-      refreshToken: flags.refreshToken,
       apiUrl: flags.apiUrl ?? DEFAULT_API_URL,
       repoPath,
-      supabaseUrl: flags.supabaseUrl,
-      supabaseAnonKey: flags.supabaseAnonKey,
       selected: selected.length ? selected : ALL_AGENTS,
       installSkill: true,
     };
@@ -170,12 +165,8 @@ async function gather(flags: CliFlags): Promise<Answers> {
       console.log(`  Detected: ${detected.map((agent) => agent.label).join(", ")}\n`);
     }
 
-    const token = flags.token ?? (await prompt(rl, "  Supabase access token: "));
-    if (!token) throw new Error("An access token is required. Get one from the Work Learn web app.");
-
-    const refreshToken =
-      flags.refreshToken ??
-      ((await prompt(rl, "  Refresh token (optional, keeps the agent connected): ")) || undefined);
+    const token = flags.token ?? (await prompt(rl, "  Work Learn personal access token: "));
+    if (!token) throw new Error("An access token is required. Create one in the Work Learn web app.");
 
     const apiUrl = flags.apiUrl ?? (await prompt(rl, `  API URL [${DEFAULT_API_URL}]: `, DEFAULT_API_URL));
 
@@ -189,13 +180,6 @@ async function gather(flags: CliFlags): Promise<Answers> {
     repoPath = isAbsolute(repoPath) ? repoPath : resolve(repoPath);
     if (!existsSync(join(repoPath, "packages", "mcp-server", "src", "server.ts"))) {
       throw new Error(`Could not find packages/mcp-server in ${repoPath}.`);
-    }
-
-    let supabaseUrl = flags.supabaseUrl;
-    let supabaseAnonKey = flags.supabaseAnonKey;
-    if (refreshToken && (!supabaseUrl || !supabaseAnonKey)) {
-      supabaseUrl = supabaseUrl ?? ((await prompt(rl, "  Supabase URL (for auto-refresh): ")) || undefined);
-      supabaseAnonKey = supabaseAnonKey ?? ((await prompt(rl, "  Supabase anon key (for auto-refresh): ")) || undefined);
     }
 
     let chosen = selected;
@@ -214,7 +198,7 @@ async function gather(flags: CliFlags): Promise<Answers> {
 
     const installSkill = bool(await prompt(rl, "  Also install the Work Learn Skill? [Y/n]: "), true);
 
-    return { token, refreshToken, apiUrl, repoPath, supabaseUrl, supabaseAnonKey, selected: chosen, installSkill };
+    return { token, apiUrl, repoPath, selected: chosen, installSkill };
   } finally {
     rl.close();
   }
@@ -232,15 +216,23 @@ function buildEntry(answers: Answers): McpEntry {
     WORK_LEARN_API_URL: answers.apiUrl,
     WORK_LEARN_ACCESS_TOKEN: answers.token,
   };
-  if (answers.refreshToken) env.WORK_LEARN_REFRESH_TOKEN = answers.refreshToken;
-  if (answers.supabaseUrl) env.SUPABASE_URL = answers.supabaseUrl;
-  if (answers.supabaseAnonKey) env.SUPABASE_ANON_KEY = answers.supabaseAnonKey;
 
   return { command: tsx, args: [serverTs], env };
 }
 
+function fail(error: unknown): never {
+  const message = error instanceof Error ? error.message : String(error);
+  console.error(`\n  Setup failed: ${message}\n`);
+  process.exit(1);
+}
+
 function main() {
-  const flags = parseArgs(process.argv.slice(2));
+  let flags: CliFlags;
+  try {
+    flags = parseArgs(process.argv.slice(2));
+  } catch (error) {
+    fail(error);
+  }
   if (flags.help) {
     console.log(HELP);
     return;
@@ -267,16 +259,8 @@ function main() {
 
       console.log("\n  Done. Restart your agent(s), then ask:");
       console.log('    "Save the useful English from this conversation."\n');
-      if (!answers.refreshToken) {
-        console.log("  Tip: re-run with --refresh-token (plus Supabase URL/anon key) so the");
-        console.log("  agent stays connected after the short-lived access token expires.\n");
-      }
     })
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      console.error(`\n  Setup failed: ${message}\n`);
-      process.exit(1);
-    });
+    .catch(fail);
 }
 
 main();
