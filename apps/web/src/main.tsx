@@ -324,7 +324,9 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
     2
   );
 
-  const setupCommand = `npx -y @work-learn/setup --token "${token}"`;
+  // No --token here on purpose: a token on the command line lands in the shell
+  // history file and is briefly visible in `ps`. The installer prompts for it.
+  const setupCommand = "npx -y @work-learn/setup";
   const remoteMcpUrl = `${API_URL}/api/mcp`;
   const authHeader = `Authorization: Bearer ${token}`;
   const skillUrl = `${RAW_BASE}/skills/work-learn/SKILL.md`;
@@ -399,7 +401,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         <p className="connect-step">{t.connect.step2}</p>
         <div className="code-block compact">
           <code className="code-line">{setupCommand}</code>
-          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("setup", setupCommand)}>
+          <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
             {copiedId === "setup" ? t.common.copied : t.common.copy}
           </button>
         </div>

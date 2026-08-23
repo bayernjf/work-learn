@@ -67,7 +67,9 @@ Usage:
   npx @work-learn/setup [options]
 
 Options:
-  --token <token>            Work Learn personal access token (WORK_LEARN_ACCESS_TOKEN)
+  --token <token>            Work Learn personal access token (WORK_LEARN_ACCESS_TOKEN).
+                             Prefer the interactive prompt: a token passed here
+                             lands in your shell history. Use this only with -y.
   --api-url <url>            Work Learn API URL (default: ${DEFAULT_API_URL})
   --repo <path>              Path to a local clone of work-learn
   --agent <id>               Only configure this agent (repeatable): codex, claude-code, claude-desktop, codebuddy, cursor, opencode

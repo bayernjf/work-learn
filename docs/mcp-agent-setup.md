@@ -42,8 +42,11 @@ agent 的配置文件，而 personal access token 本身就长期有效、可单
 然后在 Web 端登录后创建 token，运行：
 
 ```bash
-npx @work-learn/setup --token <your-access-token> --repo /path/to/work-learn
+npx @work-learn/setup --repo /path/to/work-learn
 ```
+
+安装器会问你要 token，粘贴进去即可。不要用 `--token` 传:命令行参数会进 shell 历史文件，
+执行瞬间也能在 `ps` 里看到。`--token` 只留给 `-y` 非交互场景（CI 之类）。
 
 向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。
