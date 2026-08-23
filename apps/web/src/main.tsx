@@ -15,6 +15,18 @@ const LANDING_URL = "https://work-learn.bayjf.com";
 const REPO_URL = "https://github.com/bayernjf/work-learn";
 const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
 
+// Tab label and note for the skills directories worth naming. Anything in
+// __AGENT_SKILL_DIRS__ without an entry here is still covered by the universal
+// command; it just gets no tab of its own.
+const SKILL_DIR_TABS = {
+  "~/.codex/skills": { noteKey: "codex", label: "Codex" },
+  "~/.claude/skills": { noteKey: "claude", label: "Claude Code" },
+  "~/.codebuddy/skills": { noteKey: "codebuddy", label: "CodeBuddy" },
+  "~/.cursor/skills": { noteKey: "cursor", label: "Cursor" },
+  "~/.config/opencode/skills": { noteKey: "opencode", label: "OpenCode" },
+  "~/.pi/agent/skills": { noteKey: "pi", label: "Pi" },
+} as const;
+
 function App({ supabase }: { supabase: SupabaseClient }) {
   const { t } = useI18n();
   const [session, setSession] = useState<Session | null>(null);
@@ -310,20 +322,21 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const skillUrl = `${RAW_BASE}/skills/work-learn/SKILL.md`;
   const agentPrompt = t.connect.autoPrompt(remoteMcpUrl, token, skillUrl);
 
-  const skillInstalls = [
-    { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal },
-    { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: t.connect.notes.codex },
-    { id: "claude", label: "Claude Code", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: t.connect.notes.claude },
-    { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: t.connect.notes.codebuddy },
-    { id: "cursor", label: "Cursor", command: `mkdir -p ~/.cursor/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.cursor/skills/work-learn/SKILL.md`, note: t.connect.notes.cursor },
-    { id: "opencode", label: "OpenCode", command: `mkdir -p ~/.config/opencode/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.config/opencode/skills/work-learn/SKILL.md`, note: t.connect.notes.opencode },
-    { id: "pi", label: "Pi", command: `mkdir -p ~/.pi/agent/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.pi/agent/skills/work-learn/SKILL.md`, note: t.connect.notes.pi },
-  ] as const;
+  const universalInstall = { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal };
+  const skillInstalls: typeof universalInstall[] = [
+    universalInstall,
+    ...__AGENT_SKILL_DIRS__.flatMap((dir) => {
+      const meta = SKILL_DIR_TABS[dir as keyof typeof SKILL_DIR_TABS];
+      if (!meta) return [];
+      const dest = `${dir}/work-learn`;
+      return [{ id: meta.noteKey, label: meta.label, command: `mkdir -p ${dest} && curl -fsSL ${skillUrl} -o ${dest}/SKILL.md`, note: t.connect.notes[meta.noteKey] }];
+    }),
+  ];
 
-  const [activeAgent, setActiveAgent] = useState<(typeof skillInstalls)[number]["id"]>("universal");
+  const [activeAgent, setActiveAgent] = useState<string>("universal");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [open, setOpen] = useState(initialOpen);
-  const active = skillInstalls.find((item) => item.id === activeAgent) ?? skillInstalls[0];
+  const active = skillInstalls.find((item) => item.id === activeAgent) ?? universalInstall;
 
   const copy = async (id: string, value: string) => {
     try {
