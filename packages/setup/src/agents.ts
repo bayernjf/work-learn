@@ -15,8 +15,11 @@ export type AgentTarget = {
   /** Absolute path to the config file this writer manages. */
   configPath: string;
   kind: "json-mcpServers" | "codex-toml" | "opencode-json";
-  /** Directory the skill installer should target, if known. */
-  skillsDir?: string;
+  /**
+   * Directory that proves the client is installed even when it has no MCP
+   * config yet. Omit it for clients whose config file is the only evidence.
+   */
+  appDir?: string;
 };
 
 const home = homedir();
@@ -27,47 +30,50 @@ export const ALL_AGENTS: AgentTarget[] = [
     label: "Codex",
     configPath: join(home, ".codex", "config.toml"),
     kind: "codex-toml",
-    skillsDir: join(home, ".codex", "skills"),
+    appDir: join(home, ".codex"),
   },
   {
-    id: "claude",
+    // Claude Code and Claude Desktop are separate products with separate config
+    // files. One entry covering both would leave whichever it did not name
+    // unconfigured.
+    id: "claude-code",
+    label: "Claude Code",
+    configPath: join(home, ".claude.json"),
+    kind: "json-mcpServers",
+    appDir: join(home, ".claude"),
+  },
+  {
+    id: "claude-desktop",
     label: "Claude Desktop",
     configPath: join(home, "Library", "Application Support", "Claude", "claude_desktop_config.json"),
     kind: "json-mcpServers",
-    skillsDir: join(home, ".claude", "skills"),
+    appDir: join(home, "Library", "Application Support", "Claude"),
   },
   {
     id: "codebuddy",
     label: "CodeBuddy",
     configPath: join(home, ".codebuddy", "mcp.json"),
     kind: "json-mcpServers",
-    skillsDir: join(home, ".codebuddy", "skills"),
   },
   {
     id: "cursor",
     label: "Cursor",
     configPath: join(home, ".cursor", "mcp.json"),
     kind: "json-mcpServers",
-    skillsDir: join(home, ".cursor", "skills"),
   },
   {
     id: "opencode",
     label: "OpenCode",
     configPath: join(home, ".config", "opencode", "opencode.json"),
     kind: "opencode-json",
-    skillsDir: join(home, ".config", "opencode", "skills"),
   },
 ];
 
-/** Agents whose config file or parent config directory already exists. */
+/** Agents whose config file or app directory already exists. */
 export function detectAgents(): AgentTarget[] {
-  return ALL_AGENTS.filter((agent) => {
-    if (existsSync(agent.configPath)) return true;
-    // Codex/Claude have well-known app dirs even before an MCP config exists.
-    if (agent.id === "codex" && existsSync(dirname(agent.configPath))) return true;
-    if (agent.id === "claude" && existsSync(dirname(agent.configPath))) return true;
-    return false;
-  });
+  return ALL_AGENTS.filter(
+    (agent) => existsSync(agent.configPath) || (agent.appDir !== undefined && existsSync(agent.appDir)),
+  );
 }
 
 function ensureDir(file: string) {

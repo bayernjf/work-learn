@@ -96,7 +96,7 @@ Auth header: Authorization: Bearer ${token}
 Server name: work-learn
 
 Do this:
-1. Work out which client this is and find its MCP config file (for example ~/.codex/config.toml, ~/.claude.json, ~/.cursor/mcp.json, ~/.config/opencode/opencode.json). Ask me if you cannot tell.
+1. Work out which client this is and find its MCP config file (for example ~/.codex/config.toml, ~/.claude.json for Claude Code, ~/.codebuddy/mcp.json, ~/.cursor/mcp.json, ~/.config/opencode/opencode.json). Ask me if you cannot tell.
 2. Back that file up, then add "work-learn" with the endpoint and auth header above. Leave every other MCP server in the file exactly as it is.
 3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
@@ -107,7 +107,7 @@ Do this:
     hint1: "Create a personal access token below and use it as the Bearer token. It stays valid until you revoke it, unlike your short-lived session token.",
     hint1b: (): ReactNode => <>In agents that support remote MCP (Streamable HTTP), add the URL above and set the <code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>. For persistent local agents that only support stdio, use option 2.</>,
     step2: "2. Or run the local installer. Your access token is already filled in.",
-    hint2: (): ReactNode => <>The installer detects Codex, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the correct MCP config for each one (with a backup), and can install the Skill too. When it asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for agents that only support stdio MCP.</>,
+    hint2: (): ReactNode => <>The installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the correct MCP config for each one (with a backup), and can install the Skill too. When it asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for agents that only support stdio MCP.</>,
     manualSummary: "Prefer to paste the config yourself?",
     hint2b: (docsUrl: string): ReactNode => <>The token is short-lived. For long-running agents, pass <code>--refresh-token</code>, <code>--supabase-url</code>, and <code>--supabase-anon-key</code> to the installer (or set <code>WORK_LEARN_REFRESH_TOKEN</code>, <code>SUPABASE_URL</code>, and <code>SUPABASE_ANON_KEY</code>) as shown in the <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.</>,
     step3: "3. Install the Skill (optional). It tells your agent when to save.",
@@ -276,7 +276,7 @@ export const zh: Strings = {
 服务器名称：work-learn
 
 请按以下步骤做：
-1. 判断这是哪个客户端，找到它的 MCP 配置文件（例如 ~/.codex/config.toml、~/.claude.json、~/.cursor/mcp.json、~/.config/opencode/opencode.json）。判断不出来就先问我。
+1. 判断这是哪个客户端，找到它的 MCP 配置文件（例如 ~/.codex/config.toml、Claude Code 是 ~/.claude.json、~/.codebuddy/mcp.json、~/.cursor/mcp.json、~/.config/opencode/opencode.json）。判断不出来就先问我。
 2. 先备份该文件，再以 "work-learn" 为名写入上面的端点和认证请求头。文件里已有的其他 MCP 服务器一个都不要改。
 3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
@@ -287,7 +287,7 @@ export const zh: Strings = {
     hint1: "在下面创建一个 personal access token，拿它当 Bearer token。它在你主动吊销前一直有效，不像会话 token 那样很快过期。",
     hint1b: (): ReactNode => <>在支持远程 MCP（Streamable HTTP）的 agent 里，填上面那个地址，并把 <code>Authorization</code> 请求头设成 <code>Bearer &lt;personal-access-token&gt;</code>。只支持 stdio 的常驻本地 agent 请用方式 2。</>,
     step2: "2. 或者跑本地安装器，你的 access token 已经填好了。",
-    hint2: (): ReactNode => <>安装器会检测 Codex、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，为每个写入正确的 MCP 配置（并留备份），也可以顺带装上 Skill。它问仓库路径时，指向你本地的 <code>work-learn</code> clone。只支持 stdio MCP 的 agent 用这个。</>,
+    hint2: (): ReactNode => <>安装器会检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，为每个写入正确的 MCP 配置（并留备份），也可以顺带装上 Skill。它问仓库路径时，指向你本地的 <code>work-learn</code> clone。只支持 stdio MCP 的 agent 用这个。</>,
     manualSummary: "想自己粘配置？",
     hint2b: (docsUrl: string): ReactNode => <>这个 token 很快过期。常驻运行的 agent 请给安装器传 <code>--refresh-token</code>、<code>--supabase-url</code> 和 <code>--supabase-anon-key</code>（或设置 <code>WORK_LEARN_REFRESH_TOKEN</code>、<code>SUPABASE_URL</code> 和 <code>SUPABASE_ANON_KEY</code>），具体见 <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">配置文档<span className="external-icon" aria-hidden="true">↗</span></a>。</>,
     step3: "3. 安装 Skill（可选）。它负责告诉 agent 什么时候该存。",

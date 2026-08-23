@@ -313,7 +313,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const skillInstalls = [
     { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal },
     { id: "codex", label: "Codex", command: `mkdir -p ~/.codex/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codex/skills/work-learn/SKILL.md`, note: t.connect.notes.codex },
-    { id: "claude", label: "Claude", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: t.connect.notes.claude },
+    { id: "claude", label: "Claude Code", command: `mkdir -p ~/.claude/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.claude/skills/work-learn/SKILL.md`, note: t.connect.notes.claude },
     { id: "codebuddy", label: "CodeBuddy", command: `mkdir -p ~/.codebuddy/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.codebuddy/skills/work-learn/SKILL.md`, note: t.connect.notes.codebuddy },
     { id: "cursor", label: "Cursor", command: `mkdir -p ~/.cursor/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.cursor/skills/work-learn/SKILL.md`, note: t.connect.notes.cursor },
     { id: "opencode", label: "OpenCode", command: `mkdir -p ~/.config/opencode/skills/work-learn && curl -fsSL ${RAW_BASE}/skills/work-learn/SKILL.md -o ~/.config/opencode/skills/work-learn/SKILL.md`, note: t.connect.notes.opencode },
