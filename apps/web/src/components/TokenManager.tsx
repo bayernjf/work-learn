@@ -7,16 +7,16 @@ import {
   type CreatedPersonalAccessToken,
   type PersonalAccessToken
 } from "../lib/api";
+import { useI18n } from "../i18n/context";
 
 type Props = {
   session: Session;
   onTokenSelect: (token: string | null) => void;
 };
 
-const formatDate = (value: string | null) =>
-  value ? new Date(value).toLocaleDateString() : "Never";
-
 export function TokenManager({ session, onTokenSelect }: Props) {
+  const { t, formatDate: formatIso } = useI18n();
+  const formatDate = (value: string | null) => (value ? formatIso(value) : t.tokens.never);
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [name, setName] = useState("");
   const [created, setCreated] = useState<CreatedPersonalAccessToken | null>(null);
@@ -28,7 +28,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
       const result = await fetchPersonalAccessTokens(session);
       setTokens(result.data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not load tokens");
+      setError(err instanceof Error ? err.message : t.tokens.errLoad);
     }
   };
 
@@ -48,7 +48,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
       onTokenSelect(result.data.token);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create token");
+      setError(err instanceof Error ? err.message : t.tokens.errCreate);
     } finally {
       setLoading(false);
     }
@@ -64,7 +64,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
       }
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not revoke token");
+      setError(err instanceof Error ? err.message : t.tokens.errRevoke);
     }
   };
 
@@ -72,7 +72,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
     <div className="token-manager">
       <div className="token-list">
         {tokens.length === 0 ? (
-          <p className="token-empty">No personal access tokens yet. Create one to connect a remote MCP agent.</p>
+          <p className="token-empty">{t.tokens.empty}</p>
         ) : (
           tokens.map((token) => (
             <div key={token.id} className={token.revoked_at ? "token-row revoked" : "token-row"}>
@@ -80,13 +80,13 @@ export function TokenManager({ session, onTokenSelect }: Props) {
                 <strong>{token.name}</strong>
                 <code>{token.token_prefix}…</code>
                 <span className="token-meta">
-                  {token.revoked_at ? "Revoked" : `Last used ${formatDate(token.last_used_at)}`}
-                  {token.expires_at ? ` · Expires ${formatDate(token.expires_at)}` : ""}
+                  {token.revoked_at ? t.tokens.revoked : t.tokens.lastUsed(formatDate(token.last_used_at))}
+                  {token.expires_at ? t.tokens.expires(formatDate(token.expires_at)) : ""}
                 </span>
               </div>
               {!token.revoked_at && (
                 <button type="button" className="token-revoke" onClick={() => handleRevoke(token.id)}>
-                  Revoke
+                  {t.tokens.revoke}
                 </button>
               )}
             </div>
@@ -97,7 +97,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
       {created && (
         <div className="token-created">
           <p>
-            Copy this token now. It will not be shown again.
+            {t.tokens.copyNow}
           </p>
           <div className="token-row created-row">
             <code className="token-raw">{created.token}</code>
@@ -108,13 +108,13 @@ export function TokenManager({ session, onTokenSelect }: Props) {
       <form className="token-form" onSubmit={handleCreate}>
         <input
           type="text"
-          placeholder="Token name, e.g. Claude Desktop"
+          placeholder={t.tokens.namePlaceholder}
           value={name}
           onChange={(event) => setName(event.target.value)}
           maxLength={80}
         />
         <button type="submit" disabled={loading || !name.trim()}>
-          {loading ? "Creating…" : "Create token"}
+          {loading ? t.tokens.creating : t.tokens.create}
         </button>
       </form>
       {error && <p className="token-error">{error}</p>}

@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { knownAgents } from "./agents.js";
+import { redactSecrets } from "./redaction.js";
 
 export { knownAgents };
+export { redactSecrets } from "./redaction.js";
+export type { RedactionResult } from "./redaction.js";
 
 // Source is an open label, not a closed enum, so new agents work without a
 // schema change or redeploy. Use `knownAgents` for the curated list in UIs/CLI.
@@ -28,6 +31,9 @@ export const learningMaterialSchema = z.object({
   source: sourceSchema,
   topic: z.string().min(1),
   originalText: z.string().min(1),
+  // Defaulted, not required: Skill copies already installed in users' agent
+  // folders predate this field and must keep saving.
+  explanation: z.string().default(""),
   usefulExpressions: z.array(z.string()),
   corrections: z.array(z.string()),
   vocabulary: z.array(z.string()),
@@ -36,7 +42,28 @@ export const learningMaterialSchema = z.object({
   createdAt: z.string().datetime()
 });
 
-export const saveMaterialInputSchema = learningMaterialSchema.omit({ id: true, createdAt: true });
+// Redaction hangs off the schema rather than off each caller because every path
+// that writes a material -- the remote MCP context and the Hono API -- parses
+// this schema first. An agent pastes conversation text here verbatim, so this is
+// the last point before a leaked key or absolute path reaches the database.
+export const saveMaterialInputSchema = learningMaterialSchema
+  .omit({ id: true, createdAt: true })
+  .transform((input) => ({
+    ...input,
+    topic: redactSecrets(input.topic).text,
+    originalText: redactSecrets(input.originalText).text,
+    explanation: redactSecrets(input.explanation).text,
+    usefulExpressions: input.usefulExpressions.map((value) => redactSecrets(value).text),
+    corrections: input.corrections.map((value) => redactSecrets(value).text),
+    vocabulary: input.vocabulary.map((value) => redactSecrets(value).text),
+    practicePrompts: input.practicePrompts.map((value) => redactSecrets(value).text)
+  }));
+
+// The columns the API returns for a material. Explicit rather than "*", because
+// the table also carries search_text -- a denormalised copy of every searchable
+// field, kept for the trigram index. Selecting "*" would double every payload.
+export const materialColumns =
+  "id,session_id,source,topic,original_text,explanation,useful_expressions,corrections,vocabulary,practice_prompts,tags,created_at";
 
 export type Source = z.infer<typeof sourceSchema>;
 export type Role = z.infer<typeof roleSchema>;

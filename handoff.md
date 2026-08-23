@@ -6,7 +6,7 @@
 
 Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨平台同步；CLI 与 macOS Companion 负责无 Skill 场景、终端会话和本地兜底采集。
 
-详细方案见：[docs/product-proposal.md](/Users/jiangfeng/000mycodes/work-learn/docs/product-proposal.md)
+详细方案见：[docs/product-proposal.md](docs/product-proposal.md)
 
 ## 技术基线
 

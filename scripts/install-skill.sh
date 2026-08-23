@@ -2,25 +2,29 @@
 # Install the Work Learn skill into every detected AI agent's skills directory.
 # Usage:
 #   Local:  bash scripts/install-skill.sh
-#   Remote: curl -fsSL https://raw.githubusercontent.com/bayernjf/work-learn/main/scripts/install-skill.sh | bash
+#   Remote: curl -fsSL https://<work-learn-host>/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=https://<work-learn-host> bash
 set -euo pipefail
 
 SKILL_NAME="work-learn"
+# Where to fetch SKILL.md when this script runs outside a repo checkout. The web
+# app serves its own copy and passes its origin here, because
+# raw.githubusercontent.com is blocked on some networks.
+SKILL_BASE="${WORK_LEARN_SKILL_BASE:-https://raw.githubusercontent.com/bayernjf/work-learn/main}"
 TMP_DIR=""
 
-cleanup() { [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"; }
+cleanup() { [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"; return 0; }
 trap cleanup EXIT
 
 # Resolve the source skill directory (local repo or fresh download).
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 LOCAL_SRC="$SCRIPT_DIR/../skills/$SKILL_NAME"
 if [ -f "$LOCAL_SRC/SKILL.md" ]; then
   SRC_DIR="$LOCAL_SRC"
 else
-  echo "Downloading $SKILL_NAME skill from GitHub..."
+  echo "Downloading $SKILL_NAME skill from $SKILL_BASE..."
   TMP_DIR="$(mktemp -d)"
   SRC_DIR="$TMP_DIR/$SKILL_NAME"
-  curl -fsSL "https://raw.githubusercontent.com/bayernjf/work-learn/main/skills/$SKILL_NAME/SKILL.md" -o "$SRC_DIR/SKILL.md" --create-dirs
+  curl -fsSL "$SKILL_BASE/skills/$SKILL_NAME/SKILL.md" -o "$SRC_DIR/SKILL.md" --create-dirs
 fi
 
 # Known per-agent skills directories. Add new agents here.

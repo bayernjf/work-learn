@@ -28,7 +28,7 @@ Authorization: Bearer <your-access-token>
 
 ## 前置条件
 
-- 仓库位于 `/Users/jiangfeng/000mycodes/work-learn`
+- 已把本仓库 clone 到本机。下文示例统一用 `/path/to/work-learn` 代指这个目录，照抄时替换成你自己的路径
 - 本机已安装 pnpm 和 Node 20+
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已拿到一个 Supabase 用户的 access token（从 Web 登录或脚本登录获取）
@@ -73,7 +73,7 @@ npx @work-learn/setup \
 {
   "command": "pnpm",
   "args": ["--filter", "@work-learn/mcp-server", "exec", "tsx", "src/server.ts"],
-  "cwd": "/Users/jiangfeng/000mycodes/work-learn",
+  "cwd": "/path/to/work-learn",
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
     "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
@@ -88,8 +88,8 @@ npx @work-learn/setup \
 
 ```json
 {
-  "command": "/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/node_modules/.bin/tsx",
-  "args": ["/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/src/server.ts"],
+  "command": "/path/to/work-learn/packages/mcp-server/node_modules/.bin/tsx",
+  "args": ["/path/to/work-learn/packages/mcp-server/src/server.ts"],
   "env": {
     "WORK_LEARN_API_URL": "http://localhost:3000",
     "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
@@ -110,7 +110,7 @@ npx @work-learn/setup \
     "work-learn": {
       "command": "pnpm",
       "args": ["--filter", "@work-learn/mcp-server", "exec", "tsx", "src/server.ts"],
-      "cwd": "/Users/jiangfeng/000mycodes/work-learn",
+      "cwd": "/path/to/work-learn",
       "env": {
         "WORK_LEARN_API_URL": "http://localhost:3000",
         "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
@@ -131,8 +131,8 @@ npx @work-learn/setup \
 {
   "mcpServers": {
     "work-learn": {
-      "command": "/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/node_modules/.bin/tsx",
-      "args": ["/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/src/server.ts"],
+      "command": "/path/to/work-learn/packages/mcp-server/node_modules/.bin/tsx",
+      "args": ["/path/to/work-learn/packages/mcp-server/src/server.ts"],
       "env": {
         "WORK_LEARN_API_URL": "https://work-learn-api.vercel.app",
         "WORK_LEARN_ACCESS_TOKEN": "<Supabase user access token>",
@@ -154,8 +154,8 @@ npx @work-learn/setup \
 
 ```toml
 [mcp_servers.work-learn]
-command = "/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/node_modules/.bin/tsx"
-args = ["/Users/jiangfeng/000mycodes/work-learn/packages/mcp-server/src/server.ts"]
+command = "/path/to/work-learn/packages/mcp-server/node_modules/.bin/tsx"
+args = ["/path/to/work-learn/packages/mcp-server/src/server.ts"]
 env = { WORK_LEARN_API_URL = "http://localhost:3000", WORK_LEARN_ACCESS_TOKEN = "<Supabase user access token>" }
 ```
 
@@ -174,8 +174,10 @@ MCP 提供工具能力，Skill 则告诉 Agent 何时保存、如何整理。两
 脚本会自动检测本机所有支持 Skill 的 Agent（Codex、Claude Code、CodeBuddy、Cursor、OpenCode、Pi 等），把 Skill 装进对应的 skills 目录：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/bayernjf/work-learn/main/scripts/install-skill.sh | bash
+curl -fsSL https://work-learn.pages.dev/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=https://work-learn.pages.dev bash
 ```
+
+> 命令从 Work Learn 站点自身取脚本，而不是 `raw.githubusercontent.com` —— 后者在部分网络下无法访问。
 
 如果已 clone 仓库，也可以直接运行：
 
