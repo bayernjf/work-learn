@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 
 export type McpEntry = {
@@ -80,10 +80,32 @@ function ensureDir(file: string) {
   mkdirSync(dirname(file), { recursive: true });
 }
 
+/**
+ * Write a file that contains an access token.
+ *
+ * The mode argument only applies when creating, so an agent config that already
+ * exists keeps whatever it had — some ship 0644 — until chmod tightens it.
+ */
+function writeSecret(file: string, contents: string | Buffer) {
+  writeFileSync(file, contents, { mode: 0o600 });
+  try {
+    chmodSync(file, 0o600);
+  } catch {
+    console.warn(`  ! could not restrict permissions on ${file} — it holds a token, tighten it yourself`);
+  }
+}
+
 function backup(file: string) {
   if (!existsSync(file)) return;
+  // Each backup holds the token that was current when it was taken, so keeping a
+  // pile of them keeps revoked tokens readable on disk. Retain only the latest.
+  const dir = dirname(file);
+  const prefix = `${basename(file)}.bak-`;
+  for (const stale of readdirSync(dir).filter((name) => name.startsWith(prefix))) {
+    unlinkSync(join(dir, stale));
+  }
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  writeFileSync(`${file}.bak-${stamp}`, readFileSync(file));
+  writeSecret(`${file}.bak-${stamp}`, readFileSync(file));
 }
 
 function readJson(file: string): Record<string, unknown> {
@@ -97,7 +119,7 @@ function readJson(file: string): Record<string, unknown> {
 
 function writeJson(file: string, value: unknown) {
   ensureDir(file);
-  writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
+  writeSecret(file, JSON.stringify(value, null, 2) + "\n");
 }
 
 /** Write into a JSON file shaped { mcpServers: { ... } } (Claude, CodeBuddy, Cursor). */
@@ -161,7 +183,7 @@ function writeCodexToml(file: string, entry: McpEntry) {
     original = original + "\n" + block + "\n";
   }
   ensureDir(file);
-  writeFileSync(file, original);
+  writeSecret(file, original);
 }
 
 export function writeAgentConfig(agent: AgentTarget, entry: McpEntry) {

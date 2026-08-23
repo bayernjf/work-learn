@@ -15,6 +15,10 @@ const LANDING_URL = "https://work-learn.bayjf.com";
 const REPO_URL = "https://github.com/bayernjf/work-learn";
 const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
 
+// Stands in for the token until one exists, so the samples read as templates
+// rather than as something ready to paste.
+const TOKEN_PLACEHOLDER = "<your-personal-access-token>";
+
 // Tab label and note for the skills directories worth naming. Anything in
 // __AGENT_SKILL_DIRS__ without an entry here is still covered by the universal
 // command; it just gets no tab of its own.
@@ -299,7 +303,11 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const RAW_BASE = window.location.origin;
   const API_URL = "https://work-learn-api.vercel.app";
   const [remoteToken, setRemoteToken] = useState<string | null>(null);
-  const token = remoteToken ?? session.access_token;
+  // No fallback to session.access_token. That JWT also authenticates straight
+  // against Supabase, cannot be revoked from the token list, and would end up
+  // written into an agent's config file on disk.
+  const token = remoteToken ?? TOKEN_PLACEHOLDER;
+  const hasToken = remoteToken !== null;
 
   const mcpConfig = JSON.stringify(
     {
@@ -354,23 +362,26 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
       <div className="agent-connect-body">
         <p>{t.connect.intro(LANDING_URL)}</p>
 
+        <p className="connect-step">{t.connect.tokenStep}</p>
+        <p className="connect-hint">{t.connect.tokenHint}</p>
+        <TokenManager session={session} onTokenSelect={setRemoteToken} />
+
         <div className="auto-setup">
           <div className="auto-setup-head">
             <span className="auto-setup-label">{t.connect.autoLabel}</span>
-            <button type="button" className="copy-chip" onClick={() => copy("auto-prompt", agentPrompt)}>
+            <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("auto-prompt", agentPrompt)}>
               {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
             </button>
           </div>
           <p className="auto-setup-copy">{t.connect.autoCopy}</p>
           <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
-          <p className="auto-setup-note">{t.connect.autoNote}</p>
+          <p className="auto-setup-note">{hasToken ? t.connect.autoNote : t.connect.tokenGate}</p>
         </div>
 
         <p className="connect-lane">{t.connect.manualLabel}</p>
 
         <p className="connect-step">{t.connect.step1}</p>
         <p className="connect-hint">{t.connect.hint1}</p>
-        <TokenManager session={session} onTokenSelect={setRemoteToken} />
         <div className="code-block compact">
           <code className="code-line">{remoteMcpUrl}</code>
           <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
@@ -379,7 +390,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         </div>
         <div className="code-block compact">
           <code className="code-line">{authHeader}</code>
-          <button type="button" className="copy-chip" onClick={() => copy("remote-auth", authHeader)}>
+          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
             {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
           </button>
         </div>
@@ -388,7 +399,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         <p className="connect-step">{t.connect.step2}</p>
         <div className="code-block compact">
           <code className="code-line">{setupCommand}</code>
-          <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
+          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("setup", setupCommand)}>
             {copiedId === "setup" ? t.common.copied : t.common.copy}
           </button>
         </div>
@@ -398,7 +409,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
           <summary>{t.connect.manualSummary}</summary>
         <div className="code-block">
           <pre className="code-pre">{mcpConfig}</pre>
-          <button type="button" className="copy-chip" onClick={() => copy("mcp", mcpConfig)}>
+          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
             {copiedId === "mcp" ? t.common.copied : t.common.copy}
           </button>
         </div>

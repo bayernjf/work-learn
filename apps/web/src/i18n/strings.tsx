@@ -87,8 +87,8 @@ export const en = {
     summary: "Connect an agent",
     intro: (landingUrl: string): ReactNode => <>New here? Read the <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn landing page<span className="external-icon" aria-hidden="true">↗</span></a> for the full product walkthrough.</>,
     autoLabel: "Let your agent set it up",
-    autoCopy: "Paste this into the agent you want to connect. Your endpoint and token are already filled in.",
-    autoNote: "The prompt carries a live token. If you have not created a personal access token below, it is your session token and expires in about an hour — create one first, then copy again.",
+    autoCopy: "Create a token above, then paste this into the agent you want to connect. Your endpoint and token are already filled in.",
+    autoNote: "The prompt carries a live token. Treat it as a secret: it goes into that agent's config file and nowhere else. If it leaks, revoke that token above and issue a new one.",
     autoPrompt: (endpoint: string, token: string, skillUrl: string) => `Set up the Work Learn MCP server in the agent client you are running right now.
 
 Endpoint: ${endpoint} (remote MCP over Streamable HTTP, stateless)
@@ -103,14 +103,17 @@ Do this:
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
 6. Tell me to restart the client, then confirm these five tools are available: create_session, save_material, search_corpus, get_review_items, mark_mastered.`,
     manualLabel: "Manual setup",
-    step1: "1. Connect over remote MCP (no local install needed).",
-    hint1: "Create a personal access token below and use it as the Bearer token. It stays valid until you revoke it, unlike your short-lived session token.",
-    hint1b: (): ReactNode => <>In agents that support remote MCP (Streamable HTTP), add the URL above and set the <code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>. For persistent local agents that only support stdio, use option 2.</>,
-    step2: "2. Or run the local installer. Your access token is already filled in.",
+    tokenStep: "1. Create a personal access token. Everything below needs one.",
+    tokenHint: "It stays valid until you revoke it, and it only ever reaches this app's API. Issue one per agent so you can revoke that agent alone.",
+    tokenGate: "Create a token above to fill in the commands below.",
+    step1: "2. Connect over remote MCP (no local install needed).",
+    hint1: "Use the token you created above as the Bearer token.",
+    hint1b: (): ReactNode => <>In agents that support remote MCP (Streamable HTTP), add the URL above and set the <code>Authorization</code> header to <code>Bearer &lt;personal-access-token&gt;</code>. For persistent local agents that only support stdio, use option 3.</>,
+    step2: "3. Or run the local installer. Your access token is already filled in.",
     hint2: (): ReactNode => <>The installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the correct MCP config for each one (with a backup), and can install the Skill too. When it asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for agents that only support stdio MCP.</>,
     manualSummary: "Prefer to paste the config yourself?",
     hint2b: (docsUrl: string): ReactNode => <>The token is short-lived. For long-running agents, pass <code>--refresh-token</code>, <code>--supabase-url</code>, and <code>--supabase-anon-key</code> to the installer (or set <code>WORK_LEARN_REFRESH_TOKEN</code>, <code>SUPABASE_URL</code>, and <code>SUPABASE_ANON_KEY</code>) as shown in the <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.</>,
-    step3: "3. Install the Skill (optional). It tells your agent when to save.",
+    step3: "4. Install the Skill (optional). It tells your agent when to save.",
     tabsLabel: "Install Skill per agent",
     restart: (): ReactNode => <>Restart your agent, then ask: <code>&ldquo;Save the useful English from this conversation.&rdquo;</code></>,
     notes: {
@@ -267,8 +270,8 @@ export const zh: Strings = {
     summary: "接入 agent",
     intro: (landingUrl: string): ReactNode => <>第一次用？先看 <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn 介绍页<span className="external-icon" aria-hidden="true">↗</span></a>，那里有完整的产品说明。</>,
     autoLabel: "让 Agent 帮你配置",
-    autoCopy: "把这段粘给你想接入的 Agent，端点和 token 都已经填好了。",
-    autoNote: "这段提示里带着一个真实可用的 token。如果你还没在下面创建 personal access token，它就是你的会话 token，约 1 小时后过期 —— 建议先创建一个，再重新复制。",
+    autoCopy: "先在上面创建 token，然后把这段粘给你想接入的 Agent，端点和 token 都已经填好了。",
+    autoNote: "这段提示里带着一个真实可用的 token。请当成密码看待：它只该进那个 agent 的配置文件，不该出现在别处。万一泄露，在上面吊销这个 token 再发一个新的。",
     autoPrompt: (endpoint: string, token: string, skillUrl: string) => `帮我在你现在运行的这个 Agent 客户端里接入 Work Learn 的 MCP 服务器。
 
 端点：${endpoint}（远程 MCP，Streamable HTTP，无状态）
@@ -283,14 +286,17 @@ export const zh: Strings = {
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
 6. 告诉我需要重启客户端，然后确认这 5 个工具可用：create_session、save_material、search_corpus、get_review_items、mark_mastered。`,
     manualLabel: "手动配置",
-    step1: "1. 用远程 MCP 接入（不用装任何东西）。",
-    hint1: "在下面创建一个 personal access token，拿它当 Bearer token。它在你主动吊销前一直有效，不像会话 token 那样很快过期。",
-    hint1b: (): ReactNode => <>在支持远程 MCP（Streamable HTTP）的 agent 里，填上面那个地址，并把 <code>Authorization</code> 请求头设成 <code>Bearer &lt;personal-access-token&gt;</code>。只支持 stdio 的常驻本地 agent 请用方式 2。</>,
-    step2: "2. 或者跑本地安装器，你的 access token 已经填好了。",
+    tokenStep: "1. 创建一个 personal access token，下面每种方式都需要它。",
+    tokenHint: "它在你主动吊销前一直有效，而且只会被这个产品的 API 认。建议一个 agent 发一个，这样要停某个 agent 时可以只吊销它那一个。",
+    tokenGate: "先在上面创建 token，下面的命令才会填好。",
+    step1: "2. 用远程 MCP 接入（不用装任何东西）。",
+    hint1: "拿你上面创建的那个 token 当 Bearer token。",
+    hint1b: (): ReactNode => <>在支持远程 MCP（Streamable HTTP）的 agent 里，填上面那个地址，并把 <code>Authorization</code> 请求头设成 <code>Bearer &lt;personal-access-token&gt;</code>。只支持 stdio 的常驻本地 agent 请用方式 3。</>,
+    step2: "3. 或者跑本地安装器，你的 access token 已经填好了。",
     hint2: (): ReactNode => <>安装器会检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，为每个写入正确的 MCP 配置（并留备份），也可以顺带装上 Skill。它问仓库路径时，指向你本地的 <code>work-learn</code> clone。只支持 stdio MCP 的 agent 用这个。</>,
     manualSummary: "想自己粘配置？",
     hint2b: (docsUrl: string): ReactNode => <>这个 token 很快过期。常驻运行的 agent 请给安装器传 <code>--refresh-token</code>、<code>--supabase-url</code> 和 <code>--supabase-anon-key</code>（或设置 <code>WORK_LEARN_REFRESH_TOKEN</code>、<code>SUPABASE_URL</code> 和 <code>SUPABASE_ANON_KEY</code>），具体见 <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">配置文档<span className="external-icon" aria-hidden="true">↗</span></a>。</>,
-    step3: "3. 安装 Skill（可选）。它负责告诉 agent 什么时候该存。",
+    step3: "4. 安装 Skill（可选）。它负责告诉 agent 什么时候该存。",
     tabsLabel: "按 agent 选择安装命令",
     restart: (): ReactNode => <>重启 agent，然后说：<code>“整理刚才这段对话”</code></>,
     notes: {

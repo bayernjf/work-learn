@@ -829,6 +829,8 @@ code {
 }
 .copy-chip:hover { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
 .copy-chip:active { transform: translateY(1px); }
+.copy-chip:disabled { opacity: 0.45; cursor: not-allowed; }
+.copy-chip:disabled:hover { color: inherit; border-color: inherit; background: none; }
 
 .install-card { margin-top: 10px; padding: 14px; border-radius: var(--r-md); background: var(--bg); }
 .agent-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
