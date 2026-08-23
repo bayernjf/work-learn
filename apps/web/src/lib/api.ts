@@ -67,11 +67,13 @@ export const fetchPersonalAccessTokens = async (session: Session) => {
   return (await response.json()) as { data: PersonalAccessToken[] };
 };
 
-export const createPersonalAccessToken = async (session: Session, name: string) => {
+export const createPersonalAccessToken = async (session: Session, name: string, expiresInDays?: number) => {
   const response = await fetch(`/api/tokens`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ name })
+    // Omitted rather than sent as null when the user picks "no expiry": the
+    // schema treats the field as optional, not nullable.
+    body: JSON.stringify(expiresInDays ? { name, expiresInDays } : { name })
   });
   if (!response.ok) throw new Error(activeStrings().errors.tokenCreate);
   return (await response.json()) as { data: CreatedPersonalAccessToken };

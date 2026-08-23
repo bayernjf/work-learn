@@ -19,6 +19,9 @@ export function TokenManager({ session, onTokenSelect }: Props) {
   const formatDate = (value: string | null) => (value ? formatIso(value) : t.tokens.never);
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
   const [name, setName] = useState("");
+  // Days, or 0 for no expiry. Defaults to 90 so the common case is a token that
+  // stops working on its own; a leaked one then has a deadline.
+  const [expiresInDays, setExpiresInDays] = useState(90);
   const [created, setCreated] = useState<CreatedPersonalAccessToken | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -42,7 +45,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
     setLoading(true);
     setError("");
     try {
-      const result = await createPersonalAccessToken(session, name.trim());
+      const result = await createPersonalAccessToken(session, name.trim(), expiresInDays || undefined);
       setCreated(result.data);
       setName("");
       onTokenSelect(result.data.token);
@@ -113,10 +116,23 @@ export function TokenManager({ session, onTokenSelect }: Props) {
           onChange={(event) => setName(event.target.value)}
           maxLength={80}
         />
+        <select
+          aria-label={t.tokens.expiryLabel}
+          value={expiresInDays}
+          onChange={(event) => setExpiresInDays(Number(event.target.value))}
+        >
+          {[30, 90, 365].map((days) => (
+            <option key={days} value={days}>
+              {t.tokens.expiryDays(days)}
+            </option>
+          ))}
+          <option value={0}>{t.tokens.expiryNever}</option>
+        </select>
         <button type="submit" disabled={loading || !name.trim()}>
           {loading ? t.tokens.creating : t.tokens.create}
         </button>
       </form>
+      <p className="token-hint">{expiresInDays ? t.tokens.expiryHint : t.tokens.expiryNeverHint}</p>
       {error && <p className="token-error">{error}</p>}
     </div>
   );

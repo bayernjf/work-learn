@@ -18,7 +18,7 @@ https://work-learn-api.vercel.app/api/mcp
 Authorization: Bearer <your-access-token>
 ```
 
-其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。它在你吊销之前一直有效，所以本地 stdio agent 填一次就不用再管；建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
+其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。创建时可以选有效期（默认 90 天，也可以选永久）；在过期或吊销之前不需要做任何续期。建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
 
 远程端点与本地 MCP 提供完全相同的 5 个工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`。
 

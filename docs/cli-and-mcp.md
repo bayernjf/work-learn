@@ -33,8 +33,8 @@ WORK_LEARN_API_URL=http://localhost:3000
 WORK_LEARN_ACCESS_TOKEN=<your Work Learn personal access token>
 ```
 
-在 Web 端的 “Connect an agent” 面板创建 personal access token。它在你吊销之前一直有效，
-所以不需要续期机制。建议每个 agent 单独发一个，这样吊销时只影响那一个。
+在 Web 端的 “Connect an agent” 面板创建 personal access token，创建时可以选有效期（默认 90 天，
+也可以选永久）。在过期或吊销之前不需要续期机制。建议每个 agent 单独发一个，这样吊销时只影响那一个。
 
 MCP 当前提供：
 
