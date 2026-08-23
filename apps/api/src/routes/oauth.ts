@@ -3,8 +3,15 @@ import { cors } from "hono/cors";
 import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 
-const apiBase = () => process.env.WORK_LEARN_PUBLIC_API_URL ?? "https://work-learn-api.vercel.app";
-const authServer = () => `${apiBase()}/api/oauth`;
+/**
+ * Derived from the request, not hardcoded to production.
+ *
+ * RFC 8414 requires the issuer in this metadata to match the authorization
+ * server URL the client was pointed at. /api/mcp advertises that URL from the
+ * request origin, so hardcoding a fallback here makes the two disagree on any
+ * host but production, and a strict client rejects the mismatch.
+ */
+const apiBase = (url: string) => process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(url).origin;
 
 export const oauthRoute = new Hono();
 
@@ -20,11 +27,11 @@ oauthRoute.use(
 /** Authorization server metadata (RFC 8414) */
 oauthRoute.get("/.well-known/oauth-authorization-server", (c) =>
   c.json({
-    issuer: authServer(),
-    authorization_endpoint: `${apiBase()}/api/oauth/authorize`,
-    token_endpoint: `${apiBase()}/api/oauth/token`,
-    registration_endpoint: `${apiBase()}/api/oauth/register`,
-    jwks_uri: `${apiBase()}/api/oauth/jwks`,
+    issuer: `${apiBase(c.req.url)}/api/oauth`,
+    authorization_endpoint: `${apiBase(c.req.url)}/api/oauth/authorize`,
+    token_endpoint: `${apiBase(c.req.url)}/api/oauth/token`,
+    registration_endpoint: `${apiBase(c.req.url)}/api/oauth/register`,
+    jwks_uri: `${apiBase(c.req.url)}/api/oauth/jwks`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
