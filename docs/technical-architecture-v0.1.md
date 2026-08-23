@@ -21,20 +21,26 @@ packages/shared-schema   Zod 输入输出协议
 packages/learning-core   学习材料领域逻辑
 packages/learning-skill  Universal Learning Skill 指令
 packages/mcp-server      Agent 工具目录和 MCP 适配边界
+packages/setup           npx 一键安装器，写入各 Agent 的 MCP 配置
 ```
 
 ## 3. 首版 API 边界
 
+全部挂在 `/api` 下：
+
 - `GET /api/health`
+- `GET /api/config`：浏览器端公开 Supabase 配置（URL + anon key）
 - `POST /api/sessions`
 - `GET /api/materials?q=`
 - `POST /api/materials`
 - `GET /api/reviews`
 - `POST /api/reviews/:id/complete`
-- `POST /api/mcp`（规划中）：远程 MCP HTTP 端点，供普通用户通过 URL 连接 Agent
+- `POST /api/mcp`：远程 MCP HTTP 端点，供普通用户通过 URL 连接 Agent
+- `GET|POST /api/tokens`、`POST /api/tokens/:id/revoke`、`DELETE /api/tokens/:id`：Personal Access Token 管理
+- `/api/oauth/*`：MCP OAuth 2.1 授权服务器（元数据、动态注册、authorize、decision、token）
 - 所有请求和响应通过 `@work-learn/shared-schema` 校验。
 
-MCP Server 提供两种形态：本地 stdio（当前已实现，通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 调用上述 API）与远程 HTTP（规划中，挂载在 `/api/mcp`，普通用户通过 URL + 授权连接 Agent）。两种形态复用同一套工具逻辑，已实现 `create_session`、`save_material`、`search_corpus`、`get_review_items` 和 `mark_mastered` 五个工具。详见 [远程 MCP 方案](remote-mcp.md)。
+MCP Server 提供两种形态：本地 stdio（通过 `WORK_LEARN_API_URL` 和 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 调用上述 API）与远程 HTTP（挂载在 `/api/mcp`，普通用户通过 URL + 授权连接 Agent）。两种形态复用同一套工具逻辑，已实现 `create_session`、`save_material`、`search_corpus`、`get_review_items` 和 `mark_mastered` 五个工具。详见 [远程 MCP 方案](remote-mcp.md)。
 
 ## 4. 本地开发
 

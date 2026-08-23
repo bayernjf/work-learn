@@ -8,7 +8,7 @@ Work Learn 是一个跨 AI Agent 的个人英语语料学习系统。它把用�
 
 第一版面向使用 AI Agent 进行全栈开发的独立开发者，先提供一条固定的对话整理与复习闭环。英语学习是首个产品场景，底层能力可扩展到技术知识、工作决策和个人 AI 工作资产沉淀。
 
-Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨 Agent 同步；CLI 与本地 Companion 负责终端会话和无 Skill 场景的兼容接入。
+Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨 Agent 同步；CLI 负责终端会话和无 Skill 场景的兼容接入。本地 Companion 仍在设计中，尚未实现。
 
 ```text
 Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 -> Web 查看和复习
@@ -38,23 +38,23 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 ## 当前状态
 
-当前仓库处于产品方案和 MVP 定义阶段，不是可用于生产的稳定版本。
+最小闭环已经跑通并上线：API 在 Vercel（`https://work-learn-api.vercel.app`），Web 在 Cloudflare Pages（`https://work-learn.pages.dev`），数据在 Supabase。
 
-当前已完成：
+已经可用的部分：
 
-- 明确 Universal Learning Skill 作为跨 Agent 主入口；
-- 定义 MCP/API 统一能力层，以及 CLI、本地 Companion 的兼容边界；
-- 沉淀 Session/Event 和 LearningMaterial 的初步数据模型；
-- 完成 Web 落地页方向和第一版产品叙事；
-- 明确主动触发、本地优先、默认脱敏和保存前确认等安全原则。
+- 五个 MCP 工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`；
+- 两种 MCP 形态共用同一套工具实现：本地 stdio（`packages/mcp-server`）与远程 HTTP（`POST /api/mcp`，无状态 Streamable HTTP）；
+- 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销）、MCP OAuth 2.1（动态注册、PKCE、refresh token 轮换、Web consent 页）；
+- `npx @work-learn/setup` 一键安装：探测 Codex / Claude Code / Claude Desktop / CodeBuddy / Cursor / OpenCode，写入前备份配置，可顺带安装 Skill；支持 `--token-file` 让 token 不出现在命令行和对话里；
+- Universal Learning Skill（`skills/work-learn/SKILL.md`）和 `scripts/install-skill.sh`；
+- Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
+- `learn capture` CLI 的 stdin / 剪贴板采集，本地先做凭证脱敏。
 
-下一步是实现最小闭环：
+下一步：
 
-- `save_material`、`search_corpus`、`get_review_items`；
-- Universal Learning Skill 的指令和输出格式；
-- Hono API 和 Supabase 数据层；
-- 连接 Hono API 的 MCP Server；
-- 基础 Web 语料库和每日复习。
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性；
+- 给 Personal Access Token 加 scope，让只读接入不必持有可写 token；
+- 补 `apps/api` 的测试（目前只有 `packages/mcp-server` 和 `packages/shared-schema`、`packages/setup` 有测试）。
 
 ## 设计原则
 

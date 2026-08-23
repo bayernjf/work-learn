@@ -18,9 +18,7 @@ Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习
 
 脚手架已建立在 `apps/` 和 `packages/` 下，详细边界见 [v0.1 技术架构](docs/technical-architecture-v0.1.md)。
 
-## 推荐的第一步
-
-先实现最小闭环：
+## 最小闭环
 
 ```text
 Agent 中调用 Skill
@@ -30,7 +28,7 @@ Agent 中调用 Skill
   → Web 查看和复习
 ```
 
-第一版只需要支持保存、搜索和每日复习，不需要先做桌面监听或移动 App。
+这条闭环已经实现并上线，第一版不做桌面监听和移动 App。
 
 ## 待实现模块
 
@@ -70,6 +68,15 @@ Agent 中调用 Skill
   - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation
   - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`
   - [ ] 实测各 Agent 远程 MCP OAuth 兼容性
+  - [ ] 给 Personal Access Token 加 scope（当前一个 token 就是全量读写权限）
+
+## Token 交付体验
+
+- [x] Web 端创建 PAT 时可选有效期（30/90/365 天或永不过期），列表显示到期时间
+- [x] 只显示一次的 token 提供一键复制，以及「保存到文件」下载
+- [x] 页面直接给出 `--token-file` 路径，并生成 `umask 077` 写文件命令与 `install -m 600` 移动命令
+- [x] 「让 agent 帮你配置」的提示词有两种模式：token 写进提示词，或只给出文件路径（提示词明确要求 agent 不要读取该文件）
+- [x] `@work-learn/setup` 的 `--token-file` 支持 `~` 展开；仓库检测改为从当前目录向上查找，不再硬编码作者的家目录路径
 
 ## 当前关键决策
 
@@ -86,16 +93,21 @@ Agent 中调用 Skill
 - 根 `vercel.json` 用显式 `builds` 配置，避免根 `package.json` 被误判为静态站点；
 - 部署细节见 [docs/deployment.md](docs/deployment.md)。
 
+## 已经由实现回答的问题
+
+- 数据默认云端（Supabase）存储，本地采集只做脱敏和兼容兜底，不做本地优先存储；
+- 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法；
+- 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
+- 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。
+
 ## 需要后续确认的问题
 
-- 首版是否只支持 macOS；
+- 是否引入间隔重复算法，替换当前的一次性复习队列；
 - 使用本地模型还是云端模型做语料分析；
-- 数据是否默认本地优先、云端可选同步；
-- 首个重点 Agent 是 Claude Desktop、终端 Agent，还是两者同时支持；
-- 复习机制先采用简单队列，还是直接引入间隔重复算法。
+- 是否需要 macOS Companion 做终端会话的自动采集。
 
 CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 
-远程 MCP 方案见：[docs/remote-mcp.md](docs/remote-mcp.md)（普通用户通过 URL 连接 Agent，规划中）。
+远程 MCP 方案见：[docs/remote-mcp.md](docs/remote-mcp.md)（`POST /api/mcp` 已实现并上线）。
