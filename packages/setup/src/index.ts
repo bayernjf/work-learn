@@ -12,6 +12,7 @@ import {
   type AgentTarget,
   type McpEntry,
 } from "./agents.js";
+import { detectRepoPath } from "./repo.js";
 
 const DEFAULT_API_URL = "https://work-learn-api.vercel.app";
 
@@ -92,24 +93,6 @@ type Answers = {
   selected: AgentTarget[];
   installSkill: boolean;
 };
-
-function detectRepoPath(): string | undefined {
-  const candidates = [
-    process.env.WORK_LEARN_REPO,
-    process.cwd(),
-    join(homedir(), "000mycodes", "work-learn"),
-    join(homedir(), "work-learn"),
-  ].filter((value): value is string => Boolean(value));
-
-  for (const candidate of candidates) {
-    if (
-      existsSync(join(candidate, "packages", "mcp-server", "src", "server.ts"))
-    ) {
-      return candidate;
-    }
-  }
-  return undefined;
-}
 
 function resolveTsx(repoPath: string): string | undefined {
   const candidates = [

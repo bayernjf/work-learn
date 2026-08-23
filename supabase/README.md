@@ -21,6 +21,10 @@ VITE_SUPABASE_ANON_KEY=<publishable-or-anon-key>
 VITE_WORK_LEARN_API_URL=http://localhost:3000
 ```
 
+`VITE_WORK_LEARN_API_URL` is for local development only. It gets inlined into the
+bundle, so a production build carrying it points every request at localhost —
+production reads the API origin at runtime instead. See [../docs/deployment.md](../docs/deployment.md).
+
 ## 2. Link the project
 
 Install the Supabase CLI, then authenticate locally:
@@ -36,4 +40,10 @@ supabase link --project-ref "$SUPABASE_PROJECT_REF"
 supabase db push
 ```
 
-The migration creates sessions, conversation events, learning materials, review items, indexes, and per-user RLS policies.
+The migrations create sessions, conversation events, learning materials, review
+items, personal access tokens, the OAuth client/grant tables, a trigram-indexed
+search function, indexes and per-user RLS policies.
+
+Remote MCP OAuth also needs `OAUTH_JWT_SECRET`, `WORK_LEARN_PUBLIC_API_URL` and
+`WORK_LEARN_WEB_URL` in the API environment. Without them the OAuth routes fail;
+personal access tokens keep working.

@@ -102,6 +102,24 @@ Do this:
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
 6. Tell me to restart the client, then confirm these five tools are available: create_session, save_material, search_corpus, get_review_items, mark_mastered.`,
+    modesLabel: "Where the token goes",
+    modeInline: "Token in the prompt",
+    modeFile: "Token in a file",
+    autoPromptFile: (tokenPath: string, skillUrl: string) => `Set up the Work Learn MCP server in the agent client you are running right now, using the local stdio installer.
+
+My token is in this file: ${tokenPath}
+
+Do not open, cat, or otherwise read that file. It is a password, and reading it leaks it, because tool output becomes part of this conversation. Pass the path through verbatim, and never put the token itself on a command line.
+
+Do this:
+1. Find my local work-learn clone. It needs to have had \`pnpm install\` run in it. Ask me where it is if you cannot find it.
+2. From inside that clone, run: npx -y @work-learn/setup --yes --token-file ${tokenPath}
+   If you run it from anywhere else, add --repo <path to the clone>.
+3. That installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor and OpenCode, backs up each config file before writing it, records the path instead of the token, and installs the Work Learn skill. Do not hand-edit the config files yourself.
+4. If it fails, show me its output and stop. Do not fall back to putting a token in a config file.
+5. Tell me to restart the client, then confirm these five tools are available: create_session, save_material, search_corpus, get_review_items, mark_mastered.
+
+The skill it installs is the same one published at ${skillUrl}.`,
     manualLabel: "Manual setup",
     tokenStep: "1. Create a personal access token. Everything below needs one.",
     tokenHint: "It only ever reaches this app's API. Issue one per agent so you can revoke that agent alone, and pick an expiry so a forgotten token stops working on its own.",
@@ -113,11 +131,11 @@ Do this:
     hint2: (): ReactNode => <>The installer asks for the token instead of taking it as a flag, so it never reaches your shell history. It detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor, and OpenCode, writes the correct MCP config for each one (with a backup), and can install the Skill too. When it asks for the repo path, point it at your local <code>work-learn</code> clone. Use this for agents that only support stdio MCP.</>,
     manualSummary: "Prefer to paste the config yourself?",
     hint2b: (docsUrl: string): ReactNode => <>The installer writes whatever token you give it, and there is nothing to renew before it expires. Config file locations and the manual equivalent are in the <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">setup docs<span className="external-icon" aria-hidden="true">↗</span></a>.</>,
-    tokenFileSummary: "Having an agent run the installer for you?",
-    tokenFileIntro: "Then pasting the token into the installer means saying it out loud to the agent, and a conversation is recorded — it goes to the model provider and into a local transcript. Put the token in a file instead and hand over only the path.",
+    tokenFileIntro: "Pasting the token into the installer means saying it out loud to the agent, and a conversation is recorded — it goes to the model provider and into a local transcript. Put the token in a file instead and hand over only the path. This route uses the local installer, so it needs a work-learn clone; remote MCP has no way to read a header out of a file.",
+    tokenFilePathLabel: "Token file path",
     tokenFileStep1: "Run this yourself, in your own terminal. It prompts for the token, so the token never enters your shell history either.",
     tokenFileStep2: "Now this one is safe to give to an agent. A path is not a secret.",
-    tokenFileNote: "The MCP server reads the file at startup, so the config stores the path and nothing on the chain touches the token. One catch: asking an agent to open or cat the file leaks it just the same, because tool output is conversation too. The indirection is the whole point.",
+    tokenFileNote: "The MCP server reads the file at startup, so the config stores the path and nothing on the chain touches the token. One catch: asking an agent to open or cat the file leaks it just the same, because tool output is conversation too. The prompt above tells it not to.",
     step3: "4. Install the Skill (optional). It tells your agent when to save.",
     tabsLabel: "Install Skill per agent",
     restart: (): ReactNode => <>Restart your agent, then ask: <code>&ldquo;Save the useful English from this conversation.&rdquo;</code></>,
@@ -140,6 +158,13 @@ Do this:
     never: "Never",
     revoke: "Revoke",
     copyNow: "Copy this token now. It will not be shown again.",
+    save: "Save to file",
+    saved: "Saved",
+    saveHint:
+      "Saving downloads work-learn-token.txt. Your download folder is the wrong home for it — the file is world-readable there and the download shows up in browser history. Move it into place, which also makes it 0600:",
+    moveCommand: (path: string) =>
+      `install -m 600 ~/Downloads/work-learn-token.txt ${path} && rm ~/Downloads/work-learn-token.txt`,
+    lastUsedHint: "Once an agent connects, \"Last used\" turns into a timestamp. That is how you know the config took.",
     namePlaceholder: "Token name, e.g. Claude Desktop",
     expiryLabel: "Expiry",
     expiryDays: (days: number) => `Expires in ${days} days`,
@@ -295,6 +320,24 @@ export const zh: Strings = {
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
 6. 告诉我需要重启客户端，然后确认这 5 个工具可用：create_session、save_material、search_corpus、get_review_items、mark_mastered。`,
+    modesLabel: "token 放在哪",
+    modeInline: "token 写进提示词",
+    modeFile: "token 存在文件里",
+    autoPromptFile: (tokenPath: string, skillUrl: string) => `帮我在你现在运行的这个 Agent 客户端里接入 Work Learn 的 MCP 服务器，走本地 stdio 安装器。
+
+我的 token 存在这个文件里：${tokenPath}
+
+不要打开、不要 cat、不要以任何方式读取这个文件的内容。它是密码，读出来就等于泄漏——工具返回的内容一样会进这段对话。你只需要把这个路径原样传下去，也不要把 token 本身写进任何命令。
+
+请按以下步骤做：
+1. 找到本机的 work-learn clone，它必须已经执行过 \`pnpm install\`。找不到就先问我路径。
+2. 在那个目录里执行：npx -y @work-learn/setup --yes --token-file ${tokenPath}
+   如果你在别的目录执行，就加上 --repo <clone 的路径>。
+3. 这个安装器会自己检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，写入前先备份各自的配置文件，配置里记的是这个路径而不是 token，并且会顺带装上 Work Learn 的 skill。不要自己手改这些配置文件。
+4. 如果它失败了，把它的输出给我看然后停下。不要退而把 token 写进配置文件。
+5. 告诉我需要重启客户端，然后确认这 5 个工具可用：create_session、save_material、search_corpus、get_review_items、mark_mastered。
+
+它装的 skill 就是 ${skillUrl} 这一份。`,
     manualLabel: "手动配置",
     tokenStep: "1. 创建一个 personal access token，下面每种方式都需要它。",
     tokenHint: "它只会被这个产品的 API 认。建议一个 agent 发一个，这样要停某个 agent 时可以只吊销它那一个；并且设个有效期，忘掉的 token 会自己失效。",
@@ -306,11 +349,11 @@ export const zh: Strings = {
     hint2: (): ReactNode => <>安装器是问你要 token，而不是从命令行参数拿，所以 token 不会进 shell 历史。它会检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，为每个写入正确的 MCP 配置（并留备份），也可以顺带装上 Skill。它问仓库路径时，指向你本地的 <code>work-learn</code> clone。只支持 stdio MCP 的 agent 用这个。</>,
     manualSummary: "想自己粘配置？",
     hint2b: (docsUrl: string): ReactNode => <>安装器只是把你给它的 token 写进配置，在过期之前不需要做任何续期。各家配置文件的位置和手动写法见 <a className="inline-link" href={docsUrl} target="_blank" rel="noopener noreferrer">配置文档<span className="external-icon" aria-hidden="true">↗</span></a>。</>,
-    tokenFileSummary: "想让 agent 帮你跑安装器？",
-    tokenFileIntro: "那把 token 粘给安装器就等于把它说给 agent 听，而对话是会被记录的——发给模型提供方，也落在本地 transcript 里。改成先把 token 写进一个文件，只把路径交给它。",
+    tokenFileIntro: "把 token 粘给安装器就等于把它说给 agent 听，而对话是会被记录的——发给模型提供方，也落在本地 transcript 里。改成先把 token 写进一个文件，只把路径交给它。这条路走的是本地安装器，所以需要一份 work-learn clone；远程 MCP 没有「从文件读 header」这种能力。",
+    tokenFilePathLabel: "token 文件路径",
     tokenFileStep1: "这条你自己在终端里跑。它是问你要 token，所以 token 也不会进 shell 历史。",
     tokenFileStep2: "这条可以放心交给 agent。路径不是秘密。",
-    tokenFileNote: "MCP 服务器每次启动时才去读这个文件，配置里存的只是路径，整条链上没有环节接触到 token 本身。一个例外：让 agent 去打开或 cat 这个文件同样是泄漏，因为工具返回的内容一样进对话。有用的就是「只给路径」这一层间接。",
+    tokenFileNote: "MCP 服务器每次启动时才去读这个文件，配置里存的只是路径，整条链上没有环节接触到 token 本身。一个例外：让 agent 去打开或 cat 这个文件同样是泄漏，因为工具返回的内容一样进对话——上面那段提示词里已经明确要求它别这么做。",
     step3: "4. 安装 Skill（可选）。它负责告诉 agent 什么时候该存。",
     tabsLabel: "按 agent 选择安装命令",
     restart: (): ReactNode => <>重启 agent，然后说：<code>“整理刚才这段对话”</code></>,
@@ -333,6 +376,13 @@ export const zh: Strings = {
     never: "从未",
     revoke: "吊销",
     copyNow: "现在就复制这个 token，它不会再显示第二次。",
+    save: "保存到文件",
+    saved: "已保存",
+    saveHint:
+      "保存会下载一个 work-learn-token.txt。下载目录不适合放它——文件在那里是所有人可读的，而且这次下载会留在浏览器历史里。跑下面这条把它挪到位，顺带就变成 0600：",
+    moveCommand: (path: string) =>
+      `install -m 600 ~/Downloads/work-learn-token.txt ${path} && rm ~/Downloads/work-learn-token.txt`,
+    lastUsedHint: "agent 接通之后，上面的「最近使用」会从「从未」变成一个时间。这就是配置生效的凭据。",
     namePlaceholder: "token 名称，例如 Claude Desktop",
     expiryLabel: "有效期",
     expiryDays: (days: number) => `${days} 天后过期`,

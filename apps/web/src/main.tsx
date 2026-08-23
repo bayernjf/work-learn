@@ -308,6 +308,10 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   // written into an agent's config file on disk.
   const token = remoteToken ?? TOKEN_PLACEHOLDER;
   const hasToken = remoteToken !== null;
+  const [promptMode, setPromptMode] = useState<"inline" | "file">("inline");
+  // Editable because a token kept somewhere else should not mean hand-editing
+  // every command on this page.
+  const [tokenFilePath, setTokenFilePath] = useState("~/.work-learn-token");
 
   const mcpConfig = JSON.stringify(
     {
@@ -332,13 +336,16 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   // there is no window where it is world-readable. The prompt is printed separately
   // because `read -p` means "read from a coprocess" in zsh, which is the default
   // shell on macOS -- the bash spelling fails there rather than prompting.
-  const tokenFilePath = "~/.work-learn-token";
   const writeTokenFileCommand = `umask 077 && printf 'Paste your token: ' && read -rs t && printf '%s' "$t" > ${tokenFilePath} && unset t && echo`;
-  const tokenFileSetupCommand = `npx -y @work-learn/setup --token-file ${tokenFilePath}`;
   const remoteMcpUrl = `${API_URL}/api/mcp`;
   const authHeader = `Authorization: Bearer ${token}`;
   const skillUrl = `${RAW_BASE}/skills/work-learn/SKILL.md`;
-  const agentPrompt = t.connect.autoPrompt(remoteMcpUrl, token, skillUrl);
+  const agentPrompt =
+    promptMode === "file"
+      ? t.connect.autoPromptFile(tokenFilePath, skillUrl)
+      : t.connect.autoPrompt(remoteMcpUrl, token, skillUrl);
+  // Only the inline prompt carries a token, so only it has to wait for one.
+  const promptReady = promptMode === "file" || hasToken;
 
   const universalInstall = { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal };
   const skillInstalls: typeof universalInstall[] = [
@@ -374,18 +381,60 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
 
         <p className="connect-step">{t.connect.tokenStep}</p>
         <p className="connect-hint">{t.connect.tokenHint}</p>
-        <TokenManager session={session} onTokenSelect={setRemoteToken} />
+        <TokenManager session={session} onTokenSelect={setRemoteToken} tokenFilePath={tokenFilePath} />
 
         <div className="auto-setup">
           <div className="auto-setup-head">
             <span className="auto-setup-label">{t.connect.autoLabel}</span>
-            <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("auto-prompt", agentPrompt)}>
+            <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
               {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
             </button>
           </div>
-          <p className="auto-setup-copy">{t.connect.autoCopy}</p>
-          <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
-          <p className="auto-setup-note">{hasToken ? t.connect.autoNote : t.connect.tokenGate}</p>
+          <div className="auto-setup-modes" role="tablist" aria-label={t.connect.modesLabel}>
+            {([["inline", t.connect.modeInline], ["file", t.connect.modeFile]] as const).map(([mode, label]) => (
+              <button
+                key={mode}
+                type="button"
+                role="tab"
+                aria-selected={promptMode === mode}
+                className={promptMode === mode ? "agent-tab active" : "agent-tab"}
+                onClick={() => setPromptMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {promptMode === "file" ? (
+            <>
+              <p className="auto-setup-copy">{t.connect.tokenFileIntro}</p>
+              <label className="token-path">
+                <span>{t.connect.tokenFilePathLabel}</span>
+                <input
+                  type="text"
+                  value={tokenFilePath}
+                  onChange={(event) => setTokenFilePath(event.target.value)}
+                  spellCheck={false}
+                  maxLength={200}
+                />
+              </label>
+              <p className="token-file-step">{t.connect.tokenFileStep1}</p>
+              <div className="code-block compact">
+                <code className="code-line">{writeTokenFileCommand}</code>
+                <button type="button" className="copy-chip" onClick={() => copy("token-file-write", writeTokenFileCommand)}>
+                  {copiedId === "token-file-write" ? t.common.copied : t.common.copy}
+                </button>
+              </div>
+              <p className="token-file-step">{t.connect.tokenFileStep2}</p>
+              <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
+              <p className="auto-setup-note">{t.connect.tokenFileNote}</p>
+            </>
+          ) : (
+            <>
+              <p className="auto-setup-copy">{t.connect.autoCopy}</p>
+              <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
+              <p className="auto-setup-note">{hasToken ? t.connect.autoNote : t.connect.tokenGate}</p>
+            </>
+          )}
         </div>
 
         <p className="connect-lane">{t.connect.manualLabel}</p>
@@ -425,26 +474,6 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         </div>
         </details>
         <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
-
-        <details className="token-file-lane">
-          <summary>{t.connect.tokenFileSummary}</summary>
-          <p className="connect-hint">{t.connect.tokenFileIntro}</p>
-          <p className="token-file-step">{t.connect.tokenFileStep1}</p>
-          <div className="code-block compact">
-            <code className="code-line">{writeTokenFileCommand}</code>
-            <button type="button" className="copy-chip" onClick={() => copy("token-file-write", writeTokenFileCommand)}>
-              {copiedId === "token-file-write" ? t.common.copied : t.common.copy}
-            </button>
-          </div>
-          <p className="token-file-step">{t.connect.tokenFileStep2}</p>
-          <div className="code-block compact">
-            <code className="code-line">{tokenFileSetupCommand}</code>
-            <button type="button" className="copy-chip" onClick={() => copy("token-file-setup", tokenFileSetupCommand)}>
-              {copiedId === "token-file-setup" ? t.common.copied : t.common.copy}
-            </button>
-          </div>
-          <p className="connect-hint">{t.connect.tokenFileNote}</p>
-        </details>
 
         <p className="connect-step">{t.connect.step3}</p>
         <div className="install-card">
