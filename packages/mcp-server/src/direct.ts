@@ -127,6 +127,23 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
 });
 
 /**
+ * Query a user's question/translation pairs, newest first. Kept apart from
+ * `WorkLearnContext` because listing these is a read-only endpoint concern, not
+ * one of the five MCP tools.
+ */
+export const searchQuestionTranslations = async (supabase: SupabaseClient, userId: string, query?: string) => {
+  const trimmed = query?.trim();
+  let statement = supabase
+    .from("question_translations")
+    .select(questionTranslationColumns)
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (trimmed) statement = statement.or(`question.ilike.%${trimmed}%,translation.ilike.%${trimmed}%`);
+  const result = await statement;
+  return ok(result) ?? [];
+};
+
+/**
  * Idempotently upsert a batch of locally-synced records for a user. Kept apart
  * from `WorkLearnContext` because it is not an MCP tool: the sync endpoint and
  * the CLI drive it directly. The local store keeps stable uuids, so re-syncing

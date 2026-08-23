@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, fetchMaterials, fetchReviews, LearningMaterial, ReviewItem } from "./lib/api";
+import { completeReview, fetchMaterials, fetchQuestionTranslations, fetchReviews, LearningMaterial, QuestionTranslation, ReviewItem } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -47,6 +47,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [topic, setTopic] = useState<string | null>(null);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [questions, setQuestions] = useState<QuestionTranslation[]>([]);
+  const [questionResults, setQuestionResults] = useState<QuestionTranslation[] | null>(null);
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
@@ -63,8 +65,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     if (!session) return;
     setLoadingMaterials(true);
     setLoadError("");
-    void Promise.all([fetchMaterials(session), fetchReviews(session)])
-      .then(([materialResult, reviewResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); })
+    void Promise.all([fetchMaterials(session), fetchReviews(session), fetchQuestionTranslations(session)])
+      .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
   }, [session, reloadKey]);
@@ -76,9 +78,11 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setSearching(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void fetchMaterials(session, trimmed)
-        .then((result) => { if (!cancelled) setResults(result.data); })
-        .catch(() => { if (!cancelled) setResults([]); })
+      void Promise.all([fetchMaterials(session, trimmed), fetchQuestionTranslations(session, trimmed)])
+        .then(([materialResult, questionResult]) => {
+          if (!cancelled) { setResults(materialResult.data); setQuestionResults(questionResult.data); }
+        })
+        .catch(() => { if (!cancelled) { setResults([]); setQuestionResults([]); } })
         .finally(() => { if (!cancelled) setSearching(false); });
     }, 220);
 
@@ -110,7 +114,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       : a.created_at.localeCompare(b.created_at));
   }, [results, materials, topic, sort]);
 
-  const empty = materials.length === 0;
+  const empty = materials.length === 0 && questions.length === 0;
 
   const handleAuth = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -139,6 +143,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setQuery("");
     setTopic(null);
     setReviews([]);
+    setQuestions([]);
+    setQuestionResults(null);
   };
 
   const handleCompleteReview = async (reviewId: string) => {
@@ -219,6 +225,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
               : <MaterialList materials={visible} />}
         </>}
       </section>
+      <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen />
         <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
@@ -533,6 +540,33 @@ function MaterialList({ materials }: { materials: LearningMaterial[] }) {
         </article>
       ))}
     </div>
+  );
+}
+
+function QuestionTranslationsSection({ questions, searching, loading }: { questions: QuestionTranslation[]; searching: boolean; loading: boolean }) {
+  const { t, formatDate } = useI18n();
+  if (loading && questions.length === 0) return null;
+  if (questions.length === 0) return null;
+  return (
+    <section className="qa-section">
+      <div className="section-heading">
+        <div><p className="eyebrow">{t.qa.eyebrow}</p><h2>{t.qa.heading}</h2></div>
+        <span className="qa-count">{questions.length}</span>
+      </div>
+      <div className="qa-list">
+        {questions.map((question) => (
+          <article className="qa-card" key={question.id}>
+            <p className="qa-question">{question.question}</p>
+            <p className="qa-translation-label">{t.qa.translation}</p>
+            <p className="qa-translation">{question.translation}</p>
+            <div className="qa-meta">
+              {question.topic && <span className="material-topic">{question.topic}</span>}
+              <span>{formatDate(question.created_at)}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

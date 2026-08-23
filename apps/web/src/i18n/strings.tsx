@@ -44,6 +44,14 @@ export const en = {
     noMatchTopic: "Nothing matches this topic yet.",
   },
 
+  qa: {
+    heading: "Questions & translations",
+    eyebrow: "Your questions, in your English",
+    empty: "No questions saved yet.",
+    translation: "Idiomatic English",
+    question: "Your question",
+  },
+
   time: {
     minutes: (value: number) => `${value}m ago`,
     hours: (value: number) => `${value}h ago`,
@@ -260,6 +268,14 @@ export const zh: Strings = {
     oldest: "最早",
     noMatchQuery: (query: string) => `没有匹配「${query}」的内容。`,
     noMatchTopic: "这个话题下还没有内容。",
+  },
+
+  qa: {
+    heading: "提问与翻译",
+    eyebrow: "你的问题，用你的英语表达",
+    empty: "还没有保存过提问。",
+    translation: "地道英文",
+    question: "你的提问",
   },
 
   time: {
