@@ -63,3 +63,5 @@ Claude Desktop 的本地配置示例：
 ```
 
 `WORK_LEARN_ACCESS_TOKEN` 只放在本机 Agent 配置中，不提交到 Git，也不使用 service role key 代替用户 token。
+如果不想让 token 出现在配置文件里，用 `WORK_LEARN_ACCESS_TOKEN_FILE` 指向一个存着它的文件，
+配置里就只留路径；两个都设时以文件为准。

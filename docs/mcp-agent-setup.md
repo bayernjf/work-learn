@@ -31,7 +31,9 @@ Authorization: Bearer <your-access-token>
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已在 Web 端创建一个 personal access token
 
-`WORK_LEARN_ACCESS_TOKEN` 只接受 personal access token。早期版本支持的
+`WORK_LEARN_ACCESS_TOKEN` 只接受 personal access token。也可以改用
+`WORK_LEARN_ACCESS_TOKEN_FILE` 指向一个存着 token 的文件，配置里就只留路径（见下文
+「不想让 token 出现在对话里」）。两个都设时以文件为准。早期版本支持的
 `WORK_LEARN_REFRESH_TOKEN` / `SUPABASE_URL` / `SUPABASE_ANON_KEY` 已移除：它们把账号级凭证写进
 agent 的配置文件，而 personal access token 本身就长期有效、可单独吊销。旧配置里如果还留着这三个
 变量，删掉即可；MCP 服务器启动时会顺手清理遗留的 `packages/mcp-server/.session-token.json`。
@@ -47,6 +49,22 @@ npx @work-learn/setup --repo /path/to/work-learn
 
 安装器会问你要 token，粘贴进去即可。不要用 `--token` 传:命令行参数会进 shell 历史文件，
 执行瞬间也能在 `ps` 里看到。`--token` 只留给 `-y` 非交互场景（CI 之类）。
+
+### 不想让 token 出现在对话里
+
+如果是让 agent 帮你装，粘贴 token 就等于把它说给 agent 听，而对话是会被记录的（发给模型
+提供方，也落在本地 transcript 里）。这种情况用 `--token-file`:
+
+```bash
+npx @work-learn/setup --repo /path/to/work-learn --token-file ~/.work-learn-token
+```
+
+你自己先把 token 写进那个文件（`~/.work-learn-token`），然后只把**路径**告诉 agent。
+配置文件里存的也是路径，MCP 服务器每次启动时才去读。路径不是秘密，所以整条链上没有任何环节
+接触到 token 本身。
+
+注意：让 agent 去 `cat` 这个文件同样是泄漏——工具返回的内容一样进对话。有用的只是"只给路径"
+这一层间接。建议 `chmod 600 ~/.work-learn-token`。
 
 向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。

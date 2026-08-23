@@ -5,10 +5,10 @@ import { createSessionInputSchema, saveMaterialInputSchema, sourceSchema } from 
 /**
  * A capability bound to a single authenticated user.
  *
- * The stdio entry implements this by calling the Hono API over HTTP (with token
- * auto-refresh); the remote HTTP entry implements it directly against Supabase
- * inside the Vercel function. Tool registration is shared so the two transports
- * never drift.
+ * The stdio entry implements this by calling the Hono API over HTTP with a
+ * personal access token; the remote HTTP entry implements it directly against
+ * Supabase inside the Vercel function. Tool registration is shared so the two
+ * transports never drift.
  */
 export interface WorkLearnContext {
   createSession(input: unknown): Promise<unknown>;
