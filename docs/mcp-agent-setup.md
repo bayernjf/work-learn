@@ -53,18 +53,28 @@ npx @work-learn/setup --repo /path/to/work-learn
 ### 不想让 token 出现在对话里
 
 如果是让 agent 帮你装，粘贴 token 就等于把它说给 agent 听，而对话是会被记录的（发给模型
-提供方，也落在本地 transcript 里）。这种情况用 `--token-file`:
+提供方，也落在本地 transcript 里）。这种情况用 `--token-file`。
+
+第一条自己在终端里跑。它是问你要 token，所以 token 也不会进 shell 历史；`umask 077`
+让文件在创建时就是 `0600`，不存在先可读再 `chmod` 的窗口：
+
+```bash
+umask 077 && printf 'Paste your token: ' && read -rs t && printf '%s' "$t" > ~/.work-learn-token && unset t && echo
+```
+
+（提示语单独 `printf`，不用 `read -p`——在 zsh 里 `-p` 表示"从协程读"，会直接报错。）
+
+第二条可以交给 agent，因为路径不是秘密：
 
 ```bash
 npx @work-learn/setup --repo /path/to/work-learn --token-file ~/.work-learn-token
 ```
 
-你自己先把 token 写进那个文件（`~/.work-learn-token`），然后只把**路径**告诉 agent。
-配置文件里存的也是路径，MCP 服务器每次启动时才去读。路径不是秘密，所以整条链上没有任何环节
-接触到 token 本身。
+配置文件里存的也是路径，MCP 服务器每次启动时才去读。所以整条链上没有任何环节接触到
+token 本身。
 
 注意：让 agent 去 `cat` 这个文件同样是泄漏——工具返回的内容一样进对话。有用的只是"只给路径"
-这一层间接。建议 `chmod 600 ~/.work-learn-token`。
+这一层间接。
 
 向导会自动探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode，把正确格式的 MCP
 配置写进各自的配置文件（写入前会自动备份），并可选安装 Work Learn Skill。

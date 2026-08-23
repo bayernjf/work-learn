@@ -224,7 +224,11 @@ async function gather(flags: CliFlags): Promise<Answers> {
  */
 function resolveTokenFile(path: string | undefined): string | undefined {
   if (!path) return undefined;
-  const resolved = isAbsolute(path) ? path : resolve(path);
+  // Expanded here because the flag is often copied out of a doc as ~/..., and an
+  // agent that spawns us without a shell passes the tilde through literally --
+  // which then reads as "the file is missing" while the user can see it is there.
+  const expanded = path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path;
+  const resolved = isAbsolute(expanded) ? expanded : resolve(expanded);
   if (!existsSync(resolved)) throw new Error(`--token-file ${resolved} does not exist`);
   if (!readFileSync(resolved, "utf8").trim()) throw new Error(`--token-file ${resolved} is empty`);
   return resolved;

@@ -327,6 +327,14 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   // No --token here on purpose: a token on the command line lands in the shell
   // history file and is briefly visible in `ps`. The installer prompts for it.
   const setupCommand = "npx -y @work-learn/setup";
+  // Same reasoning as above, which is why the token is read from a prompt rather
+  // than written into the command: `umask 077` makes the file 0600 at creation, so
+  // there is no window where it is world-readable. The prompt is printed separately
+  // because `read -p` means "read from a coprocess" in zsh, which is the default
+  // shell on macOS -- the bash spelling fails there rather than prompting.
+  const tokenFilePath = "~/.work-learn-token";
+  const writeTokenFileCommand = `umask 077 && printf 'Paste your token: ' && read -rs t && printf '%s' "$t" > ${tokenFilePath} && unset t && echo`;
+  const tokenFileSetupCommand = `npx -y @work-learn/setup --token-file ${tokenFilePath}`;
   const remoteMcpUrl = `${API_URL}/api/mcp`;
   const authHeader = `Authorization: Bearer ${token}`;
   const skillUrl = `${RAW_BASE}/skills/work-learn/SKILL.md`;
@@ -417,6 +425,26 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         </div>
         </details>
         <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
+
+        <details className="token-file-lane">
+          <summary>{t.connect.tokenFileSummary}</summary>
+          <p className="connect-hint">{t.connect.tokenFileIntro}</p>
+          <p className="token-file-step">{t.connect.tokenFileStep1}</p>
+          <div className="code-block compact">
+            <code className="code-line">{writeTokenFileCommand}</code>
+            <button type="button" className="copy-chip" onClick={() => copy("token-file-write", writeTokenFileCommand)}>
+              {copiedId === "token-file-write" ? t.common.copied : t.common.copy}
+            </button>
+          </div>
+          <p className="token-file-step">{t.connect.tokenFileStep2}</p>
+          <div className="code-block compact">
+            <code className="code-line">{tokenFileSetupCommand}</code>
+            <button type="button" className="copy-chip" onClick={() => copy("token-file-setup", tokenFileSetupCommand)}>
+              {copiedId === "token-file-setup" ? t.common.copied : t.common.copy}
+            </button>
+          </div>
+          <p className="connect-hint">{t.connect.tokenFileNote}</p>
+        </details>
 
         <p className="connect-step">{t.connect.step3}</p>
         <div className="install-card">
