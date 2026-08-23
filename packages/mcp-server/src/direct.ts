@@ -4,7 +4,8 @@ import {
   materialColumns,
   questionTranslationColumns,
   saveMaterialInputSchema,
-  saveQuestionTranslationInputSchema
+  saveQuestionTranslationInputSchema,
+  syncBatchInputSchema
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
 
@@ -124,3 +125,56 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string): W
     return ok(result);
   }
 });
+
+/**
+ * Idempotently upsert a batch of locally-synced records for a user. Kept apart
+ * from `WorkLearnContext` because it is not an MCP tool: the sync endpoint and
+ * the CLI drive it directly. The local store keeps stable uuids, so re-syncing
+ * the same batch must not duplicate rows.
+ */
+export const syncToCloud = async (supabase: SupabaseClient, userId: string, input: unknown) => {
+  const parsed = syncBatchInputSchema.parse(input);
+
+  const sessionRows = parsed.sessions.map((s) => ({
+    id: s.id,
+    user_id: userId,
+    source: s.source,
+    topic: s.topic ?? null,
+    created_at: s.createdAt
+  }));
+  const materialRows = parsed.materials.map((m) => ({
+    id: m.id,
+    user_id: userId,
+    session_id: m.sessionId,
+    source: m.source,
+    topic: m.topic,
+    original_text: m.originalText,
+    explanation: m.explanation,
+    useful_expressions: m.usefulExpressions,
+    corrections: m.corrections,
+    vocabulary: m.vocabulary,
+    practice_prompts: m.practicePrompts,
+    tags: m.tags,
+    created_at: m.createdAt
+  }));
+  const questionRows = parsed.questions.map((q) => ({
+    id: q.id,
+    user_id: userId,
+    session_id: q.sessionId,
+    source: q.source,
+    question: q.question,
+    translation: q.translation,
+    topic: q.topic ?? null,
+    created_at: q.createdAt
+  }));
+
+  if (sessionRows.length) await supabase.from("sessions").upsert(sessionRows, { onConflict: "id", ignoreDuplicates: true });
+  if (materialRows.length) await supabase.from("learning_materials").upsert(materialRows, { onConflict: "id", ignoreDuplicates: true });
+  if (questionRows.length) await supabase.from("question_translations").upsert(questionRows, { onConflict: "id", ignoreDuplicates: true });
+
+  return {
+    sessions: sessionRows.length,
+    materials: materialRows.length,
+    questions: questionRows.length
+  };
+};

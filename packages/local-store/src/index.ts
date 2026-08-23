@@ -47,6 +47,13 @@ type QuestionRow = {
   created_at: string;
 };
 
+type SessionRow = {
+  id: string;
+  source: string;
+  topic: string | null;
+  created_at: string;
+};
+
 export const DEFAULT_DB_PATH = join(homedir(), ".work-learn", "work-learn.db");
 export const DEFAULT_NOTES_DIR = join(homedir(), ".work-learn", "notes");
 
@@ -261,11 +268,11 @@ export class LocalStore {
 
   /** All local-only rows, ready to be pushed to the cloud. */
   unsynced() {
-    const sessions = this.db.prepare("SELECT * FROM sessions ORDER BY created_at").all();
+    const sessions = this.db.prepare("SELECT * FROM sessions ORDER BY created_at").all() as SessionRow[];
     const materials = this.db.prepare("SELECT * FROM learning_materials WHERE sync_status = 'local_only' ORDER BY created_at").all() as MaterialRow[];
     const questions = this.db.prepare("SELECT * FROM question_translations WHERE sync_status = 'local_only' ORDER BY created_at").all() as QuestionRow[];
     return {
-      sessions,
+      sessions: sessions.map(toSession),
       materials: materials.map(toMaterial),
       questions: questions.map(toQuestion)
     };
@@ -351,6 +358,15 @@ function toQuestion(row: QuestionRow): QuestionTranslation {
     question: row.question,
     translation: row.translation,
     topic: row.topic ?? undefined,
+    createdAt: row.created_at
+  };
+}
+
+function toSession(row: SessionRow) {
+  return {
+    id: row.id,
+    source: row.source,
+    topic: row.topic,
     createdAt: row.created_at
   };
 }

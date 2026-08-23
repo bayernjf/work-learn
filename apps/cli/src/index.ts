@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { redactSecrets } from "@work-learn/learning-core";
 import { LocalStore } from "@work-learn/local-store";
@@ -21,7 +24,7 @@ if (command === "capture") {
 } else if (command === "search") {
   await search(args);
 } else if (command === "sync") {
-  console.log("learn sync: ready for implementation (Phase 3)");
+  await sync(args);
 } else if (command === "export") {
   console.log("learn export: ready for implementation (Phase 4)");
 } else if (!command || !(command in commands)) {
@@ -97,4 +100,53 @@ async function readStdin() {
   const chunks: Buffer[] = [];
   for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks).toString("utf8");
+}
+
+function resolveToken(): string {
+  const filePath = process.env.WORK_LEARN_ACCESS_TOKEN_FILE?.trim();
+  if (filePath) {
+    const expanded = filePath === "~" || filePath.startsWith("~/") ? join(homedir(), filePath.slice(1)) : filePath;
+    if (!existsSync(expanded)) throw new Error(`WORK_LEARN_ACCESS_TOKEN_FILE points at ${expanded}, which does not exist`);
+    const contents = readFileSync(expanded, "utf8").trim();
+    if (!contents) throw new Error(`WORK_LEARN_ACCESS_TOKEN_FILE points at ${expanded}, which is empty`);
+    return contents;
+  }
+  const inline = process.env.WORK_LEARN_ACCESS_TOKEN?.trim();
+  if (inline) return inline;
+  throw new Error("Set WORK_LEARN_ACCESS_TOKEN (or WORK_LEARN_ACCESS_TOKEN_FILE) to sync to your account.");
+}
+
+async function sync(args: string[]) {
+  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
+  const token = resolveToken();
+
+  const store = openStore();
+  try {
+    const batch = store.unsynced();
+    const total = batch.materials.length + batch.questions.length + batch.sessions.length;
+    if (total === 0) {
+      console.log("Nothing to sync.");
+      return;
+    }
+
+    const response = await fetch(`${apiUrl}/api/sync`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(batch)
+    });
+    if (!response.ok) {
+      const body = (await response.json()) as { error?: string; details?: string };
+      throw new Error(body.details ?? body.error ?? `Sync failed with ${response.status}`);
+    }
+
+    store.markSynced({
+      materials: batch.materials.map((m) => m.id),
+      questions: batch.questions.map((q) => q.id)
+    });
+
+    const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number } };
+    console.log(JSON.stringify({ synced: result.data }, null, 2));
+  } finally {
+    store.close();
+  }
 }
