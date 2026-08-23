@@ -23,11 +23,21 @@ export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
   // Days, or 0 for no expiry. Defaults to 90 so the common case is a token that
   // stops working on its own; a leaked one then has a deadline.
   const [expiresInDays, setExpiresInDays] = useState(90);
+  // Default to full access so the common case is unchanged; "read only" is the
+  // downgrade for a search-only agent.
+  const [scopes, setScopes] = useState<string[]>(["read", "write"]);
   const [created, setCreated] = useState<CreatedPersonalAccessToken | null>(null);
   const [loading, setLoading] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
+
+  const scopeLabelFor = (scopes: string[]) =>
+    !scopes || scopes.length === 0
+      ? t.tokens.scopeFull
+      : scopes.includes("write")
+        ? t.tokens.scopeReadWrite
+        : t.tokens.scopeReadOnly;
 
   const copy = async (id: string, value: string) => {
     try {
@@ -75,7 +85,7 @@ export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
     setLoading(true);
     setError("");
     try {
-      const result = await createPersonalAccessToken(session, name.trim(), expiresInDays || undefined);
+      const result = await createPersonalAccessToken(session, name.trim(), expiresInDays || undefined, scopes);
       setCreated(result.data);
       setCopiedId(null);
       setSaved(false);
@@ -115,7 +125,8 @@ export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
                 <strong>{token.name}</strong>
                 <code>{token.token_prefix}…</code>
                 <span className="token-meta">
-                  {token.revoked_at ? t.tokens.revoked : t.tokens.lastUsed(formatDate(token.last_used_at))}
+                  {scopeLabelFor(token.scopes)}
+                  {token.revoked_at ? ` · ${t.tokens.revoked}` : ` · ${t.tokens.lastUsed(formatDate(token.last_used_at))}`}
                   {token.expires_at ? t.tokens.expires(formatDate(token.expires_at)) : ""}
                 </span>
               </div>
@@ -184,11 +195,20 @@ export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
           ))}
           <option value={0}>{t.tokens.expiryNever}</option>
         </select>
+        <select
+          aria-label={t.tokens.scopeLabel}
+          value={scopes.join(",")}
+          onChange={(event) => setScopes(event.target.value.split(","))}
+        >
+          <option value="read,write">{t.tokens.scopeReadWrite}</option>
+          <option value="read">{t.tokens.scopeReadOnly}</option>
+        </select>
         <button type="submit" disabled={loading || !name.trim()}>
           {loading ? t.tokens.creating : t.tokens.create}
         </button>
       </form>
       <p className="token-hint">{expiresInDays ? t.tokens.expiryHint : t.tokens.expiryNeverHint}</p>
+      <p className="token-hint">{t.tokens.scopeHint}</p>
       {error && <p className="token-error">{error}</p>}
     </div>
   );
