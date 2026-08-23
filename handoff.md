@@ -82,10 +82,13 @@ Agent 中调用 Skill
 
 - Skill 是主入口，不是附属插件；
 - MCP/API 是统一能力层；
-- 本地采集只做兼容性兜底；
+- 数据**本地优先**：本机（stdio MCP、CLI）默认写本地 SQLite，云端 Supabase 是「个人账号的同步副本」，由 `learn sync` 主动推送；线上路径（remote MCP、Web）保持云端直写；
+- 本地同时提供 markdown 镜像（`learn export`），SQLite 是唯一真相源；
 - 不为每个 Agent 建立独立的核心业务逻辑；
 - 英语学习是第一场景，底层可扩展为个人 AI 工作资产沉淀系统；
 - 默认主动触发，不默认全量监听和上传。
+
+存储方案详见 [docs/local-first-storage.md](docs/local-first-storage.md)。
 
 ## 部署结论
 
@@ -95,7 +98,7 @@ Agent 中调用 Skill
 
 ## 已经由实现回答的问题
 
-- 数据默认云端（Supabase）存储，本地采集只做脱敏和兼容兜底，不做本地优先存储；
+- 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 手动推送，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
 - 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法；
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。

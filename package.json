@@ -14,5 +14,8 @@
   "devDependencies": {
     "typescript": "^5.7.2",
     "wrangler": "4.86.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["better-sqlite3"]
   }
 }

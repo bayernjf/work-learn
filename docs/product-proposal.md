@@ -41,8 +41,9 @@ Claude / ChatGPT / Hermes / OpenClaw / 其他 Agent
 - API：Hono + TypeScript，部署到 Vercel Functions；
 - 前端：React + TypeScript，构建为静态资源，部署到 Cloudflare Pages；
 - 数据层：Supabase 一整套，统一承担 Auth、Postgres、Row Level Security 和后续 Storage；
+- 数据策略：**本地优先**——stdio MCP 与 CLI 默认写本地 SQLite（离线可用、无需 token），云端 Supabase 是同步副本，由 `learn sync` 主动推送；remote MCP 与 Web 保持云端直写（见 [本地优先存储方案](local-first-storage.md)）；
 - Skill/MCP：通过 Hono API 访问统一的 Work Learn 能力，不直接耦合数据库；
-- CLI 与桌面端：后续接入同一套 API，必要时使用本地 SQLite 做离线队列；
+- CLI 与桌面端：本地优先读写，同步时经 `/api/sync` 幂等推送；
 - 部署原则：前端和 API 分离部署，数据权限集中在 Supabase RLS。
 
 首版不引入 Cloudflare Workers API，也不再单独维护另一套数据库或认证系统。

@@ -88,6 +88,49 @@ export const saveQuestionTranslationInputSchema = questionTranslationSchema
 export const questionTranslationColumns =
   "id,session_id,source,question,translation,topic,created_at";
 
+// A single session being synced from a local store. The id is preserved so the
+// cloud insert stays idempotent.
+export const syncSessionSchema = z.object({
+  id: z.string().min(1),
+  source: sourceSchema,
+  topic: z.string().trim().max(160).nullable(),
+  createdAt: z.string().datetime()
+});
+
+// A learning material as synced from a local store, id included for idempotency.
+export const syncMaterialSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  source: sourceSchema,
+  topic: z.string().min(1),
+  originalText: z.string().min(1),
+  explanation: z.string().default(""),
+  usefulExpressions: z.array(z.string()),
+  corrections: z.array(z.string()),
+  vocabulary: z.array(z.string()),
+  practicePrompts: z.array(z.string()),
+  tags: z.array(z.string()),
+  createdAt: z.string().datetime()
+});
+
+// A question/translation pair as synced from a local store, id included.
+export const syncQuestionTranslationSchema = z.object({
+  id: z.string().min(1),
+  sessionId: z.string().min(1),
+  source: sourceSchema,
+  question: z.string().min(1),
+  translation: z.string().min(1),
+  topic: z.string().trim().max(200).nullable(),
+  createdAt: z.string().datetime()
+});
+
+// The payload for POST /api/sync: a batch of local-only records pushed to the cloud.
+export const syncBatchInputSchema = z.object({
+  sessions: z.array(syncSessionSchema),
+  materials: z.array(syncMaterialSchema),
+  questions: z.array(syncQuestionTranslationSchema)
+});
+
 // The columns the API returns for a material. Explicit rather than "*", because
 // the table also carries search_text -- a denormalised copy of every searchable
 // field, kept for the trigram index. Selecting "*" would double every payload.
@@ -102,3 +145,4 @@ export type LearningMaterial = z.infer<typeof learningMaterialSchema>;
 export type SaveMaterialInput = z.infer<typeof saveMaterialInputSchema>;
 export type QuestionTranslation = z.infer<typeof questionTranslationSchema>;
 export type SaveQuestionTranslationInput = z.infer<typeof saveQuestionTranslationInputSchema>;
+export type SyncBatchInput = z.infer<typeof syncBatchInputSchema>;

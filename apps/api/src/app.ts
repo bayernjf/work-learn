@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
-import { createDirectContext } from "@work-learn/mcp-server/direct";
+import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema } from "@work-learn/shared-schema";
+import { createDirectContext, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -89,6 +89,20 @@ app.post("/question-translations", async (c) => {
     return c.json({ data: await ctx.saveQuestionTranslation(parsed.data) }, 201);
   } catch (error) {
     return c.json({ error: "Could not save question translation", details: detail(error) }, 500);
+  }
+});
+
+app.post("/sync", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = syncBatchInputSchema.safeParse(await c.req.json());
+  if (!parsed.success) return c.json({ error: "Invalid sync batch", issues: parsed.error.issues }, 400);
+
+  try {
+    return c.json({ data: await syncToCloud(createSupabaseServiceClient(), auth.userId, parsed.data) });
+  } catch (error) {
+    return c.json({ error: "Could not sync", details: detail(error) }, 500);
   }
 });
 

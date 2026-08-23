@@ -11,12 +11,12 @@ import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslat
  * transports never drift.
  */
 export interface WorkLearnContext {
-  createSession(input: unknown): Promise<unknown>;
-  saveMaterial(input: unknown): Promise<unknown>;
-  saveQuestionTranslation(input: unknown): Promise<unknown>;
-  searchCorpus(query?: string): Promise<unknown>;
-  getReviewItems(): Promise<unknown>;
-  markMastered(reviewId: string): Promise<unknown>;
+  createSession(input: unknown): Promise<unknown> | unknown;
+  saveMaterial(input: unknown): Promise<unknown> | unknown;
+  saveQuestionTranslation(input: unknown): Promise<unknown> | unknown;
+  searchCorpus(query?: string): Promise<unknown> | unknown;
+  getReviewItems(): Promise<unknown> | unknown;
+  markMastered(reviewId: string): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
