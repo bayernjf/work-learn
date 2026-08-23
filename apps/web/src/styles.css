@@ -930,6 +930,9 @@ code {
 .created-row { padding: 9px 11px; }
 .token-raw {
   display: block;
+  /* Shrinkable so the copy button keeps its place instead of being pushed out. */
+  flex: 1;
+  min-width: 0;
   overflow-x: auto;
   padding: 0;
   background: transparent;

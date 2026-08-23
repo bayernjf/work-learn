@@ -24,7 +24,18 @@ export function TokenManager({ session, onTokenSelect }: Props) {
   const [expiresInDays, setExpiresInDays] = useState(90);
   const [created, setCreated] = useState<CreatedPersonalAccessToken | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [error, setError] = useState("");
+
+  const copyCreated = async (token: string) => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    } catch {
+      // The token is on screen either way, so a failed copy is not worth an error.
+    }
+  };
 
   const load = async () => {
     try {
@@ -47,6 +58,7 @@ export function TokenManager({ session, onTokenSelect }: Props) {
     try {
       const result = await createPersonalAccessToken(session, name.trim(), expiresInDays || undefined);
       setCreated(result.data);
+      setCopied(false);
       setName("");
       onTokenSelect(result.data.token);
       await load();
@@ -104,6 +116,9 @@ export function TokenManager({ session, onTokenSelect }: Props) {
           </p>
           <div className="token-row created-row">
             <code className="token-raw">{created.token}</code>
+            <button type="button" className="copy-chip" onClick={() => void copyCreated(created.token)}>
+              {copied ? t.common.copied : t.common.copy}
+            </button>
           </div>
         </div>
       )}
