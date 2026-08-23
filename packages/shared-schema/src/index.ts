@@ -6,6 +6,25 @@ export { knownAgents };
 export { redactSecrets } from "./redaction.js";
 export type { RedactionResult } from "./redaction.js";
 
+// Personal access token scopes. `read` covers searching and listing the user's
+// corpus; `write` covers saving material, syncing, and completing reviews.
+// `write` implies `read`, so a write token can do everything a read token can.
+export const PAT_SCOPES = ["read", "write"] as const;
+export type PatScope = (typeof PAT_SCOPES)[number];
+
+/**
+ * Whether a token's scope list covers an operation.
+ *
+ * An empty or missing list means the token predates scoping and keeps full
+ * access; this is what the 011 migration leaves every existing token with.
+ * `write` covers `read` too, so a write token can do everything a read token can.
+ */
+export const hasScope = (scopes: string[] | undefined, scope: PatScope): boolean => {
+  if (!scopes || scopes.length === 0) return true;
+  if (scopes.includes(scope)) return true;
+  return scope === "read" && scopes.includes("write");
+};
+
 // Source is an open label, not a closed enum, so new agents work without a
 // schema change or redeploy. Use `knownAgents` for the curated list in UIs/CLI.
 export const sourceSchema = z.string().trim().min(1).max(50);

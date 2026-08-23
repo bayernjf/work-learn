@@ -61,5 +61,5 @@ mcpRoute.all("/", async (c) => {
 
   const supabase = createSupabaseServiceClient();
   const userId = auth.userId;
-  return handleMcpHttpRequest(c.req.raw, () => createDirectContext(supabase, userId));
+  return handleMcpHttpRequest(c.req.raw, () => createDirectContext(supabase, userId, auth.scopes));
 });
