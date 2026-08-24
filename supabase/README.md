@@ -44,6 +44,6 @@ The migrations create sessions, conversation events, learning materials, review
 items, personal access tokens, the OAuth client/grant tables, a trigram-indexed
 search function, indexes and per-user RLS policies.
 
-Remote MCP OAuth also needs `OAUTH_JWT_SECRET`, `WORK_LEARN_PUBLIC_API_URL` and
-`WORK_LEARN_WEB_URL` in the API environment. Without them the OAuth routes fail;
-personal access tokens keep working.
+Remote MCP OAuth also needs `WORK_LEARN_PUBLIC_API_URL` and `WORK_LEARN_WEB_URL`
+in the API environment. Without them the OAuth routes fail; personal access
+tokens keep working.

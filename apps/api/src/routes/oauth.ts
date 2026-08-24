@@ -31,7 +31,6 @@ oauthRoute.get("/.well-known/oauth-authorization-server", (c) =>
     authorization_endpoint: `${apiBase(c.req.url)}/api/oauth/authorize`,
     token_endpoint: `${apiBase(c.req.url)}/api/oauth/token`,
     registration_endpoint: `${apiBase(c.req.url)}/api/oauth/register`,
-    jwks_uri: `${apiBase(c.req.url)}/api/oauth/jwks`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
@@ -40,8 +39,6 @@ oauthRoute.get("/.well-known/oauth-authorization-server", (c) =>
     require_pushed_authorization_requests: false
   })
 );
-
-oauthRoute.get("/jwks", (c) => c.json({ keys: [] }));
 
 /** Dynamic Client Registration (RFC 7591) */
 oauthRoute.post("/register", async (c) => {

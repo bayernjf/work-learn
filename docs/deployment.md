@@ -24,7 +24,6 @@
 - Remote MCP OAuth 还需要：
   - `WORK_LEARN_PUBLIC_API_URL`：生产 API origin，例如 `https://work-learn-api.vercel.app`
   - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn.pages.dev`
-  - `OAUTH_JWT_SECRET`：OAuth access token 的 HMAC 密钥，可用 `openssl rand -base64 48` 生成
 
 ## Web（Cloudflare Pages）
 

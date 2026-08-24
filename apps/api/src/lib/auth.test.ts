@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { authenticate, type AuthClients } from "./auth.js";
+import { OAUTH_ACCESS_PREFIX, randomToken } from "./oauth.js";
 import { generatePat, hashToken } from "./pat.js";
 
 const USER = "11111111-1111-1111-1111-111111111111";
@@ -16,27 +17,54 @@ type TokenRow = {
   scopes: string[];
 };
 
-/** A service client that answers personal_access_tokens lookups from memory. */
-function stubClients(rows: TokenRow[]): AuthClients {
+type OAuthRow = {
+  user_id: string;
+  client_id: string;
+  scope: string | null;
+  access_expires_at: string;
+  revoked_at: string | null;
+};
+
+/** A service client that answers token lookups from memory, both tables keyed by hash. */
+function stubClients(rows: TokenRow[], oauthRows: Record<string, OAuthRow> = {}): AuthClients {
   const tokens = new Map(rows.map((row) => [row.token_hash, row]));
   const service = {
     from(table: string) {
-      if (table !== "personal_access_tokens") throw new Error(`unexpected table ${table}`);
+      if (table !== "personal_access_tokens" && table !== "oauth_tokens") {
+        throw new Error(`unexpected table ${table}`);
+      }
       let tokenHash: string | undefined;
       const builder: Record<string, unknown> = {};
       builder.select = () => builder;
       builder.eq = (column: string, value: unknown) => {
-        if (column === "token_hash") tokenHash = value as string;
+        if (column === "token_hash" || column === "access_token_hash") tokenHash = value as string;
         return builder;
       };
-      builder.maybeSingle = () =>
-        Promise.resolve({ data: tokenHash ? tokens.get(tokenHash) ?? null : null, error: null });
+      builder.maybeSingle = () => {
+        const data = !tokenHash
+          ? null
+          : table === "oauth_tokens"
+            ? oauthRows[tokenHash] ?? null
+            : tokens.get(tokenHash) ?? null;
+        return Promise.resolve({ data, error: null });
+      };
       builder.update = () => ({ eq: () => Promise.resolve({ data: null, error: null }) });
       return builder;
     }
   };
   return { service: () => service as unknown as SupabaseClient };
 }
+
+const oauthToken = (): string => `${OAUTH_ACCESS_PREFIX}${randomToken(32)}`;
+const oauthHash = (token: string): string => createHash("sha256").update(token).digest("hex");
+const oauthRow = (overrides: Partial<OAuthRow> = {}): OAuthRow => ({
+  user_id: USER,
+  client_id: "client-1",
+  scope: "read",
+  access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+  revoked_at: null,
+  ...overrides
+});
 
 const validPat = generatePat();
 const tokenRow = (overrides: Partial<TokenRow> = {}): TokenRow => ({
@@ -92,29 +120,28 @@ test("a missing or malformed Authorization header is rejected", async () => {
 });
 
 test("a valid OAuth access token resolves to its user", async () => {
-  const secret = "auth-test-secret";
-  process.env.OAUTH_JWT_SECRET = secret;
-  const b64url = (value: string): string => Buffer.from(value).toString("base64url");
-  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = b64url(
-    JSON.stringify({ sub: USER, client_id: "client-1", scope: "read", exp: Math.floor(Date.now() / 1000) + 3600 })
-  );
-  const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
-  const result = await authenticate(`Bearer ${head}.${body}.${sig}`, stubClients([]));
+  const token = oauthToken();
+  const clients = stubClients([], { [oauthHash(token)]: oauthRow() });
+  const result = await authenticate(`Bearer ${token}`, clients);
   assert.deepEqual(result, { ok: true, userId: USER, scopes: ["read"] });
 });
 
 test("an OAuth token without a scope keeps full access", async () => {
-  const secret = "auth-test-secret";
-  process.env.OAUTH_JWT_SECRET = secret;
-  const b64url = (value: string): string => Buffer.from(value).toString("base64url");
-  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = b64url(
-    JSON.stringify({ sub: USER, client_id: "client-1", scope: "", exp: Math.floor(Date.now() / 1000) + 3600 })
-  );
-  const sig = createHmac("sha256", secret).update(`${head}.${body}`).digest("base64url");
-  const result = await authenticate(`Bearer ${head}.${body}.${sig}`, stubClients([]));
+  const token = oauthToken();
+  const clients = stubClients([], { [oauthHash(token)]: oauthRow({ scope: "" }) });
+  const result = await authenticate(`Bearer ${token}`, clients);
   assert.deepEqual(result, { ok: true, userId: USER, scopes: undefined });
+});
+
+test("an unknown OAuth token is rejected without falling through to Supabase", async () => {
+  const clients: AuthClients = {
+    ...stubClients([]),
+    user: () => {
+      throw new Error("a wloat_ token must not be handed to supabase.auth");
+    }
+  };
+  const result = await authenticate(`Bearer ${oauthToken()}`, clients);
+  assert.deepEqual(result, { ok: false, status: 401 });
 });
 
 test("a Supabase user JWT resolves via the user client", async () => {

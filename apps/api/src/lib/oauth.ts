@@ -1,8 +1,5 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-
-const b64url = (input: Buffer | string): string =>
-  Buffer.from(input).toString("base64url");
 
 const sha256Hex = (value: string): string =>
   createHash("sha256").update(value).digest("hex");
@@ -21,36 +18,46 @@ export type OAuthClient = {
   token_endpoint_auth_method: string;
 };
 
-const getSecret = (): string => {
-  const secret = process.env.OAUTH_JWT_SECRET;
-  if (!secret) throw new Error("OAUTH_JWT_SECRET is required");
-  return secret;
-};
+/**
+ * Marks an access token as ours so it can be told apart from a Supabase user
+ * JWT without a database probe.
+ */
+export const OAUTH_ACCESS_PREFIX = "wloat_";
 
-const sign = (payload: Record<string, unknown>): string => {
-  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = b64url(JSON.stringify(payload));
-  const sig = createHmac("sha256", getSecret()).update(`${head}.${body}`).digest("base64url");
-  return `${head}.${body}.${sig}`;
-};
-
-export const verifyOAuthToken = (
-  token: string
-): { sub: string; client_id: string; scope: string } | null => {
-  try {
-    const [head, body, sig] = token.split(".");
-    if (!head || !body || !sig) return null;
-    const expected = createHmac("sha256", getSecret()).update(`${head}.${body}`).digest("base64url");
-    if (!timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-    if (typeof payload.exp === "number" && payload.exp * 1000 < Date.now()) return null;
-    return { sub: String(payload.sub), client_id: String(payload.client_id), scope: String(payload.scope ?? "") };
-  } catch {
-    return null;
-  }
-};
+export const isOAuthAccessToken = (token: string): boolean => token.startsWith(OAUTH_ACCESS_PREFIX);
 
 export const randomToken = (bytes = 32): string => randomBytes(bytes).toString("base64url");
+
+/**
+ * Opaque, not a signed JWT.
+ *
+ * The row already exists -- every issued token is stored by hash so refresh
+ * rotation can revoke it -- so a lookup costs one query and buys real
+ * revocation: a JWT stays valid until `exp` no matter what the database says.
+ * It also removes the need to advertise a JWKS endpoint that can never hold a
+ * key, since an HMAC secret has no public half to publish.
+ */
+export const verifyOAuthToken = async (
+  token: string,
+  admin: SupabaseClient
+): Promise<{ sub: string; client_id: string; scope: string } | null> => {
+  if (!isOAuthAccessToken(token)) return null;
+
+  const { data } = await admin
+    .from("oauth_tokens")
+    .select("user_id,client_id,scope,access_expires_at,revoked_at")
+    .eq("access_token_hash", sha256Hex(token))
+    .maybeSingle();
+
+  if (!data || data.revoked_at) return null;
+  if (new Date(data.access_expires_at as string).getTime() < Date.now()) return null;
+
+  return {
+    sub: data.user_id as string,
+    client_id: data.client_id as string,
+    scope: (data.scope as string | null) ?? ""
+  };
+};
 
 const service = (): SupabaseClient => {
   const url = process.env.SUPABASE_URL;
@@ -145,13 +152,7 @@ export const exchangeAuthorizationCode = async (input: {
 
   const expiresIn = 3600;
   const refreshToken = randomToken(48);
-  const accessToken = sign({
-    sub: data.user_id as string,
-    client_id: input.clientId,
-    scope: (data.scope as string) ?? "",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + expiresIn
-  });
+  const accessToken = `${OAUTH_ACCESS_PREFIX}${randomToken(32)}`;
 
   await admin.from("oauth_tokens").insert({
     access_token_hash: sha256Hex(accessToken),
@@ -186,13 +187,7 @@ export const rotateRefreshToken = async (input: {
 
   const expiresIn = 3600;
   const refreshToken = randomToken(48);
-  const accessToken = sign({
-    sub: data.user_id as string,
-    client_id: input.clientId,
-    scope: (data.scope as string) ?? "",
-    iat: Math.floor(Date.now() / 1000),
-    exp: Math.floor(Date.now() / 1000) + expiresIn
-  });
+  const accessToken = `${OAUTH_ACCESS_PREFIX}${randomToken(32)}`;
 
   await admin.from("oauth_tokens").update({ revoked_at: new Date().toISOString() }).eq("access_token_hash", data.access_token_hash as string);
   await admin.from("oauth_tokens").insert({

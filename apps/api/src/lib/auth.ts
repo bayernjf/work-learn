@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseServiceClient, createSupabaseUserClient, getBearerToken } from "./supabase.js";
 import { hashToken, isPat } from "./pat.js";
-import { verifyOAuthToken } from "./oauth.js";
+import { verifyOAuthToken, isOAuthAccessToken } from "./oauth.js";
 
 export type AuthResult =
   | { ok: true; userId: string; scopes?: string[] }
@@ -21,7 +21,7 @@ export type AuthClients = {
  * Accepts either:
  *  - a Supabase user JWT (validated with getUser), or
  *  - a Work Learn personal access token (looked up by hash via the service role).
- *  - a Work Learn OAuth access token (signed HS256 JWT).
+ *  - a Work Learn OAuth access token (opaque, looked up by hash).
  */
 export const authenticate = async (
   authorization: string | undefined,
@@ -54,8 +54,9 @@ export const authenticate = async (
     return { ok: true, userId: data.user_id as string, scopes: scopes.length ? scopes : undefined };
   }
 
-  const oauthToken = verifyOAuthToken(token);
-  if (oauthToken) {
+  if (isOAuthAccessToken(token)) {
+    const oauthToken = await verifyOAuthToken(token, service());
+    if (!oauthToken) return { ok: false, status: 401 };
     // An OAuth token's scope is a space-separated list, e.g. "read write".
     // Clients that request no scope get an empty list, which hasScope() treats
     // as full access -- the same convention as legacy personal access tokens.
