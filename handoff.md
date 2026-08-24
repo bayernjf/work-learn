@@ -91,7 +91,6 @@ Agent 中调用 Skill
 - [ ] Codex（OpenAI）远程 MCP 走 OAuth
 - [ ] Cursor / VS Code 类客户端远程 MCP 走 OAuth
 - [ ] MCP Inspector（官方调试工具）连远程端点 + OAuth 流程
-- [ ] 手机/无本地进程场景：授权码流程端到端（这是做 OAuth 的初衷）
 - [ ] refresh token 过期 / 吊销后客户端行为（应静默重授权）
 
 ## Token 交付体验
