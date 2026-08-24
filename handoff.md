@@ -66,10 +66,10 @@ Agent 中调用 Skill
 - [x] 实现远程 MCP 第一版（`POST /api/mcp`，无状态 Streamable HTTP + Bearer token），复用 `registerTools`，普通用户通过 URL + access token 连接 Agent；已用 initialize/tools/list/create_session 端到端验证（`packages/mcp-server/src/{tools,direct,http}.ts`、`apps/api/src/routes/mcp.ts`）
   - [x] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
   - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation
-  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`
+  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`、`011_pat_scopes.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`
   - [x] OAuth 代码层面排查完成（见下方「OAuth 兼容性排查结论与实测清单」），并修复一处缺口：`authenticate` 现在会把 OAuth token 的 `scope` 解析后传下去（`scope=read` 的 OAuth token 同样禁止写操作），与 PAT scope 行为一致
   - [ ] 实测各 Agent 远程 MCP OAuth 兼容性（清单见下）
-  - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；需在目标环境执行该 migration
+  - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；migration 已在生产执行
 
 ### OAuth 兼容性排查结论与实测清单
 
