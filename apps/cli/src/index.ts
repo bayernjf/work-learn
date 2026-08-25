@@ -150,7 +150,8 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
     sessions: batch.sessions.map((row) => row.id),
     materials: batch.materials.map((row) => row.id),
     questions: batch.questions.map((row) => row.id),
-    reviews: batch.reviews.map((row) => row.id)
+    reviews: batch.reviews.map((row) => row.id),
+    tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
   });
 
   const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number } };
