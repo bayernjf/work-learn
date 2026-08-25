@@ -14,6 +14,7 @@ const commands = {
   review: "Show the next review items from the local store.",
   search: "Search the local corpus.",
   sync: "Pull cloud changes, push local changes, and sync review state.",
+  delete: "Delete a local material or question and record a tombstone.",
   export: "Export local data to markdown notes."
 } as const;
 
@@ -25,6 +26,8 @@ if (command === "capture") {
   await search(args);
 } else if (command === "sync") {
   await sync(args);
+} else if (command === "delete") {
+  await deleteItem(args);
 } else if (command === "export") {
   await exportNotes(args);
 } else if (!command || !(command in commands)) {
@@ -168,6 +171,22 @@ async function sync(args: string[]) {
     const pushed = await pushChanges(apiUrl, token, store);
     const pulledAfter = await pullChanges(apiUrl, token, store);
     console.log(JSON.stringify({ pulledBefore, ...pushed, pulledAfter }, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function deleteItem(args: string[]) {
+  const kind = option(args, "--type") ?? args[0];
+  const id = option(args, "--id") ?? (kind === "material" || kind === "question" ? args[1] : undefined);
+  if (kind !== "material" && kind !== "question") {
+    throw new Error("Usage: learn delete <material|question> --id <id>");
+  }
+  if (!id) throw new Error(`Provide the ${kind} id to delete with --id`);
+  const store = openStore();
+  try {
+    const result = kind === "material" ? store.deleteMaterial(id) : store.deleteQuestion(id);
+    console.log(JSON.stringify({ deleted: true, kind, ...result }, null, 2));
   } finally {
     store.close();
   }
