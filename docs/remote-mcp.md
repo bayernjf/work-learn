@@ -69,12 +69,11 @@ Remote MCP 支持三种 Bearer token：
   - `GET /api/oauth/authorize`
   - `POST /api/oauth/decision`
   - `POST /api/oauth/token`
-  - `GET /api/oauth/jwks`
 - Agent 连接 `https://work-learn-api.vercel.app/api/mcp` 后动态注册 client，浏览器跳到 Work Learn consent 页；用户登录并批准后回调 agent。
 - authorization code 必须携带 PKCE S256 `code_verifier`；access token 1 小时过期，refresh token 30 天过期并在刷新时轮转。
-- OAuth token 使用 HMAC HS256 签名，`OAUTH_JWT_SECRET` 只存在服务端。JWKS endpoint 返回空 key 集合，因为对称密钥不能公开。
+- access token 是 opaque 随机串（`wloat_` 前缀），只以 SHA-256 哈希存进 `oauth_tokens`，校验走一次数据库查询——和 PAT 同一条路径。因此没有 JWKS endpoint：没有 JWT 需要客户端本地验签，吊销也能立即生效。
 
-上线前必须执行 `supabase/migrations/007_oauth.sql`，并在 Vercel 配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`。
+上线前必须执行 `supabase/migrations/007_oauth.sql`，并在 Vercel 配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`。
 
 ## 6. 代码组织
 

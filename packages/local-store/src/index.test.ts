@@ -89,7 +89,9 @@ test("exportMarkdown writes an overwritable day file", () => {
       translation: "How to optimize?"
     });
     const notesDir = join(dir, "notes");
-    const date = "2026-08-23";
+    // Rows are stamped with a UTC ISO timestamp, and exportMarkdown filters on
+    // that prefix -- so the date has to be derived, not hardcoded.
+    const date = new Date().toISOString().slice(0, 10);
     const path = store.exportMarkdown(date, notesDir);
     const content = readFileSync(path, "utf8");
     assert.match(content, /怎么优化？/);

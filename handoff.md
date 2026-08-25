@@ -66,10 +66,10 @@ Agent 中调用 Skill
 - [x] 实现远程 MCP 第一版（`POST /api/mcp`，无状态 Streamable HTTP + Bearer token），复用 `registerTools`，普通用户通过 URL + access token 连接 Agent；已用 initialize/tools/list/create_session 端到端验证（`packages/mcp-server/src/{tools,direct,http}.ts`、`apps/api/src/routes/mcp.ts`）
   - [x] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
   - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation
-  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`、`OAUTH_JWT_SECRET`
+  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`、`011_pat_scopes.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`（`OAUTH_JWT_SECRET` 已不再使用，可从 Vercel 删掉）
   - [x] OAuth 代码层面排查完成（见下方「OAuth 兼容性排查结论与实测清单」），并修复一处缺口：`authenticate` 现在会把 OAuth token 的 `scope` 解析后传下去（`scope=read` 的 OAuth token 同样禁止写操作），与 PAT scope 行为一致
   - [ ] 实测各 Agent 远程 MCP OAuth 兼容性（清单见下）
-  - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；需在目标环境执行该 migration
+  - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；migration 已在生产执行
 
 ### OAuth 兼容性排查结论与实测清单
 
@@ -82,7 +82,7 @@ Agent 中调用 Skill
 - refresh token 轮换并吊销旧 token。
 
 **已知风险点（需实测或决策）**
-1. `/jwks` 返回空 `keys: []`（我们发 HS256 JWT）。真实客户端（Claude/Codex/Cursor 等）只把 access token 当 opaque Bearer 透传，不受影响；但 **MCP 官方一致性测试套件**会拉 JWKS 本地验 JWT，空 keys 会失败。若要与这些套件兼容，需改为发 opaque token（推荐）或补 JWKS。
+1. ~~`/jwks` 返回空 `keys: []`~~ 已解决：access token 改为 opaque 随机串（`wloat_` 前缀，SHA-256 哈希存 `oauth_tokens`），`/jwks` 与元数据里的 `jwks_uri` 一并删除。副作用：旧的 HS256 token 全部失效，客户端需重新授权（目前没有真实客户端跑通过流程，无影响）。
 2. `/authorize` 参数缺失时返回 JSON 400，而非按规范带 `error` 参数重定向回 `redirect_uri`。多数客户端不会触发，但一致性套件可能要求重定向。
 3. `/token` 的 `redirect_uri` 客户端不传就不校验（传了才比对），属轻微偏差，可接受。
 
@@ -91,7 +91,6 @@ Agent 中调用 Skill
 - [ ] Codex（OpenAI）远程 MCP 走 OAuth
 - [ ] Cursor / VS Code 类客户端远程 MCP 走 OAuth
 - [ ] MCP Inspector（官方调试工具）连远程端点 + OAuth 流程
-- [ ] 手机/无本地进程场景：授权码流程端到端（这是做 OAuth 的初衷）
 - [ ] refresh token 过期 / 吊销后客户端行为（应静默重授权）
 
 ## Token 交付体验

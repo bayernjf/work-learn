@@ -28,6 +28,25 @@ Three trigger modes, all at the user's discretion:
 2. **Session mode (auto)** — when the user says "from now on, save every question I ask", switch into auto mode: for each subsequent user question, produce the idiomatic English translation and call `save_question_translation` once, without asking again. Keep the same `sessionId`.
 3. **Interrupt** — when the user says "stop", "enough", or otherwise asks to end auto mode, turn it off and go back to only saving on explicit request.
 
+### Whether to show the translation
+
+Independent of the three modes above. Auto mode fires on every turn of a
+conversation the user is having for other reasons, so how much it prints is the
+difference between a useful aside and a wrecked working session.
+
+- **Default: show it**, as one line and nothing else — the English rendering on
+  its own, no label, no original, no explanation, no "saved!" confirmation.
+- **Silent on request** — when the user says "don't show it", "quietly", "静默"
+  or similar, keep saving but print nothing at all about it. Say once that it is
+  off, then stay quiet. Re-enable when they ask to see it again.
+- Mention the silent option the first time auto mode is switched on, once. Never
+  bring it up again.
+
+The client still renders a tool-call card for each save, which you cannot
+suppress. Silent mode means you add nothing on top of it — it does not mean the
+save becomes invisible. In single-save mode the full proposed content is shown
+for confirmation regardless of this setting.
+
 Rules for every save:
 
 - Keep `question` verbatim — the user's exact wording, in whatever language they used. Do not clean it up or paraphrase it.

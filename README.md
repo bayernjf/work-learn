@@ -27,6 +27,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 ### 技术设计
 
 - [v0.1 技术架构](docs/technical-architecture-v0.1.md)：Vercel API、Cloudflare 静态前端、Supabase 数据层和 monorepo 边界。
+- [本地优先存储方案](docs/local-first-storage.md)：本地 SQLite、同步状态和 `learn sync` 的边界。
 - [CLI 与 MCP 接入](docs/cli-and-mcp.md)：本地采集、脱敏和 Agent 配置方式。
 - [MCP Agent 接入](docs/mcp-agent-setup.md)：Claude Desktop、Codex 等 Agent 的具体接入配置。
 - [远程 MCP 方案](docs/remote-mcp.md)：普通用户通过 URL 连接 Agent 的远程 MCP 设计。
@@ -42,21 +43,21 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 已经可用的部分：
 
-- 五个 MCP 工具：`create_session`、`save_material`、`search_corpus`、`get_review_items`、`mark_mastered`；
+- 六个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`；
+- 本地优先：CLI 与 stdio MCP 默认读写本地 SQLite（`~/.work-learn/work-learn.db`），不需要 token 也不需要起 API；只有配置了 token 才转而调用线上 API；
 - 两种 MCP 形态共用同一套工具实现：本地 stdio（`packages/mcp-server`）与远程 HTTP（`POST /api/mcp`，无状态 Streamable HTTP）；
-- 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销，可设只读 / 可读可写 scope）、MCP OAuth 2.1（动态注册、PKCE、refresh token 轮换、Web consent 页）；
+- 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销，可设只读 / 可读可写 scope）、MCP OAuth 2.1（动态注册、PKCE、access token 为 opaque 随机串按哈希查库、refresh token 轮换、Web consent 页）；
 - `npx @work-learn/setup` 一键安装：探测 Codex / Claude Code / Claude Desktop / CodeBuddy / Cursor / OpenCode，写入前备份配置，可顺带安装 Skill；支持 `--token-file` 让 token 不出现在命令行和对话里；
 - Universal Learning Skill（`skills/work-learn/SKILL.md`）和 `scripts/install-skill.sh`；
 - Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
-- `learn capture` CLI 的 stdin / 剪贴板采集，本地先做凭证脱敏。
+- `learn` CLI 五个命令：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`、`search`、`sync`（推送本地未同步数据到云端）、`export`（按天导出 markdown）。
 
 下一步：
 
 - 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
-- 若需通过 MCP 官方一致性测试套件：把 OAuth access token 从 HS256 JWT 改为 opaque token（或补 JWKS）；
-- 部署前执行 `supabase/migrations/011_pat_scopes.sql`（PAT scope 功能依赖此 migration）。
+- `/authorize` 参数缺失时改为按规范带 `error` 重定向回 `redirect_uri`，而不是返回 JSON 400。
 
-测试：`pnpm test` 全绿（`apps/api`：PAT/OAuth/鉴权与 scope 解析 20 例；`packages/mcp-server`：工具与 scope 守卫 15 例；`packages/shared-schema` 11 例；`packages/setup` 5 例；`packages/local-store` 5 例）。
+测试：`pnpm test` 全绿（`apps/api`：PAT/OAuth/鉴权与 scope 解析 22 例；`packages/mcp-server`：工具与 scope 守卫 15 例；`packages/shared-schema` 11 例；`packages/setup` 5 例；`packages/local-store` 5 例）。
 
 ## 设计原则
 

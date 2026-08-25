@@ -1,50 +1,94 @@
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHash } from "node:crypto";
 import test from "node:test";
-import { randomToken, verifyOAuthToken } from "./oauth.js";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX } from "./oauth.js";
 
-// The library reads OAUTH_JWT_SECRET lazily, so setting it at the top lets us
-// craft (and then verify) HS256 tokens under the same secret as production.
-const SECRET = "test-only-secret";
-process.env.OAUTH_JWT_SECRET = SECRET;
+const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
-const b64url = (value: string): string => Buffer.from(value).toString("base64url");
+const newToken = (): string => `${OAUTH_ACCESS_PREFIX}${randomToken(32)}`;
+const hash = (token: string): string => createHash("sha256").update(token).digest("hex");
 
-const sign = (payload: Record<string, unknown>): string => {
-  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = b64url(JSON.stringify(payload));
-  const sig = createHmac("sha256", SECRET).update(`${head}.${body}`).digest("base64url");
-  return `${head}.${body}.${sig}`;
+type Row = {
+  user_id: string;
+  client_id: string;
+  scope: string | null;
+  access_expires_at: string;
+  revoked_at: string | null;
 };
 
-test("a validly signed token resolves to its claims", () => {
-  const token = sign({ sub: "user-1", client_id: "client-1", scope: "read", exp: Math.floor(Date.now() / 1000) + 3600 });
-  assert.deepEqual(verifyOAuthToken(token), { sub: "user-1", client_id: "client-1", scope: "read" });
+const row = (overrides: Partial<Row> = {}): Row => ({
+  user_id: USER,
+  client_id: "client-1",
+  scope: "read",
+  access_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+  revoked_at: null,
+  ...overrides
 });
 
-test("a tampered signature is rejected", () => {
-  const token = sign({ sub: "user-1", client_id: "client-1", exp: Math.floor(Date.now() / 1000) + 3600 });
-  const [head, body] = token.split(".");
-  assert.equal(verifyOAuthToken(`${head}.${body}.AAAA`), null);
+/** A service client that answers oauth_tokens lookups from memory, keyed by hash. */
+function stubAdmin(rows: Record<string, Row>): SupabaseClient {
+  return {
+    from(table: string) {
+      if (table !== "oauth_tokens") throw new Error(`unexpected table ${table}`);
+      let tokenHash: string | undefined;
+      const builder: Record<string, unknown> = {};
+      builder.select = () => builder;
+      builder.eq = (column: string, value: unknown) => {
+        if (column === "access_token_hash") tokenHash = value as string;
+        return builder;
+      };
+      builder.maybeSingle = () =>
+        Promise.resolve({ data: tokenHash ? rows[tokenHash] ?? null : null, error: null });
+      return builder;
+    }
+  } as unknown as SupabaseClient;
+}
+
+test("a stored token resolves to its user, client and scope", async () => {
+  const token = newToken();
+  const admin = stubAdmin({ [hash(token)]: row() });
+  assert.deepEqual(await verifyOAuthToken(token, admin), {
+    sub: USER,
+    client_id: "client-1",
+    scope: "read"
+  });
 });
 
-test("a token signed with a different secret is rejected", () => {
-  const head = b64url(JSON.stringify({ alg: "HS256", typ: "JWT" }));
-  const body = b64url(JSON.stringify({ sub: "user-1", client_id: "client-1" }));
-  const sig = createHmac("sha256", "wrong-secret").update(`${head}.${body}`).digest("base64url");
-  assert.equal(verifyOAuthToken(`${head}.${body}.${sig}`), null);
+test("a token with no scope resolves to an empty scope", async () => {
+  const token = newToken();
+  const admin = stubAdmin({ [hash(token)]: row({ scope: null }) });
+  const result = await verifyOAuthToken(token, admin);
+  assert.equal(result?.scope, "");
 });
 
-test("an expired token is rejected", () => {
-  const token = sign({ sub: "user-1", client_id: "client-1", exp: Math.floor(Date.now() / 1000) - 60 });
-  assert.equal(verifyOAuthToken(token), null);
+test("an unknown token is rejected", async () => {
+  const admin = stubAdmin({ [hash(newToken())]: row() });
+  assert.equal(await verifyOAuthToken(newToken(), admin), null);
 });
 
-test("malformed tokens are rejected without throwing", () => {
-  assert.equal(verifyOAuthToken(""), null);
-  assert.equal(verifyOAuthToken("one.two"), null);
-  assert.equal(verifyOAuthToken("a.b.c"), null);
-  assert.equal(verifyOAuthToken("x.y.zz"), null);
+test("a revoked token is rejected", async () => {
+  const token = newToken();
+  const admin = stubAdmin({ [hash(token)]: row({ revoked_at: new Date().toISOString() }) });
+  assert.equal(await verifyOAuthToken(token, admin), null);
+});
+
+test("an expired token is rejected", async () => {
+  const token = newToken();
+  const admin = stubAdmin({
+    [hash(token)]: row({ access_expires_at: new Date(Date.now() - 60_000).toISOString() })
+  });
+  assert.equal(await verifyOAuthToken(token, admin), null);
+});
+
+test("a token without our prefix never reaches the database", async () => {
+  const admin = {
+    from() {
+      throw new Error("the database should not be queried for a foreign token");
+    }
+  } as unknown as SupabaseClient;
+  assert.equal(await verifyOAuthToken("eyJhbGciOiJIUzI1NiJ9.e30.sig", admin), null);
+  assert.equal(isOAuthAccessToken("eyJhbGciOiJIUzI1NiJ9.e30.sig"), false);
 });
 
 test("randomToken is long and unique", () => {
