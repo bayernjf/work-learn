@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
-import { ScopeError, createDirectContext, fetchSyncSnapshot, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
+import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, fetchSyncSnapshot, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -97,6 +97,28 @@ app.post("/question-translations", async (c) => {
     return c.json({ data: await ctx.saveQuestionTranslation(parsed.data) }, 201);
   } catch (error) {
     return c.json(errorResponse("Could not save question translation", error));
+  }
+});
+
+app.delete("/materials/:id", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    requireScope(auth.scopes, "write");
+    return c.json({ data: await deleteCloudMaterial(createSupabaseServiceClient(), auth.userId, c.req.param("id")) });
+  } catch (error) {
+    return c.json(errorResponse("Could not delete learning material", error));
+  }
+});
+
+app.delete("/question-translations/:id", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+  try {
+    requireScope(auth.scopes, "write");
+    return c.json({ data: await deleteCloudQuestion(createSupabaseServiceClient(), auth.userId, c.req.param("id")) });
+  } catch (error) {
+    return c.json(errorResponse("Could not delete question translation", error));
   }
 });
 
