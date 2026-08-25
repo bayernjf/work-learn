@@ -51,7 +51,7 @@ Rules for every save:
 
 - Keep `question` verbatim — the user's exact wording, in whatever language they used. Do not clean it up or paraphrase it.
 - `translation` should be the idiomatic, natural English a fluent speaker would actually ask, not a literal word-for-word rendering.
-- Show what you are about to save and get confirmation before saving, **except** in session/auto mode where the user has already opted in — there you save directly.
+- Show the translation you are saving, then save it — in single-save mode as well as in session/auto mode. The user asking for the save is the go-ahead; showing it is so they can see the rendering, not so they can approve the call.
 - Never save secrets, tokens, passwords, or private paths; keep them out of what you propose, and redaction also applies on save.
 
 ## When the user asks to save something
@@ -59,16 +59,40 @@ Rules for every save:
 1. Read only the current conversation context.
 2. If no session exists for this conversation, call `create_session` with the current agent as `source` and a short `topic`.
 3. Pick a small number of high-value items: natural phrasing, corrections to the user's English, reusable collocations, or vocabulary worth remembering.
-4. Preserve the user's voice. Do not flatten their wording into generic textbook English.
-5. For corrections, show the original and a more natural alternative, and explain the difference briefly.
-6. Show the structured result and **ask for confirmation before saving**.
-7. After confirmation, call `save_material` once per item.
+4. If there is nothing worth keeping, say so and save nothing — see below.
+5. Preserve the user's voice. Do not flatten their wording into generic textbook English.
+6. For corrections, show the original and a more natural alternative, and explain the difference briefly.
+7. Show every item you extracted, then save it.
+8. Call `save_material` once per item.
+
+### When there is nothing worth saving
+
+A conversation held entirely in the user's own language, or one whose English is
+routine, has no material in it. "Save this conversation" is an instruction to
+save what is valuable, not an instruction to produce an entry no matter what.
+Padding the corpus with a weak item costs the user more than saving nothing: it
+comes back in the review queue and teaches them nothing.
+
+So when you find nothing:
+
+- Say plainly that this conversation has nothing worth keeping, and why.
+- Offer the alternative that does fit, if there is one — usually
+  `save_question_translation` for the user's own questions.
+- Do not call `save_material`. Do not lower the bar to fill the slot.
+
+### What the user is confirming
+
+Showing the item is not asking permission — the user already asked you to save.
+It is so they can see *what you extracted* before it lands in their corpus,
+because which phrase is worth keeping is a judgment call and an easy one to get
+wrong. Print the item, then save it; stop and wait only if they told you to
+propose first, or if you are unsure enough that saving the wrong thing is likely.
 
 ## Output format for one item
 
-Show every line you are about to save, so what the user confirms is exactly what
-is stored. Each label maps to one `save_material` field; drop a line only when it
-is genuinely empty.
+Show every line you save, so what the user sees is exactly what is stored. Each
+label maps to one `save_material` field; drop a line only when it is genuinely
+empty.
 
 ```
 Worth learning: <short phrase or collocation>    -> usefulExpressions
@@ -92,5 +116,5 @@ Never save a `Vocabulary` or `Tags` value the user has not seen.
 
 - Save less, but save well. One strong item beats ten weak ones.
 - Never save secrets, tokens, passwords, or private paths. The server redacts them on save, but do not rely on that — keep them out of what you propose.
-- The user decides what is kept. You propose, they confirm.
+- Refuse confidently. Nothing worth keeping is not a failure — it is a correct judgment.
 - Keep items tied to the real work — the goal is language the user will reuse tomorrow.
