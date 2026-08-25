@@ -107,6 +107,21 @@ export const saveQuestionTranslationInputSchema = questionTranslationSchema
 export const questionTranslationColumns =
   "id,session_id,source,question,translation,topic,created_at";
 
+export const generatePracticeInputSchema = z.object({
+  materialId: z.string().min(1).optional(),
+  limit: z.number().int().min(1).max(10).default(3)
+});
+
+export const getUserPatternsInputSchema = z.object({
+  days: z.number().int().min(1).max(365).default(30),
+  limit: z.number().int().min(1).max(20).default(8)
+});
+
+export type GeneratePracticeInput = z.input<typeof generatePracticeInputSchema>;
+export type GetUserPatternsInput = z.input<typeof getUserPatternsInputSchema>;
+export type PracticeMaterial = Pick<LearningMaterial, "id" | "source" | "topic" | "originalText" | "explanation" | "usefulExpressions" | "corrections" | "vocabulary" | "practicePrompts" | "tags" | "createdAt">;
+export type PracticeQuestion = Pick<QuestionTranslation, "id" | "source" | "question" | "translation" | "topic" | "createdAt">;
+
 // A single session being synced from a local store. The id is preserved so the
 // cloud insert stays idempotent.
 export const syncSessionSchema = z.object({
@@ -159,6 +174,91 @@ export const materialColumns =
 export type Source = z.infer<typeof sourceSchema>;
 export type Role = z.infer<typeof roleSchema>;
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
+
+const topItems = (items: Array<string | undefined>, limit: number) => {
+  const counts = new Map<string, number>();
+  for (const item of items) {
+    const value = item?.trim();
+    if (!value) continue;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, limit)
+    .map(([value, count]) => ({ value, count }));
+};
+
+export const generatePracticeFromMaterials = (materials: PracticeMaterial[], input: GeneratePracticeInput = {}) => {
+  const selected = input.materialId
+    ? materials.filter((material) => material.id === input.materialId).slice(0, 1)
+    : materials.slice(0, input.limit ?? 3);
+  const exercises = selected.flatMap((material) => {
+    const focus = material.usefulExpressions[0] ?? material.vocabulary[0] ?? material.corrections[0] ?? material.originalText;
+    const output: Array<{ type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }> = [
+      {
+        type: "reuse" as const,
+        materialId: material.id,
+        focus,
+        prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`
+      },
+      {
+        type: "recall" as const,
+        materialId: material.id,
+        focus,
+        prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`
+      }
+    ];
+    if (material.corrections[0]) {
+      output.push({
+        type: "correction" as const,
+        materialId: material.id,
+        focus,
+        prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`
+      });
+    }
+    if (material.practicePrompts[0]) {
+      output.push({
+        type: "apply" as const,
+        materialId: material.id,
+        focus,
+        prompt: material.practicePrompts[0]
+      });
+    }
+    return output;
+  });
+  return { generatedAt: new Date().toISOString(), materials: selected, exercises };
+};
+
+export const getUserPatternsFromItems = (materials: PracticeMaterial[], questions: PracticeQuestion[], input: GetUserPatternsInput = {}) => {
+  const since = new Date(Date.now() - (input.days ?? 30) * 86_400_000).toISOString();
+  const recentMaterials = materials.filter((material) => material.createdAt >= since);
+  const recentQuestions = questions.filter((question) => question.createdAt >= since);
+  const limit = input.limit ?? 8;
+  const suggestions: string[] = [];
+  if (recentMaterials.length >= 3) suggestions.push("Pick two high-frequency expressions and reuse them in today's work chat.");
+  if (recentQuestions.length >= 3) suggestions.push("Take one saved question and say it aloud in idiomatic English without looking.");
+  if (recentMaterials.some((material) => material.corrections.length > 0)) suggestions.push("Review the correction patterns before writing similar requests tomorrow.");
+  if (suggestions.length === 0) suggestions.push("Save a few more real work conversations to build useful patterns.");
+
+  return {
+    generatedAt: new Date().toISOString(),
+    windowDays: input.days ?? 30,
+    counts: {
+      materials: recentMaterials.length,
+      questionTranslations: recentQuestions.length,
+      usefulExpressions: recentMaterials.reduce((sum, material) => sum + material.usefulExpressions.length, 0),
+      corrections: recentMaterials.reduce((sum, material) => sum + material.corrections.length, 0)
+    },
+    topTags: topItems(recentMaterials.flatMap((material) => material.tags), limit),
+    topSources: topItems(recentMaterials.map((material) => material.source).concat(recentQuestions.map((question) => question.source)), limit),
+    recentTopics: recentMaterials.map((material) => material.topic).slice(0, limit),
+    usefulExpressions: topItems(recentMaterials.flatMap((material) => material.usefulExpressions), limit),
+    corrections: topItems(recentMaterials.flatMap((material) => material.corrections), limit),
+    vocabulary: topItems(recentMaterials.flatMap((material) => material.vocabulary), limit),
+    suggestions
+  };
+};
+
 export type SessionEvent = z.infer<typeof sessionEventSchema>;
 export type LearningMaterial = z.infer<typeof learningMaterialSchema>;
 export type SaveMaterialInput = z.infer<typeof saveMaterialInputSchema>;
