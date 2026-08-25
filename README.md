@@ -11,7 +11,7 @@ Work Learn 是一个跨 AI Agent 的个人英语语料学习系统。它把用�
 Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨 Agent 同步；CLI 负责终端会话和无 Skill 场景的兼容接入。本地 Companion 仍在设计中，尚未实现。
 
 ```text
-Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 -> Web 查看和复习
+Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保存 -> Web 查看和复习
 ```
 
 第一版的完成结果不是“生成更多笔记”，而是：用户能够在后续真实工作对话中复用学过的表达，并看到自己的重复错误逐步减少。
@@ -20,6 +20,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 ### 产品定义
 
+- [使用手册](docs/usage.md)：保存、搜索、复习、问题翻译、CLI 和隐私边界。
 - [产品方案](docs/product-proposal.md)：产品定位、用户流程、核心架构和平台策略。
 - [品牌标志](docs/brand.md)：`W` 路径标志的概念、颜色和使用规则。
 - [Logo 方案](docs/brand-concepts.md)：三个备用的 `W + L` 融合方向。
@@ -54,15 +55,14 @@ Agent 中调用 Skill -> 整理当前对话 -> 用户确认 -> MCP/API 保存 ->
 
 下一步：
 
-- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
-- `/authorize` 参数缺失时改为按规范带 `error` 重定向回 `redirect_uri`，而不是返回 JSON 400。
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）。
 
 测试：`pnpm test` 全绿（`apps/api`：PAT/OAuth/鉴权与 scope 解析 22 例；`packages/mcp-server`：工具与 scope 守卫 15 例；`packages/shared-schema` 11 例；`packages/setup` 5 例；`packages/local-store` 5 例）。
 
 ## 设计原则
 
 ```text
-主动触发 -> 最小权限 -> 本地优先 -> 默认脱敏 -> 保存前确认
+主动触发 -> 最小权限 -> 本地优先 -> 默认脱敏 -> 无料不存
 ```
 
 - Skill 是主入口，不是附属插件；

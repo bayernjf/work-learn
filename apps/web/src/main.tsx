@@ -13,6 +13,7 @@ import "./styles.css";
 
 const LANDING_URL = "https://work-learn.bayjf.com";
 const REPO_URL = "https://github.com/bayernjf/work-learn";
+const USAGE_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/usage.md";
 const DOCS_URL = "https://github.com/bayernjf/work-learn/blob/main/docs/mcp-agent-setup.md";
 
 // Stands in for the token until one exists, so the samples read as templates
@@ -250,6 +251,7 @@ function AppFooter() {
       <nav className="footer-links">
         <a href={LANDING_URL} target="_blank" rel="noopener noreferrer">{t.footer.landing}</a>
         <a href={REPO_URL} target="_blank" rel="noopener noreferrer">{t.footer.repo}</a>
+        <a href={USAGE_URL} target="_blank" rel="noopener noreferrer">{t.footer.usage}</a>
         <a href={DOCS_URL} target="_blank" rel="noopener noreferrer">{t.footer.docs}</a>
       </nav>
     </footer>
