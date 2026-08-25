@@ -798,6 +798,10 @@ code {
 }
 .route-tab {
   flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   padding: 8px 12px;
   border: 0;
   border-radius: var(--r-sm);
@@ -807,10 +811,28 @@ code {
   font-family: var(--font-sans);
   font-size: 12.5px;
   font-weight: 600;
-  transition: background .18s ease, color .18s ease;
+  transition: background .18s ease, color .18s ease, box-shadow .18s ease;
 }
 .route-tab:hover { color: var(--ink); }
 .route-tab.active { color: var(--ink); background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
+.route-tab.recommended { color: var(--accent); }
+.route-tab.recommended.active {
+  color: var(--accent);
+  background: var(--surface);
+  box-shadow: 0 1px 2px rgb(0 0 0 / .08), inset 0 0 0 1.5px var(--accent);
+}
+.route-badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-soft);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  font-weight: 650;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 .agent-connect-body .auto-setup-copy { margin: 12px 14px 0; color: var(--ink-2); font-size: 12.5px; }
 .auto-setup-modes { display: flex; gap: 4px; }
 .token-path { display: flex; align-items: center; gap: 10px; margin: 12px 14px 0; }

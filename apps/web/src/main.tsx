@@ -370,9 +370,9 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   // stack of numbered steps -- numbering alternatives reads as "do all of these".
   const [route, setRoute] = useState<"auto" | "remote" | "installer">("auto");
   const routes = [
-    ["auto", t.connect.routeAuto],
-    ["remote", t.connect.routeRemote],
-    ["installer", t.connect.routeInstaller],
+    ["auto", t.connect.routeAuto, true],
+    ["remote", t.connect.routeRemote, false],
+    ["installer", t.connect.routeInstaller, false],
   ] as const;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [open, setOpen] = useState(initialOpen);
@@ -401,16 +401,17 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
 
         <p className="connect-lane">{t.connect.laneRoute}</p>
         <div className="route-tabs" role="tablist" aria-label={t.connect.routesLabel}>
-          {routes.map(([id, label]) => (
+          {routes.map(([id, label, recommended]) => (
             <button
               key={id}
               type="button"
               role="tab"
               aria-selected={route === id}
-              className={route === id ? "route-tab active" : "route-tab"}
+              className={[route === id ? "route-tab active" : "route-tab", recommended ? "recommended" : ""].join(" ").trim()}
               onClick={() => setRoute(id)}
             >
               {label}
+              {recommended ? <span className="route-badge">{t.connect.routeRecommended}</span> : null}
             </button>
           ))}
         </div>
