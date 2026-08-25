@@ -8,7 +8,7 @@
 learn capture  # 采集 stdin 或剪贴板，脱敏后写入本地库
 learn review   # 查看本地待复习项
 learn search   # 搜索本地语料（--q 或直接跟关键词）
-learn sync     # 推送本地未同步数据到云端账号（需 WORK_LEARN_ACCESS_TOKEN）
+learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN）
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
 ```
 
@@ -30,13 +30,13 @@ API Key、Bearer Token、密码、私钥和常见云平台凭证会在本地先�
 
 ### sync
 
-把 `sync_status='local_only'` 的记录幂等推送到云端：
+执行双向同步：拉取云端增量，推送本地未同步记录，再拉取一次结果。复习完成状态也会同步：
 
 ```bash
 learn sync --api-url https://work-learn-api.vercel.app
 ```
 
-token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供。
+token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供。冲突策略为 last-write-wins：两端修改同一条记录时，`updated_at` 更新的一端胜出。
 
 ### export
 

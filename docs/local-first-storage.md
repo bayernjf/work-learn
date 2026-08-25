@@ -1,6 +1,6 @@
 # 本地优先存储方案
 
-> 状态：已实现（Phase 1-4 完成）
+> 状态：已实现（本地 ↔ 云端双向同步，last-write-wins）
 > 决策日期：2026-08-23
 
 ## 0. 目标与原则
@@ -23,9 +23,9 @@
 │   CLI         ┼─→ LocalStore (SQLite)            │
 │                │     ~/.work-learn/work-learn.db  │
 │                │     ├─ learn export → notes/*.md │
-│                │     └─ learn sync   → 云端        │
+│                │     └─ learn sync   ↔ 云端        │
 └────────────────┴──────────────┬──────────────────┘
-                                 │ POST /api/sync (PAT 鉴权，幂等)
+                                 │ GET/POST /api/sync (PAT 鉴权，增量 + LWW)
                                  ▼
                      Supabase（个人账号，同步副本）
 ┌─ 云端（在线，保持直写，视为已同步）───────────────┐
@@ -44,7 +44,8 @@
 
 - 路径：`~/.work-learn/work-learn.db`
 - 本地表：`sessions`、`learning_materials`、`question_translations`、`review_items`，schema 与云端一致（去掉 `user_id`，改用 `sync_status`）
-- 每张表加：
+- 每张业务表都有 `updated_at`，同步按它做增量游标和 last-write-wins
+- 本地待推送表加：
   - `sync_status`：`local_only` / `synced`
   - `synced_at timestamptz`（可空）
 - `question_translations` 额外加 `question_norm`（归一化列，用于精确去重，见 §7）
@@ -87,12 +88,12 @@
 | `learn capture` | 改为写入本地库（原只打印 JSON） |
 | `learn review` | 查本地 `review_items`（原占位） |
 | `learn search` | 查本地库（原占位） |
-| **`learn sync`** | 推送 `sync_status='local_only'` 到云端，成功后标记 `synced` |
+| **`learn sync`** | 先拉云端增量，再推送本地增量，最后再拉一次；复习状态一起同步 |
 | **`learn export`** | 本地库 → markdown（`--all` / `--from` / `--to` / `--source` / `--tag`） |
 
 ### 3.4 `apps/api`
 
-新增 `POST /api/sync`：批量幂等写入（PAT 鉴权，复用 `contextFor`），表用 `ON CONFLICT (id) DO NOTHING`。
+新增 `GET /api/sync?since=` 和 `POST /api/sync`：按 `updated_at` 增量拉取/推送，使用稳定 UUID 和 last-write-wins；复习状态也同步。
 
 ### 3.5 `shared-schema`
 
@@ -108,11 +109,13 @@
 
 ## 4. 同步设计（`learn sync`）
 
-- **方向**：单向「本地 → 云端」推送（符合「同步到个人账号」）
-- **幂等**：本地记录自带 `uuid`，云端 `ON CONFLICT DO NOTHING`，重复同步不产生重复
-- **增量**：只推 `sync_status='local_only'`，成功后置 `synced` + `synced_at`
-- **复习队列**：第一版**不同步**，本地独立维护
-- **同步范围**：sessions + learning_materials + question_translations（不含 review_items）
+- **方向**：双向。本地和云端都以稳定 UUID 作为实体身份。
+- **增量**：本地保存 `last_pulled_at`；`GET /api/sync?since=` 只取更新时间更新的行。
+- **冲突策略**：last-write-wins，比较 `updated_at`；时间戳相等时以写入端为准。当前不做字段级合并或 CRDT。
+- **顺序**：`learn sync` = pull → push → pull，降低并发期间漏拉的概率。
+- **复习队列**：同步 `review_items`，按 `material_id` 归并，因此一个设备完成复习后其他设备能看到。
+- **同步范围**：sessions + learning_materials + question_translations + review_items。
+- **删除**：当前版本还不做删除同步/tombstone；编辑和完成状态可以同步，删除暂不传播。
 
 ---
 
