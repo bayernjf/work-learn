@@ -366,6 +366,14 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   ];
 
   const [activeAgent, setActiveAgent] = useState<string>("universal");
+  // The three routes are mutually exclusive, so they get a tablist rather than a
+  // stack of numbered steps -- numbering alternatives reads as "do all of these".
+  const [route, setRoute] = useState<"auto" | "remote" | "installer">("auto");
+  const routes = [
+    ["auto", t.connect.routeAuto],
+    ["remote", t.connect.routeRemote],
+    ["installer", t.connect.routeInstaller],
+  ] as const;
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [open, setOpen] = useState(initialOpen);
   const active = skillInstalls.find((item) => item.id === activeAgent) ?? universalInstall;
@@ -386,103 +394,123 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
       <div className="agent-connect-body">
         <p>{t.connect.intro(LANDING_URL)}</p>
 
+        <p className="connect-lane">{t.connect.laneToken}</p>
         <p className="connect-step">{t.connect.tokenStep}</p>
         <p className="connect-hint">{t.connect.tokenHint}</p>
         <TokenManager session={session} onTokenSelect={setRemoteToken} tokenFilePath={tokenFilePath} />
 
-        <div className="auto-setup">
-          <div className="auto-setup-head">
-            <span className="auto-setup-label">{t.connect.autoLabel}</span>
-            <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
-              {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
+        <p className="connect-lane">{t.connect.laneRoute}</p>
+        <div className="route-tabs" role="tablist" aria-label={t.connect.routesLabel}>
+          {routes.map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={route === id}
+              className={route === id ? "route-tab active" : "route-tab"}
+              onClick={() => setRoute(id)}
+            >
+              {label}
             </button>
-          </div>
-          <div className="auto-setup-modes" role="tablist" aria-label={t.connect.modesLabel}>
-            {([["inline", t.connect.modeInline], ["file", t.connect.modeFile]] as const).map(([mode, label]) => (
-              <button
-                key={mode}
-                type="button"
-                role="tab"
-                aria-selected={promptMode === mode}
-                className={promptMode === mode ? "agent-tab active" : "agent-tab"}
-                onClick={() => setPromptMode(mode)}
-              >
-                {label}
+          ))}
+        </div>
+
+        {route === "auto" ? (
+          <div className="auto-setup">
+            <div className="auto-setup-head">
+              <div className="auto-setup-modes" role="tablist" aria-label={t.connect.modesLabel}>
+                {([["inline", t.connect.modeInline], ["file", t.connect.modeFile]] as const).map(([mode, label]) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    role="tab"
+                    aria-selected={promptMode === mode}
+                    className={promptMode === mode ? "agent-tab active" : "agent-tab"}
+                    onClick={() => setPromptMode(mode)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
+                {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
               </button>
-            ))}
+            </div>
+            {promptMode === "file" ? (
+              <>
+                <p className="auto-setup-copy">{t.connect.tokenFileIntro}</p>
+                <label className="token-path">
+                  <span>{t.connect.tokenFilePathLabel}</span>
+                  <input
+                    type="text"
+                    value={tokenFilePath}
+                    onChange={(event) => setTokenFilePath(event.target.value)}
+                    spellCheck={false}
+                    maxLength={200}
+                  />
+                </label>
+                <p className="token-file-step">{t.connect.tokenFileStep1}</p>
+                <div className="code-block compact">
+                  <code className="code-line">{writeTokenFileCommand}</code>
+                  <button type="button" className="copy-chip" onClick={() => copy("token-file-write", writeTokenFileCommand)}>
+                    {copiedId === "token-file-write" ? t.common.copied : t.common.copy}
+                  </button>
+                </div>
+                <p className="token-file-step">{t.connect.tokenFileStep2}</p>
+                <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
+                <p className="auto-setup-note">{t.connect.tokenFileNote}</p>
+              </>
+            ) : (
+              <>
+                <p className="auto-setup-copy">{t.connect.autoCopy}</p>
+                <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
+                <p className="auto-setup-note">{hasToken ? t.connect.autoNote : t.connect.tokenGate}</p>
+              </>
+            )}
           </div>
-          {promptMode === "file" ? (
-            <>
-              <p className="auto-setup-copy">{t.connect.tokenFileIntro}</p>
-              <label className="token-path">
-                <span>{t.connect.tokenFilePathLabel}</span>
-                <input
-                  type="text"
-                  value={tokenFilePath}
-                  onChange={(event) => setTokenFilePath(event.target.value)}
-                  spellCheck={false}
-                  maxLength={200}
-                />
-              </label>
-              <p className="token-file-step">{t.connect.tokenFileStep1}</p>
-              <div className="code-block compact">
-                <code className="code-line">{writeTokenFileCommand}</code>
-                <button type="button" className="copy-chip" onClick={() => copy("token-file-write", writeTokenFileCommand)}>
-                  {copiedId === "token-file-write" ? t.common.copied : t.common.copy}
+        ) : route === "remote" ? (
+          <>
+            <p className="connect-step">{t.connect.remoteStep}</p>
+            <p className="connect-hint">{t.connect.hint1}</p>
+            <div className="code-block compact">
+              <code className="code-line">{remoteMcpUrl}</code>
+              <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
+                {copiedId === "remote-url" ? t.common.copied : t.common.copyUrl}
+              </button>
+            </div>
+            <div className="code-block compact">
+              <code className="code-line">{authHeader}</code>
+              <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
+                {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
+              </button>
+            </div>
+            <p className="connect-hint">{t.connect.hint1b()}</p>
+          </>
+        ) : (
+          <>
+            <p className="connect-step">{t.connect.installerStep}</p>
+            <div className="code-block compact">
+              <code className="code-line">{setupCommand}</code>
+              <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
+                {copiedId === "setup" ? t.common.copied : t.common.copy}
+              </button>
+            </div>
+            <p className="connect-hint">{t.connect.hint2()}</p>
+            <details className="manual-config">
+              <summary>{t.connect.manualSummary}</summary>
+              <div className="code-block">
+                <pre className="code-pre">{mcpConfig}</pre>
+                <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
+                  {copiedId === "mcp" ? t.common.copied : t.common.copy}
                 </button>
               </div>
-              <p className="token-file-step">{t.connect.tokenFileStep2}</p>
-              <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
-              <p className="auto-setup-note">{t.connect.tokenFileNote}</p>
-            </>
-          ) : (
-            <>
-              <p className="auto-setup-copy">{t.connect.autoCopy}</p>
-              <pre className="code-pre auto-setup-prompt">{agentPrompt}</pre>
-              <p className="auto-setup-note">{hasToken ? t.connect.autoNote : t.connect.tokenGate}</p>
-            </>
-          )}
-        </div>
+            </details>
+            <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
+          </>
+        )}
 
-        <p className="connect-lane">{t.connect.manualLabel}</p>
-
-        <p className="connect-step">{t.connect.step1}</p>
-        <p className="connect-hint">{t.connect.hint1}</p>
-        <div className="code-block compact">
-          <code className="code-line">{remoteMcpUrl}</code>
-          <button type="button" className="copy-chip" onClick={() => copy("remote-url", remoteMcpUrl)}>
-            {copiedId === "remote-url" ? t.common.copied : t.common.copyUrl}
-          </button>
-        </div>
-        <div className="code-block compact">
-          <code className="code-line">{authHeader}</code>
-          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
-            {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
-          </button>
-        </div>
-        <p className="connect-hint">{t.connect.hint1b()}</p>
-
-        <p className="connect-step">{t.connect.step2}</p>
-        <div className="code-block compact">
-          <code className="code-line">{setupCommand}</code>
-          <button type="button" className="copy-chip" onClick={() => copy("setup", setupCommand)}>
-            {copiedId === "setup" ? t.common.copied : t.common.copy}
-          </button>
-        </div>
-        <p className="connect-hint">{t.connect.hint2()}</p>
-
-        <details className="manual-config">
-          <summary>{t.connect.manualSummary}</summary>
-        <div className="code-block">
-          <pre className="code-pre">{mcpConfig}</pre>
-          <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
-            {copiedId === "mcp" ? t.common.copied : t.common.copy}
-          </button>
-        </div>
-        </details>
-        <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
-
-        <p className="connect-step">{t.connect.step3}</p>
+        <p className="connect-lane">{t.connect.laneFinish}</p>
+        <p className="connect-step">{t.connect.skillStep}</p>
         <div className="install-card">
           <div className="agent-tabs" role="tablist" aria-label={t.connect.tabsLabel}>
             {skillInstalls.map((agent) => (
