@@ -111,3 +111,11 @@ export const revokePersonalAccessToken = async (session: Session, id: string) =>
   });
   if (!response.ok) throw new Error(activeStrings().errors.tokenRevoke);
 };
+
+export const deletePersonalAccessToken = async (session: Session, id: string) => {
+  const response = await fetch(`/api/tokens/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.tokenDelete);
+};

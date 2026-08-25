@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import {
   createPersonalAccessToken,
+  deletePersonalAccessToken,
   fetchPersonalAccessTokens,
   revokePersonalAccessToken,
   type CreatedPersonalAccessToken,
@@ -115,6 +116,16 @@ export function TokenManager({ session, onTokenSelect, onActiveTokens, tokenFile
     }
   };
 
+  const handleDelete = async (id: string) => {
+    setError("");
+    try {
+      await deletePersonalAccessToken(session, id);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.tokens.errDelete);
+    }
+  };
+
   return (
     <div className="token-manager">
       <div className="token-list">
@@ -132,7 +143,16 @@ export function TokenManager({ session, onTokenSelect, onActiveTokens, tokenFile
                   {token.expires_at ? t.tokens.expires(formatDate(token.expires_at)) : ""}
                 </span>
               </div>
-              {!token.revoked_at && (
+              {token.revoked_at ? (
+                <button
+                  type="button"
+                  className="token-revoke"
+                  title={t.tokens.removeTitle}
+                  onClick={() => handleDelete(token.id)}
+                >
+                  {t.tokens.remove}
+                </button>
+              ) : (
                 <button type="button" className="token-revoke" onClick={() => handleRevoke(token.id)}>
                   {t.tokens.revoke}
                 </button>

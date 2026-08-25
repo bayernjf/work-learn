@@ -67,6 +67,7 @@ export const en = {
     tokensLoad: "Could not load personal access tokens",
     tokenCreate: "Could not create personal access token",
     tokenRevoke: "Could not revoke personal access token",
+    tokenDelete: "Could not delete personal access token",
   },
 
   empty: {
@@ -181,6 +182,8 @@ The skill it installs is the same one published at ${skillUrl}.`,
     expires: (date: string) => ` · Expires ${date}`,
     never: "Never",
     revoke: "Revoke",
+    remove: "Remove",
+    removeTitle: "Remove from this list — it is already revoked and cannot be used",
     copyNow: "Copy this token now. It will not be shown again.",
     save: "Save to file",
     saved: "Saved",
@@ -206,6 +209,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     errLoad: "Could not load tokens",
     errCreate: "Could not create token",
     errRevoke: "Could not revoke token",
+    errDelete: "Could not delete token",
   },
 
   review: {
@@ -315,6 +319,7 @@ export const zh: Strings = {
     tokensLoad: "personal access token 列表加载失败",
     tokenCreate: "personal access token 创建失败",
     tokenRevoke: "personal access token 吊销失败",
+    tokenDelete: "personal access token 删除失败",
   },
 
   empty: {
@@ -429,6 +434,8 @@ export const zh: Strings = {
     expires: (date: string) => ` · ${date} 过期`,
     never: "从未",
     revoke: "吊销",
+    remove: "删除",
+    removeTitle: "从列表里删掉 —— 它已经吊销，不会再生效",
     copyNow: "现在就复制这个 token，它不会再显示第二次。",
     save: "保存到文件",
     saved: "已保存",
@@ -454,6 +461,7 @@ export const zh: Strings = {
     errLoad: "token 列表加载失败",
     errCreate: "token 创建失败",
     errRevoke: "token 吊销失败",
+    errDelete: "token 删除失败",
   },
 
   review: {
