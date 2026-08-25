@@ -11,6 +11,8 @@ import {
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
   syncBatchInputSchema,
+  syncReviewColumns,
+  syncTombstoneColumns,
   type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
@@ -205,7 +207,8 @@ const normalizeMaterial = (row: Record<string, unknown>) => ({
   vocabulary: toStringArray(row.vocabulary),
   practicePrompts: toStringArray(row.practice_prompts),
   tags: toStringArray(row.tags),
-  createdAt: String(row.created_at)
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
 });
 
 const normalizeQuestion = (row: Record<string, unknown>) => ({
@@ -215,7 +218,19 @@ const normalizeQuestion = (row: Record<string, unknown>) => ({
   question: String(row.question),
   translation: String(row.translation),
   topic: row.topic ? String(row.topic) : undefined,
-  createdAt: String(row.created_at)
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const normalizeReview = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  materialId: String(row.material_id),
+  status: String(row.status),
+  dueAt: String(row.due_at),
+  intervalDays: Number(row.interval_days),
+  completedAt: row.completed_at ? String(row.completed_at) : null,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
 });
 
 const toStringArray = (value: unknown): string[] => Array.isArray(value) ? value.map(String) : [];
@@ -243,19 +258,106 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
  * the CLI drive it directly. The local store keeps stable uuids, so re-syncing
  * the same batch must not duplicate rows.
  */
+export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string) => {
+  const trimmed = since?.trim();
+  let sessionsQuery = supabase.from("sessions").select("id,source,topic,created_at,updated_at").eq("user_id", userId);
+  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
+  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
+  let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
+  let tombstonesQuery = supabase.from("sync_tombstones").select(syncTombstoneColumns).eq("user_id", userId);
+  if (trimmed) {
+    sessionsQuery = sessionsQuery.gte("updated_at", trimmed);
+    materialsQuery = materialsQuery.gte("updated_at", trimmed);
+    questionsQuery = questionsQuery.gte("updated_at", trimmed);
+    reviewsQuery = reviewsQuery.gte("updated_at", trimmed);
+    tombstonesQuery = tombstonesQuery.gte("deleted_at", trimmed);
+  }
+  const [sessions, materials, questions, reviews, tombstones] = await Promise.all([
+    sessionsQuery.order("updated_at", { ascending: true }),
+    materialsQuery.order("updated_at", { ascending: true }),
+    questionsQuery.order("updated_at", { ascending: true }),
+    reviewsQuery.order("updated_at", { ascending: true }),
+    tombstonesQuery.order("deleted_at", { ascending: true })
+  ]);
+  return {
+    sessions: (ok(sessions) as Record<string, unknown>[]).map(normalizeSyncSession),
+    materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
+    questions: (ok(questions) as Record<string, unknown>[]).map(normalizeQuestion),
+    reviews: (ok(reviews) as Record<string, unknown>[]).map(normalizeReview),
+    tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
+      id: String(row.id),
+      entity: String(row.entity),
+      deletedAt: String(row.deleted_at)
+    })),
+    serverCursor: new Date().toISOString()
+  };
+};
+
+const normalizeSyncSession = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  source: String(row.source),
+  topic: row.topic ? String(row.topic) : null,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const upsertWithLww = async (
+  supabase: SupabaseClient,
+  userId: string,
+  table: "sessions" | "learning_materials" | "question_translations",
+  rows: Array<Record<string, unknown>>
+) => {
+  for (const row of rows) {
+    const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
+    if (!existing) {
+      const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+      if (insert.error) throw new Error(insert.error.message);
+    } else {
+      const updated = await supabase.from(table).update(row).eq("user_id", userId).eq("id", row.id).gte("updated_at", String(row.updated_at));
+      if (updated.error) throw new Error(updated.error.message);
+    }
+  }
+};
+
+const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, rows: Array<Record<string, unknown>>) => {
+  for (const row of rows) {
+    const { data: existing } = await supabase
+      .from("review_items")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("material_id", row.material_id)
+      .maybeSingle();
+    if (!existing) {
+      const insert = await supabase.from("review_items").insert({ user_id: userId, ...row });
+      if (insert.error) throw new Error(insert.error.message);
+    } else {
+      const updated = await supabase
+        .from("review_items")
+        .update(row)
+        .eq("user_id", userId)
+        .eq("material_id", row.material_id)
+        .gte("updated_at", String(row.updated_at));
+      if (updated.error) throw new Error(updated.error.message);
+    }
+  }
+};
+
+/**
+ * Push a local batch using stable UUIDs and last-write-wins by updated_at.
+ * Review state is included so completing an item on one device propagates.
+ */
 export const syncToCloud = async (supabase: SupabaseClient, userId: string, input: unknown) => {
   const parsed = syncBatchInputSchema.parse(input);
 
   const sessionRows = parsed.sessions.map((s) => ({
     id: s.id,
-    user_id: userId,
     source: s.source,
     topic: s.topic ?? null,
-    created_at: s.createdAt
+    created_at: s.createdAt,
+    updated_at: s.updatedAt
   }));
   const materialRows = parsed.materials.map((m) => ({
     id: m.id,
-    user_id: userId,
     session_id: m.sessionId,
     source: m.source,
     topic: m.topic,
@@ -266,26 +368,63 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     vocabulary: m.vocabulary,
     practice_prompts: m.practicePrompts,
     tags: m.tags,
-    created_at: m.createdAt
+    created_at: m.createdAt,
+    updated_at: m.updatedAt
   }));
   const questionRows = parsed.questions.map((q) => ({
     id: q.id,
-    user_id: userId,
     session_id: q.sessionId,
     source: q.source,
     question: q.question,
     translation: q.translation,
     topic: q.topic ?? null,
-    created_at: q.createdAt
+    created_at: q.createdAt,
+    updated_at: q.updatedAt
+  }));
+  const reviewRows = parsed.reviews.map((r) => ({
+    id: r.id,
+    material_id: r.materialId,
+    status: r.status,
+    due_at: r.dueAt,
+    interval_days: r.intervalDays,
+    completed_at: r.completedAt,
+    created_at: r.createdAt,
+    updated_at: r.updatedAt
   }));
 
-  if (sessionRows.length) await supabase.from("sessions").upsert(sessionRows, { onConflict: "id", ignoreDuplicates: true });
-  if (materialRows.length) await supabase.from("learning_materials").upsert(materialRows, { onConflict: "id", ignoreDuplicates: true });
-  if (questionRows.length) await supabase.from("question_translations").upsert(questionRows, { onConflict: "id", ignoreDuplicates: true });
+  await applyCloudTombstones(supabase, userId, parsed.tombstones);
+  await upsertWithLww(supabase, userId, "sessions", sessionRows);
+  await upsertWithLww(supabase, userId, "learning_materials", materialRows);
+  await upsertWithLww(supabase, userId, "question_translations", questionRows);
+  await upsertReviewsWithLww(supabase, userId, reviewRows);
 
   return {
     sessions: sessionRows.length,
     materials: materialRows.length,
-    questions: questionRows.length
+    questions: questionRows.length,
+    reviews: reviewRows.length,
+    tombstones: parsed.tombstones.length,
+    serverCursor: new Date().toISOString()
   };
+};
+
+const cloudTableForEntity: Record<string, "sessions" | "learning_materials" | "question_translations" | "review_items"> = {
+  session: "sessions",
+  material: "learning_materials",
+  question: "question_translations",
+  review: "review_items"
+};
+
+const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, tombstones: ReadonlyArray<{ id: string; entity: string; deletedAt: string }>) => {
+  for (const t of tombstones) {
+    const table = cloudTableForEntity[t.entity];
+    if (!table) continue;
+    const deleted = await supabase.from(table).delete().eq("user_id", userId).eq("id", t.id).lte("updated_at", t.deletedAt);
+    if (deleted.error) throw new Error(deleted.error.message);
+    const upserted = await supabase
+      .from("sync_tombstones")
+      .upsert({ user_id: userId, id: t.id, entity: t.entity, deleted_at: t.deletedAt }, { onConflict: "user_id,entity,id" })
+      .select();
+    if (upserted.error) throw new Error(upserted.error.message);
+  }
 };

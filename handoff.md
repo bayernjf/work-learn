@@ -34,6 +34,7 @@ Agent 中调用 Skill
 
 - [x] 定义 Session/Event 和 LearningMaterial 数据结构
 - [x] 建立 Supabase schema、migration 和 RLS
+- [x] 增加 `012_sync_timestamps.sql` 和 `013_sync_tombstones.sql`，支持本地 ↔ 云端双向增量同步、复习状态同步与删除传播（待用户执行 migration）
 - [x] 实现 Hono API 的 Supabase 鉴权与 materials 读写接口
 - [x] 保存学习材料时自动创建待复习项
 - [x] 实现 reviews 查询和完成状态更新接口
@@ -122,7 +123,7 @@ Agent 中调用 Skill
 
 ## 已经由实现回答的问题
 
-- 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 手动推送，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
+- 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 做 pull → push → pull 双向同步，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
 - 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法（按当前决策先不推进 SRS）；
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。

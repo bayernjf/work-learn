@@ -12,7 +12,7 @@ AI Agent           -> Skill / MCP / CLI
 
 前端和 API 分离部署。前端只访问公开 API，用户数据权限由 Supabase RLS 负责，服务端的 service role key 只存在于 Vercel 环境变量中。
 
-数据策略为**本地优先**：stdio MCP 与 CLI 默认写入本地 SQLite（离线可用、无需 token），云端 Supabase 是「个人账号的同步副本」，由 `learn sync` 主动推送；remote MCP 与 Web 保持云端直写。详见 [本地优先存储方案](local-first-storage.md)。
+数据策略为**本地优先**：stdio MCP 与 CLI 默认写入本地 SQLite（离线可用、无需 token），云端 Supabase 是「个人账号的同步副本」，由 `learn sync` 做双向增量同步；remote MCP 与 Web 保持云端直写。详见 [本地优先存储方案](local-first-storage.md)。
 
 ## 2. Monorepo 结构
 

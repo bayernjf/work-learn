@@ -58,7 +58,8 @@ export const learningMaterialSchema = z.object({
   vocabulary: z.array(z.string()),
   practicePrompts: z.array(z.string()),
   tags: z.array(z.string()),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime().optional()
 });
 
 // Redaction hangs off the schema rather than off each caller because every path
@@ -89,7 +90,8 @@ export const questionTranslationSchema = z.object({
   question: z.string().min(1),
   translation: z.string().min(1),
   topic: z.string().trim().max(200).optional(),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime().optional()
 });
 
 export const saveQuestionTranslationInputSchema = questionTranslationSchema
@@ -105,7 +107,7 @@ export const saveQuestionTranslationInputSchema = questionTranslationSchema
 // The columns the API returns for a question translation. Explicit rather than
 // "*", so the payload stays stable if search columns are added later.
 export const questionTranslationColumns =
-  "id,session_id,source,question,translation,topic,created_at";
+  "id,session_id,source,question,translation,topic,created_at,updated_at";
 
 export const generatePracticeInputSchema = z.object({
   materialId: z.string().min(1).optional(),
@@ -128,7 +130,8 @@ export const syncSessionSchema = z.object({
   id: z.string().min(1),
   source: sourceSchema,
   topic: z.string().trim().max(160).nullable(),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
 });
 
 // A learning material as synced from a local store, id included for idempotency.
@@ -144,7 +147,8 @@ export const syncMaterialSchema = z.object({
   vocabulary: z.array(z.string()),
   practicePrompts: z.array(z.string()),
   tags: z.array(z.string()),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
 });
 
 // A question/translation pair as synced from a local store, id included.
@@ -155,21 +159,53 @@ export const syncQuestionTranslationSchema = z.object({
   question: z.string().min(1),
   translation: z.string().min(1),
   topic: z.string().trim().max(200).nullable(),
-  createdAt: z.string().datetime()
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
 });
 
-// The payload for POST /api/sync: a batch of local-only records pushed to the cloud.
+export const syncReviewSchema = z.object({
+  id: z.string().min(1),
+  materialId: z.string().min(1),
+  status: z.enum(["pending", "completed", "snoozed"]),
+  dueAt: z.string().datetime(),
+  intervalDays: z.number().int().min(0),
+  completedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review"]);
+
+export const syncTombstoneSchema = z.object({
+  id: z.string().min(1),
+  entity: tombstoneEntitySchema,
+  deletedAt: z.string().datetime()
+});
+
+export const syncTombstoneColumns = "id,entity,deleted_at";
+
+// The payload for POST /api/sync: a batch of local records pushed to the cloud.
+// Rows use stable UUIDs and updated_at timestamps; the server applies last-write-wins.
 export const syncBatchInputSchema = z.object({
   sessions: z.array(syncSessionSchema),
   materials: z.array(syncMaterialSchema),
-  questions: z.array(syncQuestionTranslationSchema)
+  questions: z.array(syncQuestionTranslationSchema),
+  reviews: z.array(syncReviewSchema).optional().default([]),
+  tombstones: z.array(syncTombstoneSchema).optional().default([])
 });
+
+export const syncPullQuerySchema = z.object({
+  since: z.string().datetime().optional()
+});
+export const syncReviewColumns =
+  "id,material_id,status,due_at,interval_days,completed_at,created_at,updated_at";
+
 
 // The columns the API returns for a material. Explicit rather than "*", because
 // the table also carries search_text -- a denormalised copy of every searchable
 // field, kept for the trigram index. Selecting "*" would double every payload.
 export const materialColumns =
-  "id,session_id,source,topic,original_text,explanation,useful_expressions,corrections,vocabulary,practice_prompts,tags,created_at";
+  "id,session_id,source,topic,original_text,explanation,useful_expressions,corrections,vocabulary,practice_prompts,tags,created_at,updated_at";
 
 export type Source = z.infer<typeof sourceSchema>;
 export type Role = z.infer<typeof roleSchema>;
@@ -265,3 +301,6 @@ export type SaveMaterialInput = z.infer<typeof saveMaterialInputSchema>;
 export type QuestionTranslation = z.infer<typeof questionTranslationSchema>;
 export type SaveQuestionTranslationInput = z.infer<typeof saveQuestionTranslationInputSchema>;
 export type SyncBatchInput = z.infer<typeof syncBatchInputSchema>;
+export type SyncReview = z.infer<typeof syncReviewSchema>;
+export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
+export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;

@@ -13,7 +13,7 @@ const commands = {
   capture: "Capture and save text (stdin or clipboard) to the local store.",
   review: "Show the next review items from the local store.",
   search: "Search the local corpus.",
-  sync: "Push local-only data to your Work Learn cloud account.",
+  sync: "Pull cloud changes, push local changes, and sync review state.",
   export: "Export local data to markdown notes."
 } as const;
 
@@ -116,36 +116,58 @@ function resolveToken(): string {
   throw new Error("Set WORK_LEARN_ACCESS_TOKEN (or WORK_LEARN_ACCESS_TOKEN_FILE) to sync to your account.");
 }
 
+async function pullChanges(apiUrl: string, token: string, store: LocalStore) {
+  const since = store.lastPulledAt();
+  const url = new URL(`${apiUrl}/api/sync`);
+  if (since) url.searchParams.set("since", since);
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+    throw new Error(body.details ?? body.error ?? `Pull failed with ${response.status}`);
+  }
+  const result = (await response.json()) as { data: { serverCursor: string } };
+  const applied = store.applyRemoteBatch(result.data);
+  store.setMeta("last_pulled_at", result.data.serverCursor);
+  return applied;
+}
+
+async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
+  const batch = store.unsynced();
+  const total = batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length;
+  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0 } };
+
+  const response = await fetch(`${apiUrl}/api/sync`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(batch)
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+    throw new Error(body.details ?? body.error ?? `Push failed with ${response.status}`);
+  }
+
+  store.markSynced({
+    sessions: batch.sessions.map((row) => row.id),
+    materials: batch.materials.map((row) => row.id),
+    questions: batch.questions.map((row) => row.id),
+    reviews: batch.reviews.map((row) => row.id),
+    tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
+  });
+
+  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number } };
+  return { pushed: result.data };
+}
+
 async function sync(args: string[]) {
   const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
   const token = resolveToken();
 
   const store = openStore();
   try {
-    const batch = store.unsynced();
-    const total = batch.materials.length + batch.questions.length + batch.sessions.length;
-    if (total === 0) {
-      console.log("Nothing to sync.");
-      return;
-    }
-
-    const response = await fetch(`${apiUrl}/api/sync`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(batch)
-    });
-    if (!response.ok) {
-      const body = (await response.json()) as { error?: string; details?: string };
-      throw new Error(body.details ?? body.error ?? `Sync failed with ${response.status}`);
-    }
-
-    store.markSynced({
-      materials: batch.materials.map((m) => m.id),
-      questions: batch.questions.map((q) => q.id)
-    });
-
-    const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number } };
-    console.log(JSON.stringify({ synced: result.data }, null, 2));
+    const pulledBefore = await pullChanges(apiUrl, token, store);
+    const pushed = await pushChanges(apiUrl, token, store);
+    const pulledAfter = await pullChanges(apiUrl, token, store);
+    console.log(JSON.stringify({ pulledBefore, ...pushed, pulledAfter }, null, 2));
   } finally {
     store.close();
   }

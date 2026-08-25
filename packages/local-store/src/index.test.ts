@@ -124,6 +124,160 @@ test("getUserPatterns summarizes recent saved language", () => {
   });
 });
 
+
+test("bidirectional sync applies remote rows and review state", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "sync" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "sync",
+      originalText: "old local text",
+      usefulExpressions: ["local phrase"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["local"]
+    }) as { id: string; createdAt: string };
+    const localReview = store.getReviewItems()[0] as { review_id: string };
+
+    const remoteUpdated = new Date(Date.now() + 5_000).toISOString();
+    store.applyRemoteBatch({
+      sessions: [{ id: session.id, source: "codex", topic: "remote sync", createdAt: session.createdAt, updatedAt: remoteUpdated }],
+      materials: [{
+        id: material.id,
+        sessionId: session.id,
+        source: "codex",
+        topic: "remote sync",
+        originalText: "remote text",
+        explanation: "from another device",
+        usefulExpressions: ["remote phrase"],
+        corrections: [],
+        vocabulary: [],
+        practicePrompts: [],
+        tags: ["remote"],
+        createdAt: material.createdAt,
+        updatedAt: remoteUpdated
+      }],
+      questions: [],
+      reviews: [{
+        id: crypto.randomUUID(),
+        materialId: material.id,
+        status: "completed",
+        dueAt: remoteUpdated,
+        intervalDays: 1,
+        completedAt: remoteUpdated,
+        createdAt: new Date(material.createdAt).toISOString(),
+        updatedAt: remoteUpdated
+      }]
+    });
+
+    const { materials } = store.searchCorpus("remote");
+    assert.equal(materials.length, 1);
+    assert.equal(materials[0]?.originalText, "remote text");
+    assert.equal(store.getReviewItems().length, 0);
+    assert.equal(store.unsynced().materials.length, 0);
+  });
+});
+
+test("bidirectional sync keeps newer local writes", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "local wins" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "local wins",
+      originalText: "new local text",
+      usefulExpressions: ["new local phrase"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["local"]
+    }) as { id: string; createdAt: string };
+    store.applyRemoteBatch({
+      sessions: [{ id: session.id, source: "codex", topic: "old remote", createdAt: session.createdAt, updatedAt: new Date(Date.now() - 5_000).toISOString() }],
+      materials: [{
+        id: material.id,
+        sessionId: session.id,
+        source: "codex",
+        topic: "old remote",
+        originalText: "old remote text",
+        explanation: "",
+        usefulExpressions: [],
+        corrections: [],
+        vocabulary: [],
+        practicePrompts: [],
+        tags: [],
+        createdAt: material.createdAt,
+        updatedAt: new Date(Date.now() - 5_000).toISOString()
+      }],
+      questions: [],
+      reviews: []
+    });
+    const { materials } = store.searchCorpus("new local");
+    assert.equal(materials.length, 1);
+  });
+});
+
+test("unsynced includes local review completion", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "review sync" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "review sync",
+      originalText: "mark this review",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string; createdAt: string };
+    const review = store.getReviewItems()[0] as { review_id: string };
+    assert.equal(store.unsynced().reviews.length, 1);
+    store.markMastered(review.review_id);
+    const batch = store.unsynced();
+    assert.equal(batch.reviews.length, 1);
+    assert.equal(batch.reviews[0]?.status, "completed");
+    assert.equal(batch.materials[0]?.id, material.id);
+  });
+});
+
+
+test("deleting a material records tombstones for push", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "delete me" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "delete me",
+      originalText: "this will be removed",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+    const reviewId = (store.getReviewItems()[0] as { review_id: string }).review_id;
+    store.deleteMaterial(material.id);
+    const batch = store.unsynced();
+    assert.ok(batch.tombstones.some((t) => t.entity === "material" && t.id === material.id));
+    assert.ok(batch.tombstones.some((t) => t.entity === "review" && t.id === reviewId));
+    assert.equal(batch.materials.length, 0);
+  });
+});
+
+test("a remote tombstone deletes the local row and is not re-pushed", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "remote delete" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "remote delete",
+      originalText: "gone from another device",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+    store.applyRemoteBatch({
+      sessions: [], materials: [], questions: [], reviews: [],
+      tombstones: [{ id: material.id, entity: "material", deletedAt: new Date().toISOString() }]
+    });
+    assert.equal(store.searchCorpus().materials.length, 0);
+    assert.equal(store.unsynced().tombstones.length, 0);
+  });
+});
+
 test("exportMarkdown writes an overwritable day file", () => {
   withStore((store, dir) => {
     const session = store.createSession({ source: "codebuddy", topic: "db" });

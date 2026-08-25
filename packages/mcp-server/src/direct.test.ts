@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext } from "./direct.js";
+import { createDirectContext, fetchSyncSnapshot } from "./direct.js";
 
 type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string };
 
@@ -16,7 +16,7 @@ function stubClient() {
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["order", "lte", "single", "limit"]) {
+    for (const method of ["order", "lte", "single", "limit", "gte", "maybeSingle"]) {
       builder[method] = () => builder;
     }
     builder.select = (columns?: string) => {
@@ -24,6 +24,10 @@ function stubClient() {
       return builder;
     };
     builder.eq = (column: string, value: unknown) => {
+      call.filters.push([column, value]);
+      return builder;
+    };
+    builder.gte = (column: string, value: unknown) => {
       call.filters.push([column, value]);
       return builder;
     };
@@ -115,6 +119,14 @@ test("generatePractice and getUserPatterns are scoped to the user", async () => 
   await ctx.generatePractice({ limit: 2 });
   await ctx.getUserPatterns({ days: 7 });
   assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
+});
+
+test("fetchSyncSnapshot scopes every table to the user", async () => {
+  const { client, calls } = stubClient();
+  await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
+  assert.ok(calls.length >= 4);
+  assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
+  assert.ok(calls.some((call) => call.filters.some(([column]) => column === "updated_at")));
 });
 
 test("read-only token can generate practice and patterns", async () => {
