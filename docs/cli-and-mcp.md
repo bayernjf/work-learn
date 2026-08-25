@@ -44,7 +44,7 @@ token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供
 
 ### doctor
 
-`learn doctor` 用于排查本地优先链路是否可用：检查 Node 版本、本地 SQLite 能否打开、本地记录数量与待同步队列、token 来源，以及 API `/api/health` 的状态和延迟。任何检查失败都会让命令以非零状态码退出，适合在终端或 Agent 里先做体检。
+`learn doctor` 用于排查本地优先链路是否可用：检查 Node 版本、本地 SQLite 能否打开、本地记录数量与待同步队列、token 来源，以及 API `/api/health` 的状态和延迟。如果能解析到 token，还会调用 `/api/sync/status` 校验云端语料计数和最近保存时间。任何检查失败都会让命令以非零状态码退出，适合在终端或 Agent 里先做体检。
 
 ```bash
 learn doctor
