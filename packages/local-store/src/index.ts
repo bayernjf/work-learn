@@ -144,6 +144,14 @@ CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sync_tombstones (
+  id TEXT NOT NULL,
+  entity TEXT NOT NULL CHECK(entity IN ('session','material','question','review')),
+  deleted_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'local_only',
+  synced_at TEXT,
+  PRIMARY KEY (entity, id)
+);
 `;
 
 /** Collapse a question to a comparable form for exact-dedupe. */
@@ -193,6 +201,14 @@ export class LocalStore {
     ensureColumn("review_items", "sync_status", "TEXT NOT NULL DEFAULT 'local_only'");
     ensureColumn("review_items", "synced_at", "TEXT");
     this.db.exec(`CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    this.db.exec(`CREATE TABLE IF NOT EXISTS sync_tombstones (
+      id TEXT NOT NULL,
+      entity TEXT NOT NULL CHECK(entity IN ('session','material','question','review')),
+      deleted_at TEXT NOT NULL,
+      sync_status TEXT NOT NULL DEFAULT 'local_only',
+      synced_at TEXT,
+      PRIMARY KEY (entity, id)
+    );`);
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS review_material_unique_idx ON review_items(material_id);`);
   }
 
@@ -352,17 +368,58 @@ export class LocalStore {
     return { id: reviewId, status: "completed" };
   }
 
+  /** Record a deletion so it can be pushed to other devices. */
+  private recordTombstone(entity: "session" | "material" | "question" | "review", id: string, deletedAt: string) {
+    this.db
+      .prepare(
+        `INSERT INTO sync_tombstones (id, entity, deleted_at, sync_status)
+         VALUES (?, ?, ?, 'local_only')
+         ON CONFLICT(entity, id) DO UPDATE SET deleted_at = excluded.deleted_at, sync_status = 'local_only'`
+      )
+      .run(id, entity, deletedAt);
+  }
+
+  /** Delete a material (and its review via cascade) and record tombstones. */
+  deleteMaterial(materialId: string) {
+    const deletedAt = new Date().toISOString();
+    const review = this.db.prepare("SELECT id FROM review_items WHERE material_id = ?").get(materialId) as { id: string } | undefined;
+    const tx = this.db.transaction(() => {
+      if (review) {
+        this.recordTombstone("review", review.id, deletedAt);
+        this.db.prepare("DELETE FROM review_items WHERE material_id = ?").run(materialId);
+      }
+      this.recordTombstone("material", materialId, deletedAt);
+      this.db.prepare("DELETE FROM learning_materials WHERE id = ?").run(materialId);
+    });
+    tx();
+    return { id: materialId, deletedAt };
+  }
+
+  /** Delete a question/translation pair and record a tombstone. */
+  deleteQuestion(questionId: string) {
+    const deletedAt = new Date().toISOString();
+    const tx = this.db.transaction(() => {
+      this.recordTombstone("question", questionId, deletedAt);
+      this.db.prepare("DELETE FROM question_translations WHERE id = ?").run(questionId);
+    });
+    tx();
+    return { id: questionId, deletedAt };
+  }
+
   /** Local rows that still need to be pushed, including review state. */
   unsynced() {
     const sessions = this.db.prepare("SELECT * FROM sessions WHERE sync_status = 'local_only' ORDER BY created_at").all() as SessionRow[];
     const materials = this.db.prepare("SELECT * FROM learning_materials WHERE sync_status = 'local_only' ORDER BY created_at").all() as MaterialRow[];
     const questions = this.db.prepare("SELECT * FROM question_translations WHERE sync_status = 'local_only' ORDER BY created_at").all() as QuestionRow[];
     const reviews = this.db.prepare("SELECT * FROM review_items WHERE sync_status = 'local_only' ORDER BY created_at").all() as ReviewRow[];
+    const tombstones = (this.db.prepare("SELECT * FROM sync_tombstones WHERE sync_status = 'local_only'").all() as Array<{ id: string; entity: string; deleted_at: string }>)
+      .map((row) => ({ id: row.id, entity: row.entity, deletedAt: row.deleted_at }));
     return {
       sessions: sessions.map(toSession),
       materials: materials.map(toMaterial),
       questions: questions.map(toQuestion),
-      reviews: reviews.map(toReview)
+      reviews: reviews.map(toReview),
+      tombstones
     };
   }
 
@@ -423,7 +480,7 @@ export class LocalStore {
       INSERT INTO review_items (id, material_id, status, due_at, interval_days, completed_at, created_at, updated_at, sync_status, synced_at)
       VALUES (@id, @materialId, @status, @dueAt, @intervalDays, @completedAt, @createdAt, @updatedAt, 'synced', @now)
     `);
-    const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0 };
+    const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, tombstones: 0 };
     const tx = this.db.transaction(() => {
       for (const row of parsed.sessions) {
         upsertSession.run({ ...row, now });
@@ -443,26 +500,46 @@ export class LocalStore {
         else insertReview.run({ ...row, now });
         counts.reviews++;
       }
+      const deleteSession = this.db.prepare("DELETE FROM sessions WHERE id = ? AND ? >= updated_at");
+      const deleteMaterial = this.db.prepare("DELETE FROM learning_materials WHERE id = ? AND ? >= updated_at");
+      const deleteQuestion = this.db.prepare("DELETE FROM question_translations WHERE id = ? AND ? >= updated_at");
+      const deleteReview = this.db.prepare("DELETE FROM review_items WHERE id = ? AND ? >= updated_at");
+      const upsertTombstone = this.db.prepare(`
+        INSERT INTO sync_tombstones (id, entity, deleted_at, sync_status, synced_at)
+        VALUES (?, ?, ?, 'synced', ?)
+        ON CONFLICT(entity, id) DO UPDATE SET deleted_at = excluded.deleted_at, sync_status = 'synced', synced_at = excluded.synced_at
+      `);
+      for (const t of parsed.tombstones) {
+        if (t.entity === "session") deleteSession.run(t.id, t.deletedAt);
+        else if (t.entity === "material") deleteMaterial.run(t.id, t.deletedAt);
+        else if (t.entity === "question") deleteQuestion.run(t.id, t.deletedAt);
+        else if (t.entity === "review") deleteReview.run(t.id, t.deletedAt);
+        upsertTombstone.run(t.id, t.entity, t.deletedAt, now);
+        counts.tombstones++;
+      }
     });
     tx();
     return counts;
   }
 
   /** Mark rows as synced after a successful push. */
-  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[] }) {
+  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[]; tombstones?: Array<{ id: string; entity: string }> }) {
     const now = new Date().toISOString();
-    const statements = [
+    const statements: Array<[string, string[]]> = [
       ["sessions", ids.sessions ?? []],
       ["learning_materials", ids.materials ?? []],
       ["question_translations", ids.questions ?? []],
       ["review_items", ids.reviews ?? []]
-    ] as const;
+    ];
+    const tombstoneIds = ids.tombstones ?? [];
     const tx = this.db.transaction(() => {
       for (const [table, ids] of statements) {
         const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ?`);
         for (const id of ids) stmt.run(now, id);
       }
     });
+    const markTombstone = this.db.prepare("UPDATE sync_tombstones SET sync_status = 'synced', synced_at = ? WHERE id = ? AND entity = ?");
+    for (const t of tombstoneIds) markTombstone.run(now, t.id, t.entity);
     tx();
   }
 
