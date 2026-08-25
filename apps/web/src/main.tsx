@@ -354,7 +354,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   // Only the inline prompt carries a token, so only it has to wait for one.
   const promptReady = promptMode === "file" || hasToken;
 
-  const universalInstall = { id: "universal", label: "Universal", command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal };
+  const universalInstall = { id: "universal", label: t.connect.skillUniversalLabel, command: `curl -fsSL ${RAW_BASE}/scripts/install-skill.sh | WORK_LEARN_SKILL_BASE=${RAW_BASE} bash`, note: t.connect.notes.universal };
   const skillInstalls: typeof universalInstall[] = [
     universalInstall,
     ...__AGENT_SKILL_DIRS__.flatMap((dir) => {
