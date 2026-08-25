@@ -289,9 +289,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
-        <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
+        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} />
       </> : <>
-        <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
+        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} />
         <AgentConnect key="filled" session={session} initialOpen={false} syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
       </>}
       <AppFooter />
@@ -824,9 +824,51 @@ function QuestionTranslationsSection({ questions, searching, loading, onDelete }
   );
 }
 
-function ReviewList({ reviews, onComplete }: { reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {
+function ReviewCard({ session, review, index, onComplete }: { session: Session; review: ReviewItem; index: number; onComplete: (reviewId: string) => void }) {
   const { t } = useI18n();
-  return <section className="review-section"><div className="section-heading"><div><p className="eyebrow">{t.review.eyebrow}</p><h2>{t.review.heading}</h2></div><span className="review-count">{t.review.due(reviews.length)}</span></div>{reviews.length === 0 ? <p className="review-empty">{t.review.empty}</p> : <div className="review-list">{reviews.map((review, index) => <article className="review-card" key={review.id}><span className="review-index">{String(index + 1).padStart(2, "0")}</span><div><p className="material-topic">{review.learning_materials.topic}</p><h3>{review.learning_materials.useful_expressions[0] ?? t.review.fallback}</h3><p>{review.learning_materials.original_text}</p></div><button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button></article>)}</div>}</section>;
+  const [showAnswer, setShowAnswer] = useState(false);
+  const material = review.learning_materials;
+  return (
+    <article className="review-card" data-revealed={showAnswer}>
+      <span className="review-index">{String(index + 1).padStart(2, "0")}</span>
+      <div className="review-body">
+        <p className="material-topic">{material.topic}</p>
+        <h3>{material.useful_expressions[0] ?? t.review.fallback}</h3>
+        <p className="review-original">{material.original_text}</p>
+        {!showAnswer ? (
+          <p className="review-hint">{t.review.recallHint}</p>
+        ) : (
+          <div className="review-answer">
+            <MaterialDetail label={t.material.better} value={material.corrections[0]} />
+            <MaterialDetail label={t.material.why} value={material.explanation} />
+            <MaterialDetail label={t.material.reuse} value={material.practice_prompts[0]} />
+            <MaterialDetail label={t.material.vocabulary} value={material.vocabulary.join(", ")} />
+            <PracticeButton session={session} materialId={material.id} />
+          </div>
+        )}
+      </div>
+      <div className="review-actions">
+        <button type="button" className="text-button" onClick={() => setShowAnswer((value) => !value)}>
+          {showAnswer ? t.review.hideAnswer : t.review.showAnswer}
+        </button>
+        {showAnswer ? <button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button> : null}
+      </div>
+    </article>
+  );
+}
+
+function ReviewList({ session, reviews, onComplete }: { session: Session; reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {
+  const { t } = useI18n();
+  return (
+    <section className="review-section">
+      <div className="section-heading"><div><p className="eyebrow">{t.review.eyebrow}</p><h2>{t.review.heading}</h2></div><span className="review-count">{t.review.due(reviews.length)}</span></div>
+      {reviews.length === 0 ? <p className="review-empty">{t.review.empty}</p> : (
+        <div className="review-list">
+          {reviews.map((review, index) => <ReviewCard key={review.id} session={session} review={review} index={index} onComplete={onComplete} />)}
+        </div>
+      )}
+    </section>
+  );
 }
 
 const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
