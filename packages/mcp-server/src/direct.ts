@@ -408,6 +408,32 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
   };
 };
 
+/** Return lightweight cloud corpus counts for the settings/doctor screens. */
+export const getSyncStatus = async (supabase: SupabaseClient, userId: string) => {
+  const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "sync_tombstones") => {
+    const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId);
+    if (result.error) throw new Error(result.error.message);
+    return result.count ?? 0;
+  };
+  const latest = await supabase
+    .from("learning_materials")
+    .select("updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latest.error) throw new Error(latest.error.message);
+  return {
+    counts: {
+      sessions: await count("sessions"),
+      materials: await count("learning_materials"),
+      questions: await count("question_translations"),
+      reviews: await count("review_items"),
+      tombstones: await count("sync_tombstones")
+    },
+    latestMaterialUpdatedAt: latest.data ? String(latest.data.updated_at) : null
+  };
+};
 
 /** Delete a cloud material and its review, recording tombstones first. */
 export const deleteCloudMaterial = async (supabase: SupabaseClient, userId: string, materialId: string) => {
