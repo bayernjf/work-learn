@@ -94,7 +94,7 @@ export const en = {
   connect: {
     summary: "Connect an agent",
     intro: (landingUrl: string): ReactNode => <>New here? Read the <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn landing page<span className="external-icon" aria-hidden="true">↗</span></a> for the full product walkthrough.</>,
-    overviewLead: "Three steps, about two minutes. Nothing to install unless you want to.",
+    overviewLead: "Three steps, about two minutes — copy, paste, done.",
     overview: [
       ["Create a token", "One click, right below."],
       ["Pick one of three routes", "They all do the same thing. Take whichever your client supports."],
@@ -340,7 +340,7 @@ export const zh: Strings = {
   connect: {
     summary: "接入 agent",
     intro: (landingUrl: string): ReactNode => <>第一次用？先看 <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn 介绍页<span className="external-icon" aria-hidden="true">↗</span></a>，那里有完整的产品说明。</>,
-    overviewLead: "一共三步，大约两分钟。除非你想，否则什么都不用装。",
+    overviewLead: "一共三步，大约两分钟，复制粘贴就能搞定。",
     overview: [
       ["创建 token", "就在下面，点一下就有。"],
       ["三选一接入", "三条路做的是同一件事，挑你的客户端支持的那条。"],
