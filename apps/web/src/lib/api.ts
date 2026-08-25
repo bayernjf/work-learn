@@ -50,6 +50,19 @@ export const fetchQuestionTranslations = async (session: Session, query = "") =>
   return (await response.json()) as { data: QuestionTranslation[] };
 };
 
+export type SyncStatus = {
+  counts: { sessions: number; materials: number; questions: number; reviews: number; tombstones: number };
+  latestMaterialUpdatedAt: string | null;
+};
+
+export const fetchSyncStatus = async (session: Session) => {
+  const response = await fetch(`/api/sync/status`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.syncStatus);
+  return (await response.json()) as { data: SyncStatus };
+};
+
 export const fetchReviews = async (session: Session) => {
   const response = await fetch(`/api/reviews`, {
     headers: { Authorization: `Bearer ${session.access_token}` }

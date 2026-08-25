@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, LearningMaterial, QuestionTranslation, ReviewItem } from "./lib/api";
+import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, LearningMaterial, QuestionTranslation, ReviewItem, SyncStatus } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -53,6 +53,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [loadingMaterials, setLoadingMaterials] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [reloadKey, setReloadKey] = useState(0);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [syncStatusLoading, setSyncStatusLoading] = useState(false);
+  const [syncStatusError, setSyncStatusError] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -70,6 +73,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
+    void refreshSyncStatus(session);
   }, [session, reloadKey]);
 
   useEffect(() => {
@@ -181,6 +185,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const refreshSyncStatus = async (currentSession: Session) => {
+    setSyncStatusLoading(true);
+    setSyncStatusError("");
+    try {
+      const result = await fetchSyncStatus(currentSession);
+      setSyncStatus(result.data);
+    } catch (error) {
+      setSyncStatus(null);
+      setSyncStatusError(error instanceof Error ? error.message : t.errors.syncStatus);
+    } finally {
+      setSyncStatusLoading(false);
+    }
+  };
+
   if (!session) {
     return <AuthScreen
       mode={authMode}
@@ -251,14 +269,40 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       </section>
       <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
       {empty && !loadError ? <>
-        <AgentConnect key="empty" session={session} initialOpen />
+        <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
         <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
       </> : <>
         <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
-        <AgentConnect key="filled" session={session} initialOpen={false} />
+        <AgentConnect key="filled" session={session} initialOpen={false} syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
       </>}
       <AppFooter />
     </main>
+  );
+}
+
+function SyncStatusPanel({ status, loading, error, onRefresh }: { status: SyncStatus | null; loading: boolean; error: string; onRefresh: () => void }) {
+  const { t, formatDate } = useI18n();
+  return (
+    <section className="sync-status" aria-live="polite">
+      <div className="sync-status-head">
+        <div>
+          <p className="eyebrow">{t.sync.eyebrow}</p>
+          <h3>{t.sync.heading}</h3>
+        </div>
+        <button type="button" className="text-button" disabled={loading} onClick={onRefresh}>{loading ? t.sync.refreshing : t.common.refresh}</button>
+      </div>
+      {status ? (
+        <>
+          <div className="sync-counts">
+            <span><b>{status.counts.materials}</b>{t.sync.materials}</span>
+            <span><b>{status.counts.questions}</b>{t.sync.questions}</span>
+            <span><b>{status.counts.reviews}</b>{t.sync.reviews}</span>
+            <span><b>{status.counts.tombstones}</b>{t.sync.tombstones}</span>
+          </div>
+          <p className="sync-meta">{status.latestMaterialUpdatedAt ? t.sync.lastSaved(formatDate(status.latestMaterialUpdatedAt)) : t.sync.empty}</p>
+        </>
+      ) : error ? <p className="sync-meta">{error}</p> : <p className="sync-meta">{t.sync.loading}</p>}
+    </section>
   );
 }
 
@@ -328,7 +372,7 @@ function EmptyCorpus() {
   return <div className="empty-state"><span className="empty-mark">+</span><h2>{t.empty.heading}</h2><p>{t.empty.body}</p><code>{t.empty.prompt}</code><a className="empty-cta" href="#connect">{t.empty.cta}<span aria-hidden="true"> →</span></a></div>;
 }
 
-function AgentConnect({ session, initialOpen }: { session: Session; initialOpen: boolean }) {
+function AgentConnect({ session, initialOpen, syncStatus, syncStatusLoading, syncStatusError, onRefreshSyncStatus }: { session: Session; initialOpen: boolean; syncStatus: SyncStatus | null; syncStatusLoading: boolean; syncStatusError: string; onRefreshSyncStatus: (session: Session) => void }) {
   const { t } = useI18n();
   // Served by this app (see vite.config.ts) rather than raw.githubusercontent.com,
   // which is unreachable on the networks these commands get pasted into.
@@ -439,6 +483,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         <p className="connect-step">{t.connect.tokenStep}</p>
         <p className="connect-hint">{t.connect.tokenHint}</p>
         <TokenManager session={session} onTokenSelect={setRemoteToken} onActiveTokens={setActiveTokens} tokenFilePath={tokenFilePath} />
+        <SyncStatusPanel status={syncStatus} loading={syncStatusLoading} error={syncStatusError} onRefresh={() => onRefreshSyncStatus(session)} />
 
         <p className="connect-lane">{t.connect.laneRoute}</p>
         <p className="connect-hint">{t.connect.routeNote}</p>
