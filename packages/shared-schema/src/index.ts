@@ -174,21 +174,32 @@ export const syncReviewSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
+export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review"]);
+
+export const syncTombstoneSchema = z.object({
+  id: z.string().min(1),
+  entity: tombstoneEntitySchema,
+  deletedAt: z.string().datetime()
+});
+
+export const syncTombstoneColumns = "id,entity,deleted_at";
+
 // The payload for POST /api/sync: a batch of local records pushed to the cloud.
 // Rows use stable UUIDs and updated_at timestamps; the server applies last-write-wins.
 export const syncBatchInputSchema = z.object({
   sessions: z.array(syncSessionSchema),
   materials: z.array(syncMaterialSchema),
   questions: z.array(syncQuestionTranslationSchema),
-  reviews: z.array(syncReviewSchema).optional().default([])
+  reviews: z.array(syncReviewSchema).optional().default([]),
+  tombstones: z.array(syncTombstoneSchema).optional().default([])
 });
 
 export const syncPullQuerySchema = z.object({
   since: z.string().datetime().optional()
 });
-
 export const syncReviewColumns =
   "id,material_id,status,due_at,interval_days,completed_at,created_at,updated_at";
+
 
 // The columns the API returns for a material. Explicit rather than "*", because
 // the table also carries search_text -- a denormalised copy of every searchable
@@ -291,4 +302,5 @@ export type QuestionTranslation = z.infer<typeof questionTranslationSchema>;
 export type SaveQuestionTranslationInput = z.infer<typeof saveQuestionTranslationInputSchema>;
 export type SyncBatchInput = z.infer<typeof syncBatchInputSchema>;
 export type SyncReview = z.infer<typeof syncReviewSchema>;
+export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
