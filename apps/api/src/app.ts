@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema } from "@work-learn/shared-schema";
-import { ScopeError, createDirectContext, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
+import { ScopeError, createDirectContext, fetchSyncSnapshot, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -110,6 +110,21 @@ app.get("/question-translations", async (c) => {
     return c.json({ data: await searchQuestionTranslations(createSupabaseServiceClient(), auth.userId, query), query: query ?? "" });
   } catch (error) {
     return c.json(errorResponse("Could not load question translations", error));
+  }
+});
+
+app.get("/sync", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = syncPullQuerySchema.safeParse({ since: c.req.query("since") });
+  if (!parsed.success) return c.json({ error: "Invalid sync cursor", issues: parsed.error.issues }, 400);
+
+  try {
+    requireScope(auth.scopes, "read");
+    return c.json({ data: await fetchSyncSnapshot(createSupabaseServiceClient(), auth.userId, parsed.data.since) });
+  } catch (error) {
+    return c.json(errorResponse("Could not load sync snapshot", error));
   }
 });
 
