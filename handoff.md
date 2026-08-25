@@ -40,7 +40,8 @@ Agent 中调用 Skill
 - [x] 实现 Web Supabase Auth 注册、登录、退出和 session 恢复
 - [x] 实现 `create_session`、`save_material`、`search_corpus` 的 MCP 工具调用
 - [x] 实现 MCP `get_review_items` 和 `mark_mastered`
-- [x] 编写 Universal Learning Skill 指令和输出格式
+- [x] 实现 MCP `generate_practice` 和 `get_user_patterns`
+- [x] 编写 Universal Learning Skill 指令、输出格式和跨 Agent 抽取契约
 - [x] 实现连接 Hono API 的 MCP Server
 - [x] 创建基础 Web 语料库页面和登录入口
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
@@ -122,13 +123,14 @@ Agent 中调用 Skill
 ## 已经由实现回答的问题
 
 - 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 手动推送，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
-- 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法；
+- 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法（按当前决策先不推进 SRS）；
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。
 
 ## 需要后续确认的问题
 
-- 是否引入间隔重复算法，替换当前的一次性复习队列；
+- 是否引入间隔重复算法，替换当前的一次性复习队列（当前决定暂缓）；
+- `generate_practice` 目前只生成结构化练习提示，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
 - 使用本地模型还是云端模型做语料分析；
 - 是否需要 macOS Companion 做终端会话的自动采集。
 
