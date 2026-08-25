@@ -408,6 +408,57 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
   };
 };
 
+/** Return lightweight cloud corpus counts for the settings/doctor screens. */
+export const getSyncStatus = async (supabase: SupabaseClient, userId: string) => {
+  const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "sync_tombstones") => {
+    const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId);
+    if (result.error) throw new Error(result.error.message);
+    return result.count ?? 0;
+  };
+  const latest = await supabase
+    .from("learning_materials")
+    .select("updated_at")
+    .eq("user_id", userId)
+    .order("updated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (latest.error) throw new Error(latest.error.message);
+  return {
+    counts: {
+      sessions: await count("sessions"),
+      materials: await count("learning_materials"),
+      questions: await count("question_translations"),
+      reviews: await count("review_items"),
+      tombstones: await count("sync_tombstones")
+    },
+    latestMaterialUpdatedAt: latest.data ? String(latest.data.updated_at) : null
+  };
+};
+
+/** Delete a cloud material and its review, recording tombstones first. */
+export const deleteCloudMaterial = async (supabase: SupabaseClient, userId: string, materialId: string) => {
+  const deletedAt = new Date().toISOString();
+  const reviews = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", materialId);
+  if (reviews.error) throw new Error(reviews.error.message);
+  const reviewIds = (reviews.data ?? []) as Array<{ id: string }>;
+  for (const review of reviewIds) {
+    await applyCloudTombstones(supabase, userId, [{ id: review.id, entity: "review", deletedAt }]);
+  }
+  await applyCloudTombstones(supabase, userId, [{ id: materialId, entity: "material", deletedAt }]);
+  const deleted = await supabase.from("learning_materials").delete().eq("user_id", userId).eq("id", materialId);
+  if (deleted.error) throw new Error(deleted.error.message);
+  return { id: materialId, deletedAt, reviews: reviewIds.length };
+};
+
+/** Delete a cloud question translation and record its tombstone first. */
+export const deleteCloudQuestion = async (supabase: SupabaseClient, userId: string, questionId: string) => {
+  const deletedAt = new Date().toISOString();
+  await applyCloudTombstones(supabase, userId, [{ id: questionId, entity: "question", deletedAt }]);
+  const deleted = await supabase.from("question_translations").delete().eq("user_id", userId).eq("id", questionId);
+  if (deleted.error) throw new Error(deleted.error.message);
+  return { id: questionId, deletedAt };
+};
+
 const cloudTableForEntity: Record<string, "sessions" | "learning_materials" | "question_translations" | "review_items"> = {
   session: "sessions",
   material: "learning_materials",

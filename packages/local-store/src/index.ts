@@ -436,6 +436,31 @@ export class LocalStore {
     return this.getMeta("last_pulled_at");
   }
 
+  stats() {
+    const count = (table: string) => (this.db.prepare(`SELECT count(*) AS count FROM ${table}`).get() as { count: number }).count;
+    const max = (table: string) => (this.db.prepare(`SELECT max(updated_at) AS updated_at FROM ${table}`).get() as { updated_at: string | null }).updated_at;
+    const batch = this.unsynced();
+    return {
+      dbPath: this.db.name,
+      lastPulledAt: this.lastPulledAt(),
+      counts: {
+        sessions: count("sessions"),
+        materials: count("learning_materials"),
+        questions: count("question_translations"),
+        reviews: count("review_items"),
+        tombstones: count("sync_tombstones")
+      },
+      pending: {
+        sessions: batch.sessions.length,
+        materials: batch.materials.length,
+        questions: batch.questions.length,
+        reviews: batch.reviews.length,
+        tombstones: batch.tombstones.length
+      },
+      latestUpdatedAt: max("learning_materials")
+    };
+  }
+
   /** Apply a cloud snapshot using last-write-wins by updated_at. */
   applyRemoteBatch(batch: unknown) {
     const parsed = syncBatchInputSchema.parse(batch);

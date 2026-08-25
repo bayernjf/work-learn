@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, fetchSyncSnapshot } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot } from "./direct.js";
 
 type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string };
 
@@ -127,6 +127,40 @@ test("fetchSyncSnapshot scopes every table to the user", async () => {
   assert.ok(calls.length >= 4);
   assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
   assert.ok(calls.some((call) => call.filters.some(([column]) => column === "updated_at")));
+});
+
+test("deleteCloudMaterial tombstones the review and material", async () => {
+  const deleted: string[] = [];
+  const upserted: Array<{ table: string; id: string; entity: string }> = [];
+  const chain = (table: string) => {
+    const b: any = {
+      eq(_c: string, _v: unknown) { return b; },
+      lte(_c: string, _v: unknown) { return b; },
+      select() { return b; },
+      then(resolve: (r: { data?: unknown; error: null }) => unknown) {
+        if (table === "review_items" && deleted.length === 0) return Promise.resolve(resolve({ data: [{ id: "review-1" }], error: null }));
+        if (table === "sync_tombstones") return Promise.resolve(resolve({ data: [], error: null }));
+        return Promise.resolve(resolve({ data: [], error: null }));
+      }
+    };
+    return b;
+  };
+  const client = {
+    from(table: string) {
+      return {
+        select: () => chain(table),
+        delete: () => { deleted.push(table); return chain(table); },
+        upsert: (row: { id: string; entity: string }) => { upserted.push({ table, ...row }); return chain(table); }
+      };
+    }
+  } as unknown as SupabaseClient;
+
+  const result = await deleteCloudMaterial(client, USER, "material-1");
+  assert.equal(result.id, "material-1");
+  assert.ok(deleted.includes("review_items"));
+  assert.ok(deleted.includes("learning_materials"));
+  assert.ok(upserted.some((u) => u.entity === "review" && u.id === "review-1"));
+  assert.ok(upserted.some((u) => u.entity === "material" && u.id === "material-1"));
 });
 
 test("read-only token can generate practice and patterns", async () => {

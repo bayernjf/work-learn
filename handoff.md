@@ -46,6 +46,7 @@ Agent 中调用 Skill
 - [x] 实现连接 Hono API 的 MCP Server
 - [x] 创建基础 Web 语料库页面和登录入口
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
+- [x] Web 端和 `learn delete` 支持删除材料/提问，删除经 tombstone 跨设备传播
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
 - [x] API 部署到 Vercel（`work-learn-api`，health 返回 200）
@@ -56,6 +57,7 @@ Agent 中调用 Skill
 - [x] Cloudflare Pages 项目改名为 `work-learn`，生产默认域名为 `https://work-learn.pages.dev`
 - [x] Web 改为运行时从 `/api/config` 拉取公开 Supabase 配置，修复 Pages 漏配 `VITE_SUPABASE_*` 导致的白屏
 - [x] Pages 同源代理 `/api/*` 到 Vercel；`vercel.json` 补 `/api/*` routes，修复生产 API 平台级 404
+- [x] 增加同步可观测性：Web 端“Connect an agent”面板展示云端同步计数和最近保存时间；CLI 增加 `learn doctor`；`learn sync` 输出本地库统计
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 接入分发待办

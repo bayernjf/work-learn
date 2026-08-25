@@ -18,6 +18,8 @@ export const en = {
     copied: "Copied",
     copyUrl: "Copy URL",
     language: "Language",
+    delete: "Delete",
+    refresh: "Refresh",
   },
 
   header: {
@@ -50,6 +52,7 @@ export const en = {
     empty: "No questions saved yet.",
     translation: "Idiomatic English",
     question: "Your question",
+    deleteConfirm: "Delete this question and its translation? It will be removed from your other devices too.",
   },
 
   time: {
@@ -68,6 +71,9 @@ export const en = {
     tokenCreate: "Could not create personal access token",
     tokenRevoke: "Could not revoke personal access token",
     tokenDelete: "Could not delete personal access token",
+    deleteMaterial: "Could not delete learning material",
+    deleteQuestion: "Could not delete question translation",
+    syncStatus: "Could not load sync status",
   },
 
   empty: {
@@ -90,6 +96,19 @@ export const en = {
     headline: "Connect your learning layer.",
     heading: "Work Learn could not load its configuration.",
     body: (): ReactNode => <>Refresh in a moment. If this persists, check that the Work Learn API is deployed and has <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> configured.</>,
+  },
+
+  sync: {
+    eyebrow: "Cloud sync",
+    heading: "Your learning layer is connected",
+    refreshing: "Refreshing…",
+    loading: "Loading sync status…",
+    empty: "Nothing saved to the cloud yet.",
+    lastSaved: (date: string) => `Last saved ${date}`,
+    materials: "materials",
+    questions: "questions",
+    reviews: "reviews",
+    tombstones: "deletions synced",
   },
 
   connect: {
@@ -228,6 +247,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     why: "Why",
     reuse: "Reuse",
     vocabulary: "Vocabulary",
+    deleteConfirm: "Delete this learning material? It will be removed from your other devices too.",
   },
 
   footer: {
@@ -272,6 +292,8 @@ export const zh: Strings = {
     copied: "已复制",
     copyUrl: "复制地址",
     language: "语言",
+    delete: "删除",
+    refresh: "刷新",
   },
 
   header: {
@@ -304,6 +326,7 @@ export const zh: Strings = {
     empty: "还没有保存过提问。",
     translation: "地道英文",
     question: "你的提问",
+    deleteConfirm: "删除这条提问和它的英文表达？删除也会同步到你的其他设备。",
   },
 
   time: {
@@ -322,6 +345,9 @@ export const zh: Strings = {
     tokenCreate: "personal access token 创建失败",
     tokenRevoke: "personal access token 吊销失败",
     tokenDelete: "personal access token 删除失败",
+    deleteMaterial: "删除学习材料失败",
+    deleteQuestion: "删除提问翻译失败",
+    syncStatus: "加载同步状态失败",
   },
 
   empty: {
@@ -344,6 +370,19 @@ export const zh: Strings = {
     headline: "接上你的学习层。",
     heading: "Work Learn 读不到自己的配置。",
     body: (): ReactNode => <>稍后刷新一次。如果一直这样，检查 Work Learn API 是否已部署，以及是否配了 <code>SUPABASE_URL</code> 和 <code>SUPABASE_ANON_KEY</code>。</>,
+  },
+
+  sync: {
+    eyebrow: "云端同步",
+    heading: "学习层已连接",
+    refreshing: "刷新中…",
+    loading: "正在加载同步状态…",
+    empty: "云端还没有保存内容。",
+    lastSaved: (date: string) => `最近保存：${date}`,
+    materials: "条材料",
+    questions: "条提问",
+    reviews: "条复习",
+    tombstones: "条删除记录",
   },
 
   connect: {
@@ -482,6 +521,7 @@ export const zh: Strings = {
     why: "为什么",
     reuse: "造句练习",
     vocabulary: "词汇",
+    deleteConfirm: "删除这条学习材料？删除也会同步到你的其他设备。",
   },
 
   footer: {

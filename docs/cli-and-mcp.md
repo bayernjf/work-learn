@@ -9,6 +9,8 @@ learn capture  # 采集 stdin 或剪贴板，脱敏后写入本地库
 learn review   # 查看本地待复习项
 learn search   # 搜索本地语料（--q 或直接跟关键词）
 learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN）
+learn doctor   # 检查本地库、token 配置和 API 健康状态
+learn delete   # 删除本地材料或提问，并记录 tombstone
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
 ```
 
@@ -37,6 +39,28 @@ learn sync --api-url https://work-learn-api.vercel.app
 ```
 
 token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供。冲突策略为 last-write-wins：两端修改同一条记录时，`updated_at` 更新的一端胜出。
+
+成功时输出 JSON，包含本轮 `pulledBefore`、`pushed`、`pulledAfter`，以及本地库的 `local` 状态：数据库路径、最近一次 pull cursor、各类记录数量、待同步数量和最近更新时间。
+
+### doctor
+
+`learn doctor` 用于排查本地优先链路是否可用：检查 Node 版本、本地 SQLite 能否打开、本地记录数量与待同步队列、token 来源，以及 API `/api/health` 的状态和延迟。任何检查失败都会让命令以非零状态码退出，适合在终端或 Agent 里先做体检。
+
+```bash
+learn doctor
+learn doctor --api-url https://work-learn-api.vercel.app
+```
+
+### delete
+
+删除一条本地材料或提问，并写入 tombstone，下次 `learn sync` 会把删除传播到云端和其他设备：
+
+```bash
+learn delete material --id <material-id>
+learn delete question --id <question-id>
+```
+
+Web 端的材料卡片和提问卡片也提供了删除按钮，删除会直接写云端 tombstone。
 
 ### export
 

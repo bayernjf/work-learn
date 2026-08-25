@@ -14,6 +14,8 @@ const commands = {
   review: "Show the next review items from the local store.",
   search: "Search the local corpus.",
   sync: "Pull cloud changes, push local changes, and sync review state.",
+  delete: "Delete a local material or question and record a tombstone.",
+  doctor: "Check local DB, token config, and API health.",
   export: "Export local data to markdown notes."
 } as const;
 
@@ -25,6 +27,10 @@ if (command === "capture") {
   await search(args);
 } else if (command === "sync") {
   await sync(args);
+} else if (command === "delete") {
+  await deleteItem(args);
+} else if (command === "doctor") {
+  await doctor(args);
 } else if (command === "export") {
   await exportNotes(args);
 } else if (!command || !(command in commands)) {
@@ -133,8 +139,8 @@ async function pullChanges(apiUrl: string, token: string, store: LocalStore) {
 
 async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
   const batch = store.unsynced();
-  const total = batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length;
-  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0 } };
+  const total = batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length + batch.tombstones.length;
+  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, tombstones: 0 } };
 
   const response = await fetch(`${apiUrl}/api/sync`, {
     method: "POST",
@@ -154,7 +160,7 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
     tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
   });
 
-  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number } };
+  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; tombstones: number } };
   return { pushed: result.data };
 }
 
@@ -167,10 +173,67 @@ async function sync(args: string[]) {
     const pulledBefore = await pullChanges(apiUrl, token, store);
     const pushed = await pushChanges(apiUrl, token, store);
     const pulledAfter = await pullChanges(apiUrl, token, store);
-    console.log(JSON.stringify({ pulledBefore, ...pushed, pulledAfter }, null, 2));
+    const stats = store.stats();
+    console.log(JSON.stringify({ pulledBefore, ...pushed, pulledAfter, local: stats }, null, 2));
   } finally {
     store.close();
   }
+}
+
+async function deleteItem(args: string[]) {
+  const kind = option(args, "--type") ?? args[0];
+  const id = option(args, "--id") ?? (kind === "material" || kind === "question" ? args[1] : undefined);
+  if (kind !== "material" && kind !== "question") {
+    throw new Error("Usage: learn delete <material|question> --id <id>");
+  }
+  if (!id) throw new Error(`Provide the ${kind} id to delete with --id`);
+  const store = openStore();
+  try {
+    const result = kind === "material" ? store.deleteMaterial(id) : store.deleteQuestion(id);
+    console.log(JSON.stringify({ deleted: true, kind, ...result }, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function doctor(args: string[]) {
+  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
+  const report: Record<string, unknown> = {
+    node: process.version,
+    cwd: process.cwd(),
+    apiUrl,
+    checks: {} as Record<string, unknown>
+  };
+  const checks = report.checks as Record<string, unknown>;
+
+  let store: LocalStore | undefined;
+  try {
+    store = openStore();
+    checks.localDb = { ok: true, ...store.stats() };
+  } catch (error) {
+    checks.localDb = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  const tokenSource = process.env.WORK_LEARN_ACCESS_TOKEN_FILE?.trim()
+    ? `file:${process.env.WORK_LEARN_ACCESS_TOKEN_FILE}`
+    : process.env.WORK_LEARN_ACCESS_TOKEN?.trim()
+      ? "env:WORK_LEARN_ACCESS_TOKEN"
+      : undefined;
+  checks.token = tokenSource ? { ok: true, source: tokenSource } : { ok: false, hint: "Set WORK_LEARN_ACCESS_TOKEN or WORK_LEARN_ACCESS_TOKEN_FILE to sync." };
+
+  try {
+    const started = Date.now();
+    const response = await fetch(`${apiUrl}/api/health`);
+    const body = await response.json().catch(() => ({})) as { ok?: boolean; service?: string };
+    checks.api = { ok: response.ok && body.ok === true, status: response.status, service: body.service, latencyMs: Date.now() - started };
+  } catch (error) {
+    checks.api = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  store?.close();
+  const failed = Object.values(checks).some((value) => typeof value === "object" && value !== null && (value as { ok?: boolean }).ok === false);
+  console.log(JSON.stringify(report, null, 2));
+  if (failed) process.exitCode = 1;
 }
 
 async function exportNotes(args: string[]) {
