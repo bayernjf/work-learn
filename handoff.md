@@ -34,7 +34,7 @@ Agent 中调用 Skill
 
 - [x] 定义 Session/Event 和 LearningMaterial 数据结构
 - [x] 建立 Supabase schema、migration 和 RLS
-- [x] 增加 `012_sync_timestamps.sql`，支持本地 ↔ 云端双向增量同步和复习状态同步（待用户执行 migration）
+- [x] 增加 `012_sync_timestamps.sql` 和 `013_sync_tombstones.sql`，支持本地 ↔ 云端双向增量同步、复习状态同步与删除传播（待用户执行 migration）
 - [x] 实现 Hono API 的 Supabase 鉴权与 materials 读写接口
 - [x] 保存学习材料时自动创建待复习项
 - [x] 实现 reviews 查询和完成状态更新接口

@@ -115,7 +115,7 @@
 - **顺序**：`learn sync` = pull → push → pull，降低并发期间漏拉的概率。
 - **复习队列**：同步 `review_items`，按 `material_id` 归并，因此一个设备完成复习后其他设备能看到。
 - **同步范围**：sessions + learning_materials + question_translations + review_items。
-- **删除**：当前版本还不做删除同步/tombstone；编辑和完成状态可以同步，删除暂不传播。
+- **删除**：通过 tombstone 同步。本地删除材料/问题会写入墓碑，push 时传播；另一端按 `deleted_at >= updated_at` 删除。当前不做级联 session 删除入口，删除材料会连带其 review 墓碑。
 
 ---
 
