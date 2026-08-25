@@ -55,8 +55,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 下一步：
 
-- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
-- `/authorize` 参数缺失时改为按规范带 `error` 重定向回 `redirect_uri`，而不是返回 JSON 400。
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）。
 
 测试：`pnpm test` 全绿（`apps/api`：PAT/OAuth/鉴权与 scope 解析 22 例；`packages/mcp-server`：工具与 scope 守卫 15 例；`packages/shared-schema` 11 例；`packages/setup` 5 例；`packages/local-store` 5 例）。
 
