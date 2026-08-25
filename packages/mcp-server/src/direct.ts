@@ -12,6 +12,7 @@ import {
   saveQuestionTranslationInputSchema,
   syncBatchInputSchema,
   syncReviewColumns,
+  syncTombstoneColumns,
   type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
@@ -263,23 +264,31 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
   let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
   let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
   let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
+  let tombstonesQuery = supabase.from("sync_tombstones").select(syncTombstoneColumns).eq("user_id", userId);
   if (trimmed) {
     sessionsQuery = sessionsQuery.gte("updated_at", trimmed);
     materialsQuery = materialsQuery.gte("updated_at", trimmed);
     questionsQuery = questionsQuery.gte("updated_at", trimmed);
     reviewsQuery = reviewsQuery.gte("updated_at", trimmed);
+    tombstonesQuery = tombstonesQuery.gte("deleted_at", trimmed);
   }
-  const [sessions, materials, questions, reviews] = await Promise.all([
+  const [sessions, materials, questions, reviews, tombstones] = await Promise.all([
     sessionsQuery.order("updated_at", { ascending: true }),
     materialsQuery.order("updated_at", { ascending: true }),
     questionsQuery.order("updated_at", { ascending: true }),
-    reviewsQuery.order("updated_at", { ascending: true })
+    reviewsQuery.order("updated_at", { ascending: true }),
+    tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
   return {
     sessions: (ok(sessions) as Record<string, unknown>[]).map(normalizeSyncSession),
     materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
     questions: (ok(questions) as Record<string, unknown>[]).map(normalizeQuestion),
     reviews: (ok(reviews) as Record<string, unknown>[]).map(normalizeReview),
+    tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
+      id: String(row.id),
+      entity: String(row.entity),
+      deletedAt: String(row.deleted_at)
+    })),
     serverCursor: new Date().toISOString()
   };
 };
@@ -383,6 +392,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     updated_at: r.updatedAt
   }));
 
+  await applyCloudTombstones(supabase, userId, parsed.tombstones);
   await upsertWithLww(supabase, userId, "sessions", sessionRows);
   await upsertWithLww(supabase, userId, "learning_materials", materialRows);
   await upsertWithLww(supabase, userId, "question_translations", questionRows);
@@ -393,6 +403,28 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     materials: materialRows.length,
     questions: questionRows.length,
     reviews: reviewRows.length,
+    tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
   };
+};
+
+const cloudTableForEntity: Record<string, "sessions" | "learning_materials" | "question_translations" | "review_items"> = {
+  session: "sessions",
+  material: "learning_materials",
+  question: "question_translations",
+  review: "review_items"
+};
+
+const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, tombstones: ReadonlyArray<{ id: string; entity: string; deletedAt: string }>) => {
+  for (const t of tombstones) {
+    const table = cloudTableForEntity[t.entity];
+    if (!table) continue;
+    const deleted = await supabase.from(table).delete().eq("user_id", userId).eq("id", t.id).lte("updated_at", t.deletedAt);
+    if (deleted.error) throw new Error(deleted.error.message);
+    const upserted = await supabase
+      .from("sync_tombstones")
+      .upsert({ user_id: userId, id: t.id, entity: t.entity, deleted_at: t.deletedAt }, { onConflict: "user_id,entity,id" })
+      .select();
+    if (upserted.error) throw new Error(upserted.error.message);
+  }
 };
