@@ -79,6 +79,51 @@ test("material save feeds the review queue and can be marked mastered", () => {
   });
 });
 
+test("generatePractice turns recent materials into exercise prompts", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "api design" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "api design",
+      originalText: "make the API to not couple with UI",
+      explanation: "Decouple is the natural verb here.",
+      usefulExpressions: ["decouple the API from the UI"],
+      corrections: ["decouple the API from the UI"],
+      vocabulary: ["decouple"],
+      practicePrompts: ["Write two examples using decouple."],
+      tags: ["api", "architecture"]
+    });
+
+    const practice = store.generatePractice({ limit: 3 });
+    assert.equal(practice.materials.length, 1);
+    assert.ok(practice.exercises.some((exercise: { type: string }) => exercise.type === "reuse"));
+    assert.ok(practice.exercises.some((exercise: { prompt: string }) => exercise.prompt.includes("decouple the API from the UI")));
+  });
+});
+
+test("getUserPatterns summarizes recent saved language", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codebuddy", topic: "database" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codebuddy",
+      topic: "database",
+      originalText: "optimize the query",
+      usefulExpressions: ["optimize the query", "avoid a full table scan"],
+      corrections: ["optimize the query"],
+      vocabulary: ["query"],
+      practicePrompts: [],
+      tags: ["database", "performance"]
+    });
+
+    const patterns = store.getUserPatterns({ days: 30, limit: 5 });
+    assert.equal(patterns.counts.materials, 1);
+    assert.equal(patterns.topTags[0]?.value, "database");
+    assert.equal(patterns.usefulExpressions[0]?.value, "avoid a full table scan");
+  });
+});
+
 test("exportMarkdown writes an overwritable day file", () => {
   withStore((store, dir) => {
     const session = store.createSession({ source: "codebuddy", topic: "db" });

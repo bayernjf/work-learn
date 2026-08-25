@@ -16,7 +16,7 @@ function stubClient() {
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["order", "lte", "single"]) {
+    for (const method of ["order", "lte", "single", "limit"]) {
       builder[method] = () => builder;
     }
     builder.select = (columns?: string) => {
@@ -107,6 +107,21 @@ test("no read hands the internal search column to a client", async () => {
   assert.equal(columns[0], materialColumns);
   assert.equal(columns[1], materialColumns);
   assert.ok(columns[2]?.includes(`learning_materials(${materialColumns})`));
+});
+
+test("generatePractice and getUserPatterns are scoped to the user", async () => {
+  const { client, calls } = stubClient();
+  const ctx = createDirectContext(client, USER);
+  await ctx.generatePractice({ limit: 2 });
+  await ctx.getUserPatterns({ days: 7 });
+  assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
+});
+
+test("read-only token can generate practice and patterns", async () => {
+  const { client } = stubClient();
+  const ctx = createDirectContext(client, USER, ["read"]);
+  await ctx.generatePractice({});
+  await ctx.getUserPatterns({});
 });
 
 test("a read-only token cannot write", async () => {
