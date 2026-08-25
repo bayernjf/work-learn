@@ -239,6 +239,45 @@ test("unsynced includes local review completion", () => {
   });
 });
 
+
+test("deleting a material records tombstones for push", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "delete me" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "delete me",
+      originalText: "this will be removed",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+    const reviewId = (store.getReviewItems()[0] as { review_id: string }).review_id;
+    store.deleteMaterial(material.id);
+    const batch = store.unsynced();
+    assert.ok(batch.tombstones.some((t) => t.entity === "material" && t.id === material.id));
+    assert.ok(batch.tombstones.some((t) => t.entity === "review" && t.id === reviewId));
+    assert.equal(batch.materials.length, 0);
+  });
+});
+
+test("a remote tombstone deletes the local row and is not re-pushed", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "remote delete" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "remote delete",
+      originalText: "gone from another device",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+    store.applyRemoteBatch({
+      sessions: [], materials: [], questions: [], reviews: [],
+      tombstones: [{ id: material.id, entity: "material", deletedAt: new Date().toISOString() }]
+    });
+    assert.equal(store.searchCorpus().materials.length, 0);
+    assert.equal(store.unsynced().tombstones.length, 0);
+  });
+});
+
 test("exportMarkdown writes an overwritable day file", () => {
   withStore((store, dir) => {
     const session = store.createSession({ source: "codebuddy", topic: "db" });
