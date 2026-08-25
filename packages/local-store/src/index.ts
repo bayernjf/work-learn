@@ -10,6 +10,7 @@ import {
   getUserPatternsInputSchema,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
+  syncBatchInputSchema,
   type PracticeMaterial,
   type PracticeQuestion,
   type QuestionTranslation,
@@ -41,6 +42,9 @@ type MaterialRow = {
   practice_prompts: string;
   tags: string;
   created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+  synced_at: string | null;
 };
 
 type QuestionRow = {
@@ -51,6 +55,9 @@ type QuestionRow = {
   translation: string;
   topic: string | null;
   created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+  synced_at: string | null;
 };
 
 type SessionRow = {
@@ -58,6 +65,22 @@ type SessionRow = {
   source: string;
   topic: string | null;
   created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+  synced_at: string | null;
+};
+
+type ReviewRow = {
+  id: string;
+  material_id: string;
+  status: "pending" | "completed" | "snoozed";
+  due_at: string;
+  interval_days: number;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+  sync_status: SyncStatus;
+  synced_at: string | null;
 };
 
 export const DEFAULT_DB_PATH = join(homedir(), ".work-learn", "work-learn.db");
@@ -68,7 +91,10 @@ CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   source TEXT NOT NULL,
   topic TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'local_only',
+  synced_at TEXT
 );
 CREATE TABLE IF NOT EXISTS learning_materials (
   id TEXT PRIMARY KEY,
@@ -84,7 +110,8 @@ CREATE TABLE IF NOT EXISTS learning_materials (
   tags TEXT NOT NULL DEFAULT '[]',
   sync_status TEXT NOT NULL DEFAULT 'local_only',
   synced_at TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS question_translations (
   id TEXT PRIMARY KEY,
@@ -96,18 +123,26 @@ CREATE TABLE IF NOT EXISTS question_translations (
   topic TEXT,
   sync_status TEXT NOT NULL DEFAULT 'local_only',
   synced_at TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS qt_session_norm_idx ON question_translations(session_id, question_norm);
 CREATE INDEX IF NOT EXISTS materials_created_idx ON learning_materials(created_at DESC);
 CREATE TABLE IF NOT EXISTS review_items (
   id TEXT PRIMARY KEY,
-  material_id TEXT NOT NULL REFERENCES learning_materials(id) ON DELETE CASCADE,
+  material_id TEXT NOT NULL UNIQUE REFERENCES learning_materials(id) ON DELETE CASCADE,
   status TEXT NOT NULL DEFAULT 'pending',
   due_at TEXT NOT NULL,
   interval_days INTEGER NOT NULL DEFAULT 0,
   completed_at TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'local_only',
+  synced_at TEXT
+);
+CREATE TABLE IF NOT EXISTS sync_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
 );
 `;
 
@@ -137,6 +172,28 @@ export class LocalStore {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.db.exec(schema);
+    this.migrate();
+  }
+
+  private columns(table: string) {
+    return new Set((this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>).map((column) => column.name));
+  }
+
+  private migrate() {
+    const now = new Date().toISOString();
+    const ensureColumn = (table: string, name: string, definition: string) => {
+      if (!this.columns(table).has(name)) this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+    };
+    ensureColumn("sessions", "updated_at", `TEXT NOT NULL DEFAULT '${now}'`);
+    ensureColumn("sessions", "sync_status", "TEXT NOT NULL DEFAULT 'local_only'");
+    ensureColumn("sessions", "synced_at", "TEXT");
+    ensureColumn("learning_materials", "updated_at", `TEXT NOT NULL DEFAULT '${now}'`);
+    ensureColumn("question_translations", "updated_at", `TEXT NOT NULL DEFAULT '${now}'`);
+    ensureColumn("review_items", "updated_at", `TEXT NOT NULL DEFAULT '${now}'`);
+    ensureColumn("review_items", "sync_status", "TEXT NOT NULL DEFAULT 'local_only'");
+    ensureColumn("review_items", "synced_at", "TEXT");
+    this.db.exec(`CREATE TABLE IF NOT EXISTS sync_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);`);
+    this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS review_material_unique_idx ON review_items(material_id);`);
   }
 
   close(): void {
@@ -148,9 +205,9 @@ export class LocalStore {
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
     this.db
-      .prepare("INSERT INTO sessions (id, source, topic, created_at) VALUES (?, ?, ?, ?)")
-      .run(id, parsed.source, parsed.topic ?? null, createdAt);
-    return { id, source: parsed.source, topic: parsed.topic ?? null, createdAt };
+      .prepare("INSERT INTO sessions (id, source, topic, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run(id, parsed.source, parsed.topic ?? null, createdAt, createdAt);
+    return { id, source: parsed.source, topic: parsed.topic ?? null, createdAt, updatedAt: createdAt };
   }
 
   saveMaterial(input: unknown) {
@@ -160,8 +217,8 @@ export class LocalStore {
     this.db
       .prepare(
         `INSERT INTO learning_materials
-         (id, session_id, source, topic, original_text, explanation, useful_expressions, corrections, vocabulary, practice_prompts, tags, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, session_id, source, topic, original_text, explanation, useful_expressions, corrections, vocabulary, practice_prompts, tags, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
       .run(
         id,
@@ -175,13 +232,14 @@ export class LocalStore {
         JSON.stringify(parsed.vocabulary),
         JSON.stringify(parsed.practicePrompts),
         JSON.stringify(parsed.tags),
+        createdAt,
         createdAt
       );
 
     // A saved material feeds the local review queue, mirroring the cloud.
     this.db
-      .prepare("INSERT INTO review_items (id, material_id, due_at, created_at) VALUES (?, ?, ?, ?)")
-      .run(crypto.randomUUID(), id, createdAt, createdAt);
+      .prepare("INSERT INTO review_items (id, material_id, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run(crypto.randomUUID(), id, createdAt, createdAt, createdAt);
 
     return { id, sessionId: parsed.sessionId, source: parsed.source, topic: parsed.topic, createdAt };
   }
@@ -205,10 +263,10 @@ export class LocalStore {
     this.db
       .prepare(
         `INSERT INTO question_translations
-         (id, session_id, source, question, question_norm, translation, topic, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+         (id, session_id, source, question, question_norm, translation, topic, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run(id, parsed.sessionId, parsed.source, parsed.question, norm, parsed.translation, parsed.topic ?? null, createdAt);
+      .run(id, parsed.sessionId, parsed.source, parsed.question, norm, parsed.translation, parsed.topic ?? null, createdAt, createdAt);
 
     return { id, sessionId: parsed.sessionId, source: parsed.source, question: parsed.question, translation: parsed.translation, topic: parsed.topic, createdAt };
   }
@@ -286,34 +344,124 @@ export class LocalStore {
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
-        `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = 1
+        `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = 1, updated_at = ?, sync_status = 'local_only'
          WHERE id = ? AND status = 'pending'`
       )
-      .run(new Date().toISOString(), reviewId);
+      .run(new Date().toISOString(), new Date().toISOString(), reviewId);
     if (result.changes === 0) throw new Error("Review item not found or already completed");
     return { id: reviewId, status: "completed" };
   }
 
-  /** All local-only rows, ready to be pushed to the cloud. */
+  /** Local rows that still need to be pushed, including review state. */
   unsynced() {
-    const sessions = this.db.prepare("SELECT * FROM sessions ORDER BY created_at").all() as SessionRow[];
+    const sessions = this.db.prepare("SELECT * FROM sessions WHERE sync_status = 'local_only' ORDER BY created_at").all() as SessionRow[];
     const materials = this.db.prepare("SELECT * FROM learning_materials WHERE sync_status = 'local_only' ORDER BY created_at").all() as MaterialRow[];
     const questions = this.db.prepare("SELECT * FROM question_translations WHERE sync_status = 'local_only' ORDER BY created_at").all() as QuestionRow[];
+    const reviews = this.db.prepare("SELECT * FROM review_items WHERE sync_status = 'local_only' ORDER BY created_at").all() as ReviewRow[];
     return {
       sessions: sessions.map(toSession),
       materials: materials.map(toMaterial),
-      questions: questions.map(toQuestion)
+      questions: questions.map(toQuestion),
+      reviews: reviews.map(toReview)
     };
   }
 
-  /** Mark rows as synced after a successful push. */
-  markSynced(ids: { materials: string[]; questions: string[] }) {
+  getMeta(key: string): string | undefined {
+    const row = this.db.prepare("SELECT value FROM sync_meta WHERE key = ?").get(key) as { value: string } | undefined;
+    return row?.value;
+  }
+
+  setMeta(key: string, value: string) {
+    this.db.prepare("INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
+  }
+
+  lastPulledAt() {
+    return this.getMeta("last_pulled_at");
+  }
+
+  /** Apply a cloud snapshot using last-write-wins by updated_at. */
+  applyRemoteBatch(batch: unknown) {
+    const parsed = syncBatchInputSchema.parse(batch);
     const now = new Date().toISOString();
-    const markMaterial = this.db.prepare("UPDATE learning_materials SET sync_status = 'synced', synced_at = ? WHERE id = ?");
-    const markQuestion = this.db.prepare("UPDATE question_translations SET sync_status = 'synced', synced_at = ? WHERE id = ?");
+    const upsertSession = this.db.prepare(`
+      INSERT INTO sessions (id, source, topic, created_at, updated_at, sync_status, synced_at)
+      VALUES (@id, @source, @topic, @createdAt, @updatedAt, 'synced', @now)
+      ON CONFLICT(id) DO UPDATE SET
+        source = excluded.source, topic = excluded.topic, updated_at = excluded.updated_at,
+        sync_status = 'synced', synced_at = excluded.synced_at
+      WHERE excluded.updated_at >= sessions.updated_at
+    `);
+    const upsertMaterial = this.db.prepare(`
+      INSERT INTO learning_materials
+        (id, session_id, source, topic, original_text, explanation, useful_expressions, corrections, vocabulary, practice_prompts, tags, created_at, updated_at, sync_status, synced_at)
+      VALUES (@id, @sessionId, @source, @topic, @originalText, @explanation, @usefulExpressions, @corrections, @vocabulary, @practicePrompts, @tags, @createdAt, @updatedAt, 'synced', @now)
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = excluded.session_id, source = excluded.source, topic = excluded.topic,
+        original_text = excluded.original_text, explanation = excluded.explanation,
+        useful_expressions = excluded.useful_expressions, corrections = excluded.corrections,
+        vocabulary = excluded.vocabulary, practice_prompts = excluded.practice_prompts, tags = excluded.tags,
+        updated_at = excluded.updated_at, sync_status = 'synced', synced_at = excluded.synced_at
+      WHERE excluded.updated_at >= learning_materials.updated_at
+    `);
+    const upsertQuestion = this.db.prepare(`
+      INSERT INTO question_translations
+        (id, session_id, source, question, question_norm, translation, topic, created_at, updated_at, sync_status, synced_at)
+      VALUES (@id, @sessionId, @source, @question, @questionNorm, @translation, @topic, @createdAt, @updatedAt, 'synced', @now)
+      ON CONFLICT(id) DO UPDATE SET
+        session_id = excluded.session_id, source = excluded.source, question = excluded.question,
+        question_norm = excluded.question_norm, translation = excluded.translation, topic = excluded.topic,
+        updated_at = excluded.updated_at, sync_status = 'synced', synced_at = excluded.synced_at
+      WHERE excluded.updated_at >= question_translations.updated_at
+    `);
+    const findReviewByMaterial = this.db.prepare("SELECT id, updated_at FROM review_items WHERE material_id = ?");
+    const updateReviewByMaterial = this.db.prepare(`
+      UPDATE review_items SET id = @id, status = @status, due_at = @dueAt, interval_days = @intervalDays,
+        completed_at = @completedAt, updated_at = @updatedAt, sync_status = 'synced', synced_at = @now
+      WHERE material_id = @materialId AND @updatedAt >= updated_at
+    `);
+    const insertReview = this.db.prepare(`
+      INSERT INTO review_items (id, material_id, status, due_at, interval_days, completed_at, created_at, updated_at, sync_status, synced_at)
+      VALUES (@id, @materialId, @status, @dueAt, @intervalDays, @completedAt, @createdAt, @updatedAt, 'synced', @now)
+    `);
+    const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0 };
     const tx = this.db.transaction(() => {
-      for (const id of ids.materials) markMaterial.run(now, id);
-      for (const id of ids.questions) markQuestion.run(now, id);
+      for (const row of parsed.sessions) {
+        upsertSession.run({ ...row, now });
+        counts.sessions++;
+      }
+      for (const row of parsed.materials) {
+        upsertMaterial.run({ ...row, usefulExpressions: JSON.stringify(row.usefulExpressions), corrections: JSON.stringify(row.corrections), vocabulary: JSON.stringify(row.vocabulary), practicePrompts: JSON.stringify(row.practicePrompts), tags: JSON.stringify(row.tags), now });
+        counts.materials++;
+      }
+      for (const row of parsed.questions) {
+        upsertQuestion.run({ ...row, questionNorm: normalizeQuestion(row.question), now });
+        counts.questions++;
+      }
+      for (const row of parsed.reviews) {
+        const existing = findReviewByMaterial.get(row.materialId) as { id: string; updated_at: string } | undefined;
+        if (existing) updateReviewByMaterial.run({ ...row, now });
+        else insertReview.run({ ...row, now });
+        counts.reviews++;
+      }
+    });
+    tx();
+    return counts;
+  }
+
+  /** Mark rows as synced after a successful push. */
+  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[] }) {
+    const now = new Date().toISOString();
+    const statements = [
+      ["sessions", ids.sessions ?? []],
+      ["learning_materials", ids.materials ?? []],
+      ["question_translations", ids.questions ?? []],
+      ["review_items", ids.reviews ?? []]
+    ] as const;
+    const tx = this.db.transaction(() => {
+      for (const [table, ids] of statements) {
+        const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ?`);
+        for (const id of ids) stmt.run(now, id);
+      }
     });
     tx();
   }
@@ -387,7 +535,21 @@ function toMaterial(row: MaterialRow) {
     vocabulary: jsonOrEmpty(row.vocabulary),
     practicePrompts: jsonOrEmpty(row.practice_prompts),
     tags: jsonOrEmpty(row.tags),
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toReview(row: ReviewRow) {
+  return {
+    id: row.id,
+    materialId: row.material_id,
+    status: row.status,
+    dueAt: row.due_at,
+    intervalDays: row.interval_days,
+    completedAt: row.completed_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -399,7 +561,8 @@ function toQuestion(row: QuestionRow): QuestionTranslation {
     question: row.question,
     translation: row.translation,
     topic: row.topic ?? undefined,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -408,7 +571,8 @@ function toSession(row: SessionRow) {
     id: row.id,
     source: row.source,
     topic: row.topic,
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
