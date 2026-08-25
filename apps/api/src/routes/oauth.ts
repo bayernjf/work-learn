@@ -86,12 +86,37 @@ oauthRoute.get("/authorize", async (c) => {
   const state = params.state ?? "";
   const responseType = params.response_type;
 
-  if (responseType !== "code" || !clientId || !redirectUri || !codeChallenge) {
-    return c.json({ error: "invalid_request", error_description: "Missing client_id, redirect_uri, or code_challenge" }, 400);
+  // RFC 6749 4.1.2.1 splits authorize errors in two. Anything wrong with
+  // client_id or redirect_uri has to be shown here, because redirecting on an
+  // unverified redirect_uri is an open redirect. Everything after that must go
+  // back to the client, or its callback handler waits forever while the user
+  // stares at a JSON blob in a popup.
+  if (!clientId || !redirectUri) {
+    return c.json({ error: "invalid_request", error_description: "Missing client_id or redirect_uri" }, 400);
   }
   const client = await getClient(clientId);
   if (!client || !client.redirect_uris.includes(redirectUri)) {
     return c.json({ error: "invalid_client" }, 400);
+  }
+
+  const errorBack = (error: string, description: string) => {
+    const target = new URL(redirectUri);
+    target.searchParams.set("error", error);
+    target.searchParams.set("error_description", description);
+    if (state) target.searchParams.set("state", state);
+    return c.redirect(target.toString(), 302);
+  };
+
+  if (responseType !== "code") {
+    return errorBack("unsupported_response_type", "Only response_type=code is supported");
+  }
+  if (!codeChallenge) {
+    return errorBack("invalid_request", "Missing code_challenge");
+  }
+  // Codes are always stored and verified as S256, so accepting another method
+  // would fail at the token exchange instead — far from the actual mistake.
+  if (params.code_challenge_method && params.code_challenge_method !== "S256") {
+    return errorBack("invalid_request", "Only code_challenge_method=S256 is supported");
   }
 
   const webBase = process.env.WORK_LEARN_WEB_URL ?? "https://work-learn.pages.dev";
