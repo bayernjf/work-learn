@@ -1005,8 +1005,9 @@ code {
 .copy-chip:active { transform: translateY(1px); }
 .copy-chip:disabled { opacity: 0.45; cursor: not-allowed; }
 .copy-chip:disabled:hover { color: inherit; border-color: inherit; background: none; }
-.chip-gate { position: relative; display: inline-flex; flex: 0 0 auto; }
-.chip-gate[data-tip]:hover::after {
+.chip-gate { display: inline-flex; flex: 0 0 auto; }
+[data-tip] { position: relative; }
+[data-tip]:hover::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 8px);
@@ -1025,7 +1026,7 @@ code {
   white-space: normal;
   pointer-events: none;
 }
-.chip-gate[data-tip]:hover::before {
+[data-tip]:hover::before {
   content: "";
   position: absolute;
   top: calc(100% + 2px);
