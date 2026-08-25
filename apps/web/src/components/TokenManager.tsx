@@ -153,7 +153,12 @@ export function TokenManager({ session, onTokenSelect, onActiveTokens, tokenFile
                   {t.tokens.remove}
                 </button>
               ) : (
-                <button type="button" className="token-revoke" onClick={() => handleRevoke(token.id)}>
+                <button
+                  type="button"
+                  className="token-revoke"
+                  data-tip={t.tokens.revokeTitle}
+                  onClick={() => handleRevoke(token.id)}
+                >
                   {t.tokens.revoke}
                 </button>
               )}
