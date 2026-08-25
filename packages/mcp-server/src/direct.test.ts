@@ -2,23 +2,27 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus } from "./direct.js";
 
-type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string };
+type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string; single?: boolean };
 
 /**
  * Records the query chain instead of talking to Postgres. The service role
  * bypasses RLS, so what these tests assert is that the filters are present at
  * all -- a missing user_id here is a cross-user read, not a failed query.
  */
-function stubClient() {
+function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null }) {
   const calls: Call[] = [];
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["order", "lte", "single", "limit", "gte", "maybeSingle"]) {
+    for (const method of ["order", "lte", "single", "limit", "gte"]) {
       builder[method] = () => builder;
     }
+    builder.maybeSingle = () => {
+      call.single = true;
+      return builder;
+    };
     builder.select = (columns?: string) => {
       call.columns = columns;
       return builder;
@@ -31,8 +35,10 @@ function stubClient() {
       call.filters.push([column, value]);
       return builder;
     };
-    builder.then = (resolve: (result: { data: unknown; error: null }) => unknown) =>
-      Promise.resolve(resolve({ data: [], error: null }));
+    builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
+      if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
+    };
     return builder;
   };
 
@@ -128,6 +134,22 @@ test("fetchSyncSnapshot scopes every table to the user", async () => {
   assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
   assert.ok(calls.some((call) => call.filters.some(([column]) => column === "updated_at")));
 });
+
+test("getSyncStatus scopes counts and returns the latest material update", async () => {
+  const latest = "2026-08-25T10:00:00.000Z";
+  const { client, calls } = stubClient({
+    counts: { sessions: 1, learning_materials: 2, question_translations: 3, review_items: 4, sync_tombstones: 5 },
+    latestUpdatedAt: latest
+  });
+
+  const status = await getSyncStatus(client, USER);
+
+  assert.deepEqual(status.counts, { sessions: 1, materials: 2, questions: 3, reviews: 4, tombstones: 5 });
+  assert.equal(status.latestMaterialUpdatedAt, latest);
+  assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
+  assert.ok(calls.some((call) => call.table === "learning_materials" && call.single === true));
+});
+
 
 test("deleteCloudMaterial tombstones the review and material", async () => {
   const deleted: string[] = [];
