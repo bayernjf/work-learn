@@ -20,6 +20,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 ### 产品定义
 
+- [使用手册](docs/usage.md)：保存、搜索、复习、问题翻译、CLI 和隐私边界。
 - [产品方案](docs/product-proposal.md)：产品定位、用户流程、核心架构和平台策略。
 - [品牌标志](docs/brand.md)：`W` 路径标志的概念、颜色和使用规则。
 - [Logo 方案](docs/brand-concepts.md)：三个备用的 `W + L` 融合方向。

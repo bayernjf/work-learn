@@ -233,6 +233,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
   footer: {
     landing: "Product overview",
     repo: "GitHub",
+    usage: "Usage guide",
     docs: "Setup docs",
   },
 
@@ -486,6 +487,7 @@ export const zh: Strings = {
   footer: {
     landing: "介绍页",
     repo: "GitHub",
+    usage: "使用手册",
     docs: "配置文档",
   },
 
