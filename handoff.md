@@ -58,6 +58,9 @@ Agent 中调用 Skill
 - [x] Web 改为运行时从 `/api/config` 拉取公开 Supabase 配置，修复 Pages 漏配 `VITE_SUPABASE_*` 导致的白屏
 - [x] Pages 同源代理 `/api/*` 到 Vercel；`vercel.json` 补 `/api/*` routes，修复生产 API 平台级 404
 - [x] 增加同步可观测性：Web 端“Connect an agent”面板展示云端同步计数和最近保存时间；CLI 增加 `learn doctor`；`learn sync` 输出本地库统计
+- [x] Skill 抽取质量统一：8 点自检清单 + 正反例，不同宿主 Agent 按同一标准判断什么值得存
+- [x] Web 练习入口：语料卡片"练习"按钮调用 /api/practice；首页"你的学习模式"面板调用 /api/patterns
+- [x] 复习卡片改为先回忆再展开：默认只显示原文，点"显示答案"后展开 better/why/reuse/词汇和练习按钮
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
 
 ## 接入分发待办
