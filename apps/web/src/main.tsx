@@ -394,12 +394,24 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
       <div className="agent-connect-body">
         <p>{t.connect.intro(LANDING_URL)}</p>
 
+        <p className="connect-overview-lead">{t.connect.overviewLead}</p>
+        <ol className="connect-overview">
+          {t.connect.overview.map(([title, body]) => (
+            <li key={title}>
+              <span>
+                <b>{title}</b> {body}
+              </span>
+            </li>
+          ))}
+        </ol>
+
         <p className="connect-lane">{t.connect.laneToken}</p>
         <p className="connect-step">{t.connect.tokenStep}</p>
         <p className="connect-hint">{t.connect.tokenHint}</p>
         <TokenManager session={session} onTokenSelect={setRemoteToken} tokenFilePath={tokenFilePath} />
 
         <p className="connect-lane">{t.connect.laneRoute}</p>
+        <p className="connect-hint">{t.connect.routeNote}</p>
         <div className="route-tabs" role="tablist" aria-label={t.connect.routesLabel}>
           {routes.map(([id, label, recommended]) => (
             <button
