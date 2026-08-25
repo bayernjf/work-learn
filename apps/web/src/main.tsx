@@ -310,11 +310,16 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
   const RAW_BASE = window.location.origin;
   const API_URL = "https://work-learn-api.vercel.app";
   const [remoteToken, setRemoteToken] = useState<string | null>(null);
+  const [activeTokens, setActiveTokens] = useState(0);
   // No fallback to session.access_token. That JWT also authenticates straight
   // against Supabase, cannot be revoked from the token list, and would end up
   // written into an agent's config file on disk.
   const token = remoteToken ?? TOKEN_PLACEHOLDER;
   const hasToken = remoteToken !== null;
+  // A token's plaintext exists only in the response that created it, so after a
+  // reload the snippets cannot be filled from tokens that already exist. Say so,
+  // rather than pointing at a step the user has demonstrably already done.
+  const copyGate = activeTokens > 0 ? t.connect.copyGateStale : t.connect.copyGate;
   const [promptMode, setPromptMode] = useState<"inline" | "file">("inline");
   // Editable because a token kept somewhere else should not mean hand-editing
   // every command on this page.
@@ -408,7 +413,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
         <p className="connect-lane">{t.connect.laneToken}</p>
         <p className="connect-step">{t.connect.tokenStep}</p>
         <p className="connect-hint">{t.connect.tokenHint}</p>
-        <TokenManager session={session} onTokenSelect={setRemoteToken} tokenFilePath={tokenFilePath} />
+        <TokenManager session={session} onTokenSelect={setRemoteToken} onActiveTokens={setActiveTokens} tokenFilePath={tokenFilePath} />
 
         <p className="connect-lane">{t.connect.laneRoute}</p>
         <p className="connect-hint">{t.connect.routeNote}</p>
@@ -445,7 +450,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
                   </button>
                 ))}
               </div>
-              <span className="chip-gate" data-tip={promptReady ? undefined : t.connect.copyGate}>
+              <span className="chip-gate" data-tip={promptReady ? undefined : copyGate}>
                 <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
                   {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
                 </button>
@@ -495,7 +500,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
             </div>
             <div className="code-block compact">
               <code className="code-line">{authHeader}</code>
-              <span className="chip-gate" data-tip={hasToken ? undefined : t.connect.copyGate}>
+              <span className="chip-gate" data-tip={hasToken ? undefined : copyGate}>
                 <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
                   {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
                 </button>
@@ -517,7 +522,7 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
               <summary>{t.connect.manualSummary}</summary>
               <div className="code-block">
                 <pre className="code-pre">{mcpConfig}</pre>
-                <span className="chip-gate" data-tip={hasToken ? undefined : t.connect.copyGate}>
+                <span className="chip-gate" data-tip={hasToken ? undefined : copyGate}>
                   <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
                     {copiedId === "mcp" ? t.common.copied : t.common.copy}
                   </button>

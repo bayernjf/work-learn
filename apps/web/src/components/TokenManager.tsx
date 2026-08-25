@@ -12,10 +12,11 @@ import { useI18n } from "../i18n/context";
 type Props = {
   session: Session;
   onTokenSelect: (token: string | null) => void;
+  onActiveTokens: (count: number) => void;
   tokenFilePath: string;
 };
 
-export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
+export function TokenManager({ session, onTokenSelect, onActiveTokens, tokenFilePath }: Props) {
   const { t, formatDate: formatIso } = useI18n();
   const formatDate = (value: string | null) => (value ? formatIso(value) : t.tokens.never);
   const [tokens, setTokens] = useState<PersonalAccessToken[]>([]);
@@ -70,6 +71,7 @@ export function TokenManager({ session, onTokenSelect, tokenFilePath }: Props) {
     try {
       const result = await fetchPersonalAccessTokens(session);
       setTokens(result.data);
+      onActiveTokens(result.data.filter((token) => !token.revoked_at).length);
     } catch (err) {
       setError(err instanceof Error ? err.message : t.tokens.errLoad);
     }
