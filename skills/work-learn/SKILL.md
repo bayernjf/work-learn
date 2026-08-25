@@ -17,6 +17,8 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `search_corpus` — search the user's saved materials. Optional `query`.
 - `get_review_items` — get items due for review.
 - `mark_mastered` — mark a review item completed by `reviewId`.
+- `generate_practice` — generate structured practice prompts from one or recent saved materials. The tool returns prompts and source material; you run the practice conversation with the user.
+- `get_user_patterns` — summarize recent topics, reusable expressions, corrections, vocabulary, and suggested next practice.
 
 ## Saving a question and its translation
 
@@ -53,6 +55,23 @@ Rules for every save:
 - `translation` should be the idiomatic, natural English a fluent speaker would actually ask, not a literal word-for-word rendering.
 - Show the translation you are saving, then save it — in single-save mode as well as in session/auto mode. The user asking for the save is the go-ahead; showing it is so they can see the rendering, not so they can approve the call.
 - Never save secrets, tokens, passwords, or private paths; keep them out of what you propose, and redaction also applies on save.
+
+## Canonical extraction contract
+
+Different host models must produce the same shape. Follow this strictly:
+
+- Save **1-3 items per conversation turn**, never bulk-transcribe the chat.
+- Prefer reusable collocations, idiomatic phrasing, register choices, and corrections the user can reuse tomorrow.
+- Do not save greetings, generic technical jargon, secrets, tokens, private paths, or one-off details with no language value.
+- `originalText` is the exact wording worth improving or remembering. Keep it short.
+- `usefulExpressions` contains phrases to reuse. Use complete collocations when possible, not isolated words.
+- `corrections` contains one natural alternative only when there is a real correction.
+- `explanation` is one line: explain register, grammar, collocation, or why the natural version fits.
+- `practicePrompts` contains one fresh work-relevant sentence prompt that reuses the item.
+- `vocabulary` contains only words worth active recall.
+- `tags` has 2-4 short lowercase labels.
+- Preserve the user's voice: make it more natural, but do not turn it into fake textbook English.
+- If the bar is not met, save nothing and say why.
 
 ## When the user asks to save something
 
@@ -107,10 +126,12 @@ Tags:           <2-4 short labels>               -> tags
 One item per `save_material` call: pass one string per array, not a merged list.
 Never save a `Vocabulary` or `Tags` value the user has not seen.
 
-## Search and review
+## Search, practice, and review
 
 - When the user asks "have I seen this before?" or searches past material, call `search_corpus`.
-- When the user wants to study, call `get_review_items`, present the items, and after the user confirms they remember one, call `mark_mastered`.
+- When the user wants to practice, call `generate_practice`. Ask one exercise at a time, wait for the answer, give concise feedback, then continue.
+- When the user asks what they should focus on or what mistakes they repeat, call `get_user_patterns` and turn the result into a short study plan.
+- When the user wants to review due items, call `get_review_items`, present the items, and after the user confirms they remember one, call `mark_mastered`.
 
 ## Principles
 

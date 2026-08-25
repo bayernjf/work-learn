@@ -124,7 +124,7 @@ Do this:
 3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
-6. Tell me to restart the client, then confirm these six tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered.`,
+6. Tell me to restart the client, then confirm these eight tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, generate_practice, get_user_patterns.`,
     modesLabel: "Where the token goes",
     modeInline: "Token in the prompt",
     modeFile: "Token in a file",
@@ -140,7 +140,7 @@ Do this:
    If you run it from anywhere else, add --repo <path to the clone>.
 3. That installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor and OpenCode, backs up each config file before writing it, records the path instead of the token, and installs the Work Learn skill. Do not hand-edit the config files yourself.
 4. If it fails, show me its output and stop. Do not fall back to putting a token in a config file.
-5. Tell me to restart the client, then confirm these six tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered.
+5. Tell me to restart the client, then confirm these eight tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, generate_practice, get_user_patterns.
 
 The skill it installs is the same one published at ${skillUrl}.`,
     tokenStep: "Create a personal access token. Every route below needs one.",
@@ -378,7 +378,7 @@ export const zh: Strings = {
 3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
-6. 告诉我需要重启客户端，然后确认这 6 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered。`,
+6. 告诉我需要重启客户端，然后确认这 8 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、generate_practice、get_user_patterns。`,
     modesLabel: "token 放在哪",
     modeInline: "token 写进提示词",
     modeFile: "token 存在文件里",
@@ -394,7 +394,7 @@ export const zh: Strings = {
    如果你在别的目录执行，就加上 --repo <clone 的路径>。
 3. 这个安装器会自己检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，写入前先备份各自的配置文件，配置里记的是这个路径而不是 token，并且会顺带装上 Work Learn 的 skill。不要自己手改这些配置文件。
 4. 如果它失败了，把它的输出给我看然后停下。不要退而把 token 写进配置文件。
-5. 告诉我需要重启客户端，然后确认这 6 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered。
+5. 告诉我需要重启客户端，然后确认这 8 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、generate_practice、get_user_patterns。
 
 它装的 skill 就是 ${skillUrl} 这一份。`,
     tokenStep: "创建一个 personal access token，下面三种方式都需要它。",

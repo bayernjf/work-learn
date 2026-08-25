@@ -72,16 +72,16 @@ Skill 不负责直接实现数据库、账号、同步和复习算法，而是�
 
 ### 3.2 Learning MCP Server / API
 
-统一提供以下能力（已实现的六个工具）：
+统一提供以下能力（已实现的八个工具）：
 
 - `create_session`：为当前对话建立会话；
 - `save_material`：保存学习材料；
 - `save_question_translation`：保存用户原始提问与地道英文译法；
 - `search_corpus`：搜索用户语料；
 - `get_review_items`：获取待复习内容；
-- `mark_mastered`：记录掌握状态。
-
-规划中但尚未实现：`generate_practice`（生成练习）、`get_user_patterns`（返回重复错误和学习模式）。
+- `mark_mastered`：记录掌握状态；
+- `generate_practice`：基于一条或最近多条语料生成结构化练习提示；
+- `get_user_patterns`：汇总近期高频表达、纠错模式、词汇和练习建议。
 
 Skill 只需要知道这些能力，不需要耦合具体数据库或前端实现。
 

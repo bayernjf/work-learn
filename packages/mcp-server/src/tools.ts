@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -17,6 +17,8 @@ export interface WorkLearnContext {
   searchCorpus(query?: string): Promise<unknown> | unknown;
   getReviewItems(): Promise<unknown> | unknown;
   markMastered(reviewId: string): Promise<unknown> | unknown;
+  generatePractice(input: unknown): Promise<unknown> | unknown;
+  getUserPatterns(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
@@ -70,6 +72,22 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
     description: "Mark a Work Learn review item as completed.",
     inputSchema: { reviewId: z.string() }
   }, async ({ reviewId }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.markMastered(reviewId)) }] }));
+
+  server.registerTool("generate_practice", {
+    description: "Generate structured practice prompts from recent Work Learn materials, or one material when materialId is provided. The host agent asks the questions and gives feedback; this tool does not call a model.",
+    inputSchema: {
+      materialId: z.string().optional().describe("Optional saved material id to practice instead of recent materials."),
+      limit: z.number().int().min(1).max(10).optional().describe("Number of recent materials to use, default 3.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.generatePractice(generatePracticeInputSchema.parse(input))) }] }));
+
+  server.registerTool("get_user_patterns", {
+    description: "Summarize the user's recent saved English patterns: recurring topics, expressions, corrections, vocabulary, and practice suggestions.",
+    inputSchema: {
+      days: z.number().int().min(1).max(365).optional().describe("Lookback window in days, default 30."),
+      limit: z.number().int().min(1).max(20).optional().describe("Maximum items per category, default 8.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getUserPatterns(getUserPatternsInputSchema.parse(input))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

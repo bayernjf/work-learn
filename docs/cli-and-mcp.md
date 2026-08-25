@@ -76,6 +76,8 @@ MCP 当前提供：
 - `search_corpus`
 - `get_review_items`
 - `mark_mastered`
+- `generate_practice`
+- `get_user_patterns`
 
 Claude Desktop 的本地配置示例（本地优先，无需 env）：
 

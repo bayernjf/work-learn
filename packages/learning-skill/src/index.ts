@@ -12,5 +12,6 @@ export const learningSkillToolNames = [
   "search_corpus",
   "get_review_items",
   "generate_practice",
+  "get_user_patterns",
   "mark_mastered"
 ] as const;

@@ -1,6 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createSessionInputSchema,
+  generatePracticeFromMaterials,
+  generatePracticeInputSchema,
+  getUserPatternsFromItems,
+  getUserPatternsInputSchema,
   hasScope,
   materialColumns,
   questionTranslationColumns,
@@ -148,8 +152,73 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       .select()
       .single();
     return ok(result);
+  },
+
+  async generatePractice(input) {
+    requireScope(scopes, "read");
+    const parsed = generatePracticeInputSchema.parse(input);
+    let query = supabase
+      .from("learning_materials")
+      .select(materialColumns)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+    if (parsed.materialId) query = query.eq("id", parsed.materialId).limit(1);
+    else query = query.limit(50);
+    const rows = ok(await query) as unknown[];
+    return generatePracticeFromMaterials((rows as Record<string, unknown>[]).map(normalizeMaterial), parsed);
+  },
+
+  async getUserPatterns(input) {
+    requireScope(scopes, "read");
+    const parsed = getUserPatternsInputSchema.parse(input);
+    const [materialRows, questionRows] = await Promise.all([
+      supabase
+        .from("learning_materials")
+        .select(materialColumns)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100),
+      supabase
+        .from("question_translations")
+        .select(questionTranslationColumns)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(100)
+    ]);
+    return getUserPatternsFromItems(
+      (ok(materialRows) as Record<string, unknown>[]).map(normalizeMaterial),
+      (ok(questionRows) as Record<string, unknown>[]).map(normalizeQuestion),
+      parsed
+    );
   }
 });
+
+const normalizeMaterial = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  sessionId: String(row.session_id),
+  source: String(row.source),
+  topic: String(row.topic),
+  originalText: String(row.original_text),
+  explanation: String(row.explanation ?? ""),
+  usefulExpressions: toStringArray(row.useful_expressions),
+  corrections: toStringArray(row.corrections),
+  vocabulary: toStringArray(row.vocabulary),
+  practicePrompts: toStringArray(row.practice_prompts),
+  tags: toStringArray(row.tags),
+  createdAt: String(row.created_at)
+});
+
+const normalizeQuestion = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  sessionId: String(row.session_id),
+  source: String(row.source),
+  question: String(row.question),
+  translation: String(row.translation),
+  topic: row.topic ? String(row.topic) : undefined,
+  createdAt: String(row.created_at)
+});
+
+const toStringArray = (value: unknown): string[] => Array.isArray(value) ? value.map(String) : [];
 
 /**
  * Query a user's question/translation pairs, newest first. Kept apart from

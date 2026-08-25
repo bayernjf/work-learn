@@ -4,8 +4,14 @@ import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 import {
   createSessionInputSchema,
+  generatePracticeFromMaterials,
+  generatePracticeInputSchema,
+  getUserPatternsFromItems,
+  getUserPatternsInputSchema,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
+  type PracticeMaterial,
+  type PracticeQuestion,
   type QuestionTranslation,
   type SaveMaterialInput,
   type SaveQuestionTranslationInput
@@ -255,6 +261,28 @@ export class LocalStore {
       .all(new Date().toISOString());
   }
 
+  recentMaterials(limit = 10) {
+    return (this.db
+      .prepare("SELECT * FROM learning_materials ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as MaterialRow[]).map(toMaterial);
+  }
+
+  recentQuestions(limit = 50) {
+    return (this.db
+      .prepare("SELECT * FROM question_translations ORDER BY created_at DESC LIMIT ?")
+      .all(limit) as QuestionRow[]).map(toQuestion);
+  }
+
+  generatePractice(input: unknown) {
+    const parsed = generatePracticeInputSchema.parse(input);
+    return generatePracticeFromMaterials(this.recentMaterials(50) as PracticeMaterial[], parsed);
+  }
+
+  getUserPatterns(input: unknown) {
+    const parsed = getUserPatternsInputSchema.parse(input);
+    return getUserPatternsFromItems(this.recentMaterials(100) as PracticeMaterial[], this.recentQuestions(100) as PracticeQuestion[], parsed);
+  }
+
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
@@ -395,7 +423,9 @@ export const createLocalContext = (store: LocalStore) => ({
   saveQuestionTranslation: (input: unknown) => store.saveQuestionTranslation(input),
   searchCorpus: (query?: string) => store.searchCorpus(query),
   getReviewItems: () => store.getReviewItems(),
-  markMastered: (reviewId: string) => store.markMastered(reviewId)
+  markMastered: (reviewId: string) => store.markMastered(reviewId),
+  generatePractice: (input: unknown) => store.generatePractice(input),
+  getUserPatterns: (input: unknown) => store.getUserPatterns(input)
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;

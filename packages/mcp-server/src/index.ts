@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -7,7 +7,9 @@ export type McpToolName =
   | "save_question_translation"
   | "search_corpus"
   | "get_review_items"
-  | "mark_mastered";
+  | "mark_mastered"
+  | "generate_practice"
+  | "get_user_patterns";
 
 type McpConfig = {
   apiUrl: string;
@@ -27,7 +29,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "generate_practice", "get_user_patterns"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -51,6 +53,16 @@ export const getReviewItems = (config: McpConfig) => json(config, "/reviews");
 
 export const markMastered = (config: McpConfig, reviewId: string) => json(config, `/reviews/${encodeURIComponent(reviewId)}/complete`, { method: "POST" });
 
+export const generatePractice = (config: McpConfig, input: unknown) => {
+  const parsed = generatePracticeInputSchema.parse(input);
+  return json(config, "/practice", { method: "POST", body: JSON.stringify(parsed) });
+};
+
+export const getUserPatterns = (config: McpConfig, input: unknown) => {
+  const parsed = getUserPatternsInputSchema.parse(input);
+  return json(config, "/patterns", { method: "POST", body: JSON.stringify(parsed) });
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -70,5 +82,7 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   saveQuestionTranslation: (input) => saveQuestionTranslation(config, input),
   searchCorpus: (query) => searchCorpus(config, query),
   getReviewItems: () => getReviewItems(config),
-  markMastered: (reviewId) => markMastered(config, reviewId)
+  markMastered: (reviewId) => markMastered(config, reviewId),
+  generatePractice: (input) => generatePractice(config, input),
+  getUserPatterns: (input) => getUserPatterns(config, input)
 });

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema } from "@work-learn/shared-schema";
 import { ScopeError, createDirectContext, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
@@ -159,6 +159,34 @@ app.post("/reviews/:id/complete", async (c) => {
     return c.json({ data: await ctx.markMastered(c.req.param("id")) });
   } catch (error) {
     return c.json(errorResponse("Could not complete review item", error));
+  }
+});
+
+app.post("/practice", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = generatePracticeInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid practice request", issues: parsed.error.issues }, 400);
+
+  try {
+    return c.json({ data: await ctx.generatePractice(parsed.data) });
+  } catch (error) {
+    return c.json(errorResponse("Could not generate practice", error));
+  }
+});
+
+app.post("/patterns", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = getUserPatternsInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid patterns request", issues: parsed.error.issues }, 400);
+
+  try {
+    return c.json({ data: await ctx.getUserPatterns(parsed.data) });
+  } catch (error) {
+    return c.json(errorResponse("Could not load user patterns", error));
   }
 });
 
