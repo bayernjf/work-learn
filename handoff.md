@@ -83,7 +83,7 @@ Agent 中调用 Skill
 
 **已知风险点（需实测或决策）**
 1. ~~`/jwks` 返回空 `keys: []`~~ 已解决：access token 改为 opaque 随机串（`wloat_` 前缀，SHA-256 哈希存 `oauth_tokens`），`/jwks` 与元数据里的 `jwks_uri` 一并删除。副作用：旧的 HS256 token 全部失效，客户端需重新授权（目前没有真实客户端跑通过流程，无影响）。
-2. `/authorize` 参数缺失时返回 JSON 400，而非按规范带 `error` 参数重定向回 `redirect_uri`。多数客户端不会触发，但一致性套件可能要求重定向。
+2. ~~`/authorize` 参数缺失时返回 JSON 400，而非按规范带 `error` 参数重定向回 `redirect_uri`~~ 已解决：`client_id` / `redirect_uri` 未通过验证时仍返回 400（跳转即开放重定向），其余错误按 RFC 6749 4.1.2.1 带 `error`、`error_description`、`state` 302 回 `redirect_uri`。同时把 `code_challenge_method` 非 S256 的情况提前到 `/authorize` 拒掉，否则要到 token 交换阶段才报错。
 3. `/token` 的 `redirect_uri` 客户端不传就不校验（传了才比对），属轻微偏差，可接受。
 
 **待实测清单（需真实客户端）**
