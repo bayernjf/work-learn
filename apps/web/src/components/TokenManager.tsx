@@ -102,26 +102,40 @@ export function TokenManager({ session, onTokenSelect, onActiveTokens, tokenFile
     }
   };
 
+  // Both of these are one round trip plus a reload, which is long enough that a
+  // row sitting unchanged reads as a dead button. Move the row first and put it
+  // back if the request fails.
+  const applyOptimistic = (next: PersonalAccessToken[]) => {
+    setTokens(next);
+    onActiveTokens(next.filter((token) => !token.revoked_at).length);
+  };
+
   const handleRevoke = async (id: string) => {
     setError("");
+    const previous = tokens;
+    applyOptimistic(tokens.map((token) => (token.id === id ? { ...token, revoked_at: new Date().toISOString() } : token)));
+    if (created?.id === id) {
+      setCreated(null);
+      onTokenSelect(null);
+    }
     try {
       await revokePersonalAccessToken(session, id);
-      if (created?.id === id) {
-        setCreated(null);
-        onTokenSelect(null);
-      }
       await load();
     } catch (err) {
+      applyOptimistic(previous);
       setError(err instanceof Error ? err.message : t.tokens.errRevoke);
     }
   };
 
   const handleDelete = async (id: string) => {
     setError("");
+    const previous = tokens;
+    applyOptimistic(tokens.filter((token) => token.id !== id));
     try {
       await deletePersonalAccessToken(session, id);
       await load();
     } catch (err) {
+      applyOptimistic(previous);
       setError(err instanceof Error ? err.message : t.tokens.errDelete);
     }
   };
