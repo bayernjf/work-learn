@@ -74,6 +74,8 @@ export const en = {
     deleteMaterial: "Could not delete learning material",
     deleteQuestion: "Could not delete question translation",
     syncStatus: "Could not load sync status",
+    practice: "Could not generate practice",
+    patterns: "Could not load your patterns",
   },
 
   empty: {
@@ -109,6 +111,38 @@ export const en = {
     questions: "questions",
     reviews: "reviews",
     tombstones: "deletions synced",
+  },
+
+  patterns: {
+    eyebrow: "Your patterns",
+    heading: "What keeps coming up",
+    subheading: "Aggregated from your last 30 days of saved work.",
+    loading: "Looking at your recent corpus…",
+    empty: "Save a few conversations to see your patterns here.",
+    materials: "materials",
+    questions: "questions",
+    expressions: "expressions",
+    correctionsMade: "corrections",
+    tags: "Topics",
+    expressionsTitle: "Reusable expressions",
+    correctionsTitle: "Corrections you have needed",
+    vocabularyTitle: "Vocabulary",
+    suggestionsTitle: "What to do next",
+    refresh: "Refresh",
+  },
+
+  practice: {
+    practice: "Practice",
+    practicing: "Preparing…",
+    hide: "Hide",
+    heading: "Practice this",
+    empty: "No exercises generated for this item yet.",
+    types: {
+      reuse: "Reuse",
+      recall: "Recall",
+      correction: "Correction",
+      apply: "Apply"
+    }
   },
 
   connect: {
@@ -348,6 +382,8 @@ export const zh: Strings = {
     deleteMaterial: "删除学习材料失败",
     deleteQuestion: "删除提问翻译失败",
     syncStatus: "加载同步状态失败",
+    practice: "生成练习失败",
+    patterns: "加载学习模式失败",
   },
 
   empty: {
@@ -383,6 +419,38 @@ export const zh: Strings = {
     questions: "条提问",
     reviews: "条复习",
     tombstones: "条删除记录",
+  },
+
+  patterns: {
+    eyebrow: "你的学习模式",
+    heading: "最近反复出现的内容",
+    subheading: "汇总自你最近 30 天保存的工作语料。",
+    loading: "正在分析你最近的语料…",
+    empty: "多存几段对话，这里会出现你的学习模式。",
+    materials: "条材料",
+    questions: "条提问",
+    expressions: "个表达",
+    correctionsMade: "处纠错",
+    tags: "话题",
+    expressionsTitle: "可复用表达",
+    correctionsTitle: "你需要过的纠错",
+    vocabularyTitle: "词汇",
+    suggestionsTitle: "下一步做什么",
+    refresh: "刷新",
+  },
+
+  practice: {
+    practice: "练习",
+    practicing: "准备中…",
+    hide: "收起",
+    heading: "练习这条",
+    empty: "这条还没有生成练习。",
+    types: {
+      reuse: "复用",
+      recall: "回忆",
+      correction: "纠错",
+      apply: "应用"
+    }
   },
 
   connect: {

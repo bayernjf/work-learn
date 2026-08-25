@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, LearningMaterial, QuestionTranslation, ReviewItem, SyncStatus } from "./lib/api";
+import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, generatePractice, getUserPatterns, LearningMaterial, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -56,6 +56,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [syncStatusLoading, setSyncStatusLoading] = useState(false);
   const [syncStatusError, setSyncStatusError] = useState("");
+  const [patterns, setPatterns] = useState<UserPatterns | null>(null);
+  const [patternsLoading, setPatternsLoading] = useState(false);
+  const [patternsError, setPatternsError] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -74,6 +77,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
     void refreshSyncStatus(session);
+    void loadPatterns(session);
   }, [session, reloadKey]);
 
   useEffect(() => {
@@ -199,6 +203,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const loadPatterns = async (currentSession: Session) => {
+    setPatternsLoading(true);
+    setPatternsError("");
+    try {
+      const result = await getUserPatterns(currentSession);
+      setPatterns(result.data);
+    } catch (error) {
+      setPatterns(null);
+      setPatternsError(error instanceof Error ? error.message : t.errors.patterns);
+    } finally {
+      setPatternsLoading(false);
+    }
+  };
+
   if (!session) {
     return <AuthScreen
       mode={authMode}
@@ -237,6 +255,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
             <button className="text-button" onClick={() => setReloadKey((key) => key + 1)}>{t.common.tryAgain}</button>
           </div>
         ) : <>
+          <PatternsPanel patterns={patterns} loading={patternsLoading} error={patternsError} onRefresh={() => void loadPatterns(session)} />
           <label className="search" data-empty={empty}>
             <SearchIcon />
             <input
@@ -264,7 +283,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
             : empty ? <EmptyCorpus />
             : visible.length === 0
               ? <p className="corpus-empty">{query.trim() ? t.desk.noMatchQuery(query.trim()) : t.desk.noMatchTopic}</p>
-              : <MaterialList materials={visible} onDelete={handleDeleteMaterial} />}
+              : <MaterialList session={session} materials={visible} onDelete={handleDeleteMaterial} />}
         </>}
       </section>
       <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
@@ -635,6 +654,114 @@ function AgentConnect({ session, initialOpen, syncStatus, syncStatusLoading, syn
   );
 }
 
+function PracticeButton({ session, materialId }: { session: Session; materialId: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState<PracticeResult | null>(null);
+
+  const toggle = async () => {
+    if (open) { setOpen(false); return; }
+    setOpen(true);
+    if (result) return;
+    setLoading(true);
+    setError("");
+    try {
+      const response = await generatePractice(session, materialId);
+      setResult(response.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errors.practice);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="practice-block">
+      <button type="button" className="text-button practice-toggle" onClick={toggle}>
+        {open ? t.practice.hide : t.practice.practice}
+      </button>
+      {open ? (
+        <div className="practice-panel">
+          <h4>{t.practice.heading}</h4>
+          {loading ? <p className="practice-meta">{t.practice.practicing}</p> : null}
+          {error ? <p className="practice-meta practice-error">{error}</p> : null}
+          {result?.exercises.length ? (
+            <ol className="practice-list">
+              {result.exercises.map((exercise, index) => (
+                <li key={`${exercise.type}-${index}`}>
+                  <span className={`practice-type practice-type-${exercise.type}`}>{t.practice.types[exercise.type]}</span>
+                  <p>{exercise.prompt}</p>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+          {!loading && !error && !result?.exercises.length ? <p className="practice-meta">{t.practice.empty}</p> : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function PatternsPanel({ patterns, loading, error, onRefresh }: { patterns: UserPatterns | null; loading: boolean; error: string; onRefresh: () => void }) {
+  const { t } = useI18n();
+  return (
+    <section className="patterns-panel" aria-live="polite">
+      <div className="patterns-head">
+        <div>
+          <p className="eyebrow">{t.patterns.eyebrow}</p>
+          <h3>{t.patterns.heading}</h3>
+        </div>
+        <button type="button" className="text-button" disabled={loading} onClick={onRefresh}>{loading ? t.sync.refreshing : t.patterns.refresh}</button>
+      </div>
+      {loading && !patterns ? <p className="patterns-meta">{t.patterns.loading}</p> : null}
+      {error ? <p className="patterns-meta patterns-error">{error}</p> : null}
+      {patterns ? (
+        <>
+          <div className="patterns-counts">
+            <span><b>{patterns.counts.materials}</b>{t.patterns.materials}</span>
+            <span><b>{patterns.counts.questionTranslations}</b>{t.patterns.questions}</span>
+            <span><b>{patterns.counts.usefulExpressions}</b>{t.patterns.expressions}</span>
+            <span><b>{patterns.counts.corrections}</b>{t.patterns.correctionsMade}</span>
+          </div>
+          {patterns.topTags.length ? (
+            <div className="patterns-tags">
+              <span className="patterns-label">{t.patterns.tags}</span>
+              {patterns.topTags.map((tag) => <span className="pattern-chip" key={tag.value}>{tag.value} <b>{tag.count}</b></span>)}
+            </div>
+          ) : null}
+          {patterns.usefulExpressions.length ? (
+            <div className="patterns-col">
+              <p className="patterns-label">{t.patterns.expressionsTitle}</p>
+              <ul>{patterns.usefulExpressions.map((item) => <li key={item.value}>{item.value}</li>)}</ul>
+            </div>
+          ) : null}
+          {patterns.corrections.length ? (
+            <div className="patterns-col">
+              <p className="patterns-label">{t.patterns.correctionsTitle}</p>
+              <ul>{patterns.corrections.map((item) => <li key={item.value}>{item.value}</li>)}</ul>
+            </div>
+          ) : null}
+          {patterns.vocabulary.length ? (
+            <div className="patterns-col">
+              <p className="patterns-label">{t.patterns.vocabularyTitle}</p>
+              <ul>{patterns.vocabulary.map((item) => <li key={item.value}>{item.value}</li>)}</ul>
+            </div>
+          ) : null}
+          {patterns.suggestions.length ? (
+            <div className="patterns-col">
+              <p className="patterns-label">{t.patterns.suggestionsTitle}</p>
+              <ul>{patterns.suggestions.map((suggestion, index) => <li key={index}>{suggestion}</li>)}</ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {!loading && !error && !patterns ? <p className="patterns-meta">{t.patterns.empty}</p> : null}
+    </section>
+  );
+}
+
 function MaterialDetail({ label, value }: { label: string; value: string | undefined }) {
   if (!value) return null;
   return (
@@ -645,7 +772,7 @@ function MaterialDetail({ label, value }: { label: string; value: string | undef
   );
 }
 
-function MaterialList({ materials, onDelete }: { materials: LearningMaterial[]; onDelete: (id: string) => void }) {
+function MaterialList({ session, materials, onDelete }: { session: Session; materials: LearningMaterial[]; onDelete: (id: string) => void }) {
   const { t, formatDate } = useI18n();
   return (
     <div className="material-list">
@@ -658,6 +785,7 @@ function MaterialList({ materials, onDelete }: { materials: LearningMaterial[]; 
           <MaterialDetail label={t.material.why} value={material.explanation} />
           <MaterialDetail label={t.material.reuse} value={material.practice_prompts[0]} />
           <MaterialDetail label={t.material.vocabulary} value={material.vocabulary.join(", ")} />
+          <PracticeButton session={session} materialId={material.id} />
           <div className="card-actions">
             <span>{formatDate(material.created_at)}</span>
             <button type="button" className="text-button" onClick={() => onDelete(material.id)}>{t.common.delete}</button>
