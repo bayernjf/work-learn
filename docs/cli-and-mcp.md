@@ -9,6 +9,7 @@ learn capture  # 采集 stdin 或剪贴板，脱敏后写入本地库
 learn review   # 查看本地待复习项
 learn search   # 搜索本地语料（--q 或直接跟关键词）
 learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN）
+learn delete   # 删除本地材料或提问，并记录 tombstone
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
 ```
 
@@ -37,6 +38,17 @@ learn sync --api-url https://work-learn-api.vercel.app
 ```
 
 token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供。冲突策略为 last-write-wins：两端修改同一条记录时，`updated_at` 更新的一端胜出。
+
+### delete
+
+删除一条本地材料或提问，并写入 tombstone，下次 `learn sync` 会把删除传播到云端和其他设备：
+
+```bash
+learn delete material --id <material-id>
+learn delete question --id <question-id>
+```
+
+Web 端的材料卡片和提问卡片也提供了删除按钮，删除会直接写云端 tombstone。
 
 ### export
 

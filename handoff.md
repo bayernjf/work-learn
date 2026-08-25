@@ -46,6 +46,7 @@ Agent 中调用 Skill
 - [x] 实现连接 Hono API 的 MCP Server
 - [x] 创建基础 Web 语料库页面和登录入口
 - [x] 实现 `learn capture` CLI 的 stdin 和剪贴板采集
+- [x] Web 端和 `learn delete` 支持删除材料/提问，删除经 tombstone 跨设备传播
 - [x] 增加 API Key、Token、密码和绝对路径脱敏
 - [x] 用真实 Supabase 测试账号验证 Auth、RLS、materials 保存、复习生成与完成、搜索闭环
 - [x] API 部署到 Vercel（`work-learn-api`，health 返回 200）
