@@ -219,7 +219,13 @@ async function doctor(args: string[]) {
     : process.env.WORK_LEARN_ACCESS_TOKEN?.trim()
       ? "env:WORK_LEARN_ACCESS_TOKEN"
       : undefined;
-  checks.token = tokenSource ? { ok: true, source: tokenSource } : { ok: false, hint: "Set WORK_LEARN_ACCESS_TOKEN or WORK_LEARN_ACCESS_TOKEN_FILE to sync." };
+  let token: string | undefined;
+  try {
+    token = resolveToken();
+    checks.token = { ok: true, source: tokenSource };
+  } catch (error) {
+    checks.token = { ok: false, source: tokenSource, error: error instanceof Error ? error.message : String(error) };
+  }
 
   try {
     const started = Date.now();
@@ -228,6 +234,18 @@ async function doctor(args: string[]) {
     checks.api = { ok: response.ok && body.ok === true, status: response.status, service: body.service, latencyMs: Date.now() - started };
   } catch (error) {
     checks.api = { ok: false, error: error instanceof Error ? error.message : String(error) };
+  }
+
+  if (token) {
+    try {
+      const response = await fetch(`${apiUrl}/api/sync/status`, { headers: { Authorization: `Bearer ${token}` } });
+      const body = await response.json().catch(() => ({})) as { data?: { counts: Record<string, number>; latestMaterialUpdatedAt: string | null }; error?: string; details?: string };
+      checks.cloudSync = response.ok && body.data
+        ? { ok: true, status: response.status, ...body.data }
+        : { ok: false, status: response.status, error: body.details ?? body.error ?? `Cloud sync status failed with ${response.status}` };
+    } catch (error) {
+      checks.cloudSync = { ok: false, error: error instanceof Error ? error.message : String(error) };
+    }
   }
 
   store?.close();

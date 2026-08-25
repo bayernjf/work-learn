@@ -124,6 +124,46 @@ test("getUserPatterns summarizes recent saved language", () => {
   });
 });
 
+test("stats reports local corpus counts and pending changes", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codebuddy", topic: "stats" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codebuddy",
+      topic: "stats",
+      originalText: "push the local changes first",
+      usefulExpressions: ["push the local changes first"],
+      corrections: [],
+      vocabulary: ["push"],
+      practicePrompts: [],
+      tags: ["sync"]
+    });
+    store.saveQuestionTranslation({
+      sessionId: session.id,
+      source: "codebuddy",
+      question: "这个状态怎么看？",
+      translation: "How can I inspect this status?"
+    });
+
+    const stats = store.stats();
+
+    assert.equal(stats.dbPath.endsWith("test.db"), true);
+    assert.equal(stats.lastPulledAt, null);
+    assert.equal(stats.counts.sessions, 1);
+    assert.equal(stats.counts.materials, 1);
+    assert.equal(stats.counts.questions, 1);
+    assert.equal(stats.counts.reviews, 1);
+    assert.equal(stats.counts.tombstones, 0);
+    assert.equal(stats.pending.sessions, 1);
+    assert.equal(stats.pending.materials, 1);
+    assert.equal(stats.pending.questions, 1);
+    assert.equal(stats.pending.reviews, 1);
+    assert.equal(stats.pending.tombstones, 0);
+    assert.equal(typeof stats.latestUpdatedAt, "string");
+  });
+});
+
+
 
 test("bidirectional sync applies remote rows and review state", () => {
   withStore((store) => {

@@ -432,8 +432,8 @@ export class LocalStore {
     this.db.prepare("INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(key, value);
   }
 
-  lastPulledAt() {
-    return this.getMeta("last_pulled_at");
+  lastPulledAt(): string | null {
+    return this.getMeta("last_pulled_at") ?? null;
   }
 
   stats() {

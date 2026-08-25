@@ -73,6 +73,55 @@ Different host models must produce the same shape. Follow this strictly:
 - Preserve the user's voice: make it more natural, but do not turn it into fake textbook English.
 - If the bar is not met, save nothing and say why.
 
+## Quality self-check (run before every save)
+
+Different host models vary in how aggressive they are. Before you call `save_material`, silently check each candidate against this list. If two or more fail, drop the item.
+
+1. **Reusable tomorrow?** Would the user plausibly write or say this in another real conversation? One-off facts, names, and situation-specific detail do not qualify.
+2. **A real language object?** There must be a collocation, register choice, grammar point, or correction at stake — not just an idea that happened to be in English.
+3. **Short and exact?** `originalText` and `usefulExpressions[0]` should each be one phrase or sentence, not a paragraph. Cut everything else into context.
+4. **Correction is genuinely better?** Only populate `corrections` when the user's wording is unnatural, ambiguous, or ungrammatical. Do not "correct" acceptable English into a different style.
+5. **Explanation teaches the why?** One line. It must name the reason (collocation, register, grammar, concision), not just assert that the alternative is better.
+6. **Practice prompt is new work?** It must ask the user to produce a fresh sentence about their own work, not to copy or translate the saved line.
+7. **Voice preserved?** The natural version should sound like the user speaking more naturally, not like a textbook or a different person.
+8. **Clean?** No API keys, tokens, passwords, private keys, absolute home paths, or host-specific internal identifiers.
+
+If the conversation only contains routine technical English with no learning object, save nothing and say so plainly. One strong item beats three filler items.
+
+### Worked examples
+
+**Save (collocation):**
+
+```
+Worth learning: decouple the validation from the persistence layer
+Original:       make the API to not couple with UI
+Better:         decouple the API from the UI
+Why:            "Decouple X from Y" is the fixed collocation; "not couple with" is not.
+Reuse:          We should decouple the billing logic from the webhook handler.
+Vocabulary:     decouple
+Tags:           api, architecture
+```
+
+**Save (register / concision):**
+
+```
+Worth learning: take a closer look at the logs
+Original:       I want to carefully examine the logs in detail
+Better:         take a closer look at the logs
+Why:            Native technical register favors the shorter phrasal verb; "examine in detail" sounds stilted.
+Reuse:          Let us take a closer look at the migration before we roll it out.
+Vocabulary:
+Tags:           debugging, register
+```
+
+**Do not save:**
+
+- A whole Chinese exchange with no English produced.
+- A single common noun like "database" or "API" with no collocation around it.
+- A restatement of a product decision with no language learning object.
+- A paragraph of generated prose — extract the one reusable phrase instead.
+- Anything containing a secret or a private path.
+
 ## When the user asks to save something
 
 1. Read only the current conversation context.

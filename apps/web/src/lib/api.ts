@@ -95,6 +95,52 @@ export const completeReview = async (session: Session, reviewId: string) => {
   if (!response.ok) throw new Error(activeStrings().errors.completeReview);
 };
 
+export type PracticeExercise = {
+  type: "reuse" | "recall" | "correction" | "apply";
+  materialId: string;
+  focus: string;
+  prompt: string;
+};
+
+export type PracticeResult = {
+  generatedAt: string;
+  materials: LearningMaterial[];
+  exercises: PracticeExercise[];
+};
+
+export const generatePractice = async (session: Session, materialId?: string) => {
+  const response = await fetch("/api/practice", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(materialId ? { materialId, limit: 1 } : { limit: 5 })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.practice);
+  return (await response.json()) as { data: PracticeResult };
+};
+
+export type UserPatterns = {
+  generatedAt: string;
+  windowDays: number;
+  counts: { materials: number; questionTranslations: number; usefulExpressions: number; corrections: number };
+  topTags: { value: string; count: number }[];
+  topSources: { value: string; count: number }[];
+  recentTopics: string[];
+  usefulExpressions: { value: string; count: number }[];
+  corrections: { value: string; count: number }[];
+  vocabulary: { value: string; count: number }[];
+  suggestions: string[];
+};
+
+export const getUserPatterns = async (session: Session) => {
+  const response = await fetch("/api/patterns", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ days: 30, limit: 8 })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.patterns);
+  return (await response.json()) as { data: UserPatterns };
+};
+
 export type PersonalAccessToken = {
   id: string;
   name: string;
