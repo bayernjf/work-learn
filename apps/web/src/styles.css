@@ -1012,7 +1012,8 @@ code {
   top: calc(100% + 8px);
   right: 0;
   z-index: 10;
-  width: 220px;
+  width: max-content;
+  max-width: 220px;
   padding: 8px 10px;
   border-radius: var(--r-sm);
   background: #171a17;
