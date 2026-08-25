@@ -433,9 +433,11 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
                   </button>
                 ))}
               </div>
-              <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
-                {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
-              </button>
+              <span className="chip-gate" data-tip={promptReady ? undefined : t.connect.copyGate}>
+                <button type="button" className="copy-chip" disabled={!promptReady} onClick={() => copy("auto-prompt", agentPrompt)}>
+                  {copiedId === "auto-prompt" ? t.common.copied : t.common.copy}
+                </button>
+              </span>
             </div>
             {promptMode === "file" ? (
               <>
@@ -481,9 +483,11 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
             </div>
             <div className="code-block compact">
               <code className="code-line">{authHeader}</code>
-              <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
-                {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
-              </button>
+              <span className="chip-gate" data-tip={hasToken ? undefined : t.connect.copyGate}>
+                <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("remote-auth", authHeader)}>
+                  {copiedId === "remote-auth" ? t.common.copied : t.common.copy}
+                </button>
+              </span>
             </div>
             <p className="connect-hint">{t.connect.hint1b()}</p>
           </>
@@ -501,9 +505,11 @@ function AgentConnect({ session, initialOpen }: { session: Session; initialOpen:
               <summary>{t.connect.manualSummary}</summary>
               <div className="code-block">
                 <pre className="code-pre">{mcpConfig}</pre>
-                <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
-                  {copiedId === "mcp" ? t.common.copied : t.common.copy}
-                </button>
+                <span className="chip-gate" data-tip={hasToken ? undefined : t.connect.copyGate}>
+                  <button type="button" className="copy-chip" disabled={!hasToken} onClick={() => copy("mcp", mcpConfig)}>
+                    {copiedId === "mcp" ? t.common.copied : t.common.copy}
+                  </button>
+                </span>
               </div>
             </details>
             <p className="connect-hint">{t.connect.hint2b(DOCS_URL)}</p>
