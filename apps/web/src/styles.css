@@ -547,7 +547,19 @@ code {
   font-variant-numeric: tabular-nums;
 }
 .material-topic { letter-spacing: .01em; }
-.material-card span { margin-top: auto; }
+.material-card .card-actions {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--ink-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.material-card .card-actions .text-button { font-size: 11px; }
+.material-card .card-actions .text-button:hover { color: #b4342a; }
 
 /* Every fourth entry reads as an excerpt, which breaks the equal-card grid. */
 @media (min-width: 60rem) {

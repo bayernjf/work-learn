@@ -18,6 +18,7 @@ export const en = {
     copied: "Copied",
     copyUrl: "Copy URL",
     language: "Language",
+    delete: "Delete",
   },
 
   header: {
@@ -50,6 +51,7 @@ export const en = {
     empty: "No questions saved yet.",
     translation: "Idiomatic English",
     question: "Your question",
+    deleteConfirm: "Delete this question and its translation? It will be removed from your other devices too.",
   },
 
   time: {
@@ -68,6 +70,8 @@ export const en = {
     tokenCreate: "Could not create personal access token",
     tokenRevoke: "Could not revoke personal access token",
     tokenDelete: "Could not delete personal access token",
+    deleteMaterial: "Could not delete learning material",
+    deleteQuestion: "Could not delete question translation",
   },
 
   empty: {
@@ -228,6 +232,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     why: "Why",
     reuse: "Reuse",
     vocabulary: "Vocabulary",
+    deleteConfirm: "Delete this learning material? It will be removed from your other devices too.",
   },
 
   footer: {
@@ -272,6 +277,7 @@ export const zh: Strings = {
     copied: "已复制",
     copyUrl: "复制地址",
     language: "语言",
+    delete: "删除",
   },
 
   header: {
@@ -304,6 +310,7 @@ export const zh: Strings = {
     empty: "还没有保存过提问。",
     translation: "地道英文",
     question: "你的提问",
+    deleteConfirm: "删除这条提问和它的英文表达？删除也会同步到你的其他设备。",
   },
 
   time: {
@@ -322,6 +329,8 @@ export const zh: Strings = {
     tokenCreate: "personal access token 创建失败",
     tokenRevoke: "personal access token 吊销失败",
     tokenDelete: "personal access token 删除失败",
+    deleteMaterial: "删除学习材料失败",
+    deleteQuestion: "删除提问翻译失败",
   },
 
   empty: {
@@ -482,6 +491,7 @@ export const zh: Strings = {
     why: "为什么",
     reuse: "造句练习",
     vocabulary: "词汇",
+    deleteConfirm: "删除这条学习材料？删除也会同步到你的其他设备。",
   },
 
   footer: {

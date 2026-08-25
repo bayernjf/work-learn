@@ -58,6 +58,22 @@ export const fetchReviews = async (session: Session) => {
   return (await response.json()) as { data: ReviewItem[] };
 };
 
+export const deleteMaterial = async (session: Session, materialId: string) => {
+  const response = await fetch(`/api/materials/${encodeURIComponent(materialId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.deleteMaterial);
+};
+
+export const deleteQuestionTranslation = async (session: Session, questionId: string) => {
+  const response = await fetch(`/api/question-translations/${encodeURIComponent(questionId)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.deleteQuestion);
+};
+
 export const completeReview = async (session: Session, reviewId: string) => {
   const response = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/complete`, {
     method: "POST",

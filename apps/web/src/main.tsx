@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, fetchMaterials, fetchQuestionTranslations, fetchReviews, LearningMaterial, QuestionTranslation, ReviewItem } from "./lib/api";
+import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, LearningMaterial, QuestionTranslation, ReviewItem } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -158,6 +158,29 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const handleDeleteMaterial = async (materialId: string) => {
+    if (!session || !window.confirm(t.material.deleteConfirm)) return;
+    try {
+      await deleteMaterial(session, materialId);
+      setMaterials((current) => current.filter((material) => material.id !== materialId));
+      setResults((current) => current?.filter((material) => material.id !== materialId) ?? current);
+      setReviews((current) => current.filter((review) => review.learning_materials.id !== materialId));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t.errors.deleteMaterial);
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    if (!session || !window.confirm(t.qa.deleteConfirm)) return;
+    try {
+      await deleteQuestionTranslation(session, questionId);
+      setQuestions((current) => current.filter((question) => question.id !== questionId));
+      setQuestionResults((current) => current?.filter((question) => question.id !== questionId) ?? current);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t.errors.deleteQuestion);
+    }
+  };
+
   if (!session) {
     return <AuthScreen
       mode={authMode}
@@ -223,10 +246,10 @@ function App({ supabase }: { supabase: SupabaseClient }) {
             : empty ? <EmptyCorpus />
             : visible.length === 0
               ? <p className="corpus-empty">{query.trim() ? t.desk.noMatchQuery(query.trim()) : t.desk.noMatchTopic}</p>
-              : <MaterialList materials={visible} />}
+              : <MaterialList materials={visible} onDelete={handleDeleteMaterial} />}
         </>}
       </section>
-      <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} />
+      <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen />
         <ReviewList reviews={reviews} onComplete={handleCompleteReview} />
@@ -577,7 +600,7 @@ function MaterialDetail({ label, value }: { label: string; value: string | undef
   );
 }
 
-function MaterialList({ materials }: { materials: LearningMaterial[] }) {
+function MaterialList({ materials, onDelete }: { materials: LearningMaterial[]; onDelete: (id: string) => void }) {
   const { t, formatDate } = useI18n();
   return (
     <div className="material-list">
@@ -590,14 +613,17 @@ function MaterialList({ materials }: { materials: LearningMaterial[] }) {
           <MaterialDetail label={t.material.why} value={material.explanation} />
           <MaterialDetail label={t.material.reuse} value={material.practice_prompts[0]} />
           <MaterialDetail label={t.material.vocabulary} value={material.vocabulary.join(", ")} />
-          <span>{formatDate(material.created_at)}</span>
+          <div className="card-actions">
+            <span>{formatDate(material.created_at)}</span>
+            <button type="button" className="text-button" onClick={() => onDelete(material.id)}>{t.common.delete}</button>
+          </div>
         </article>
       ))}
     </div>
   );
 }
 
-function QuestionTranslationsSection({ questions, searching, loading }: { questions: QuestionTranslation[]; searching: boolean; loading: boolean }) {
+function QuestionTranslationsSection({ questions, searching, loading, onDelete }: { questions: QuestionTranslation[]; searching: boolean; loading: boolean; onDelete: (id: string) => void }) {
   const { t, formatDate } = useI18n();
   if (loading && questions.length === 0) return null;
   if (questions.length === 0) return null;
@@ -616,6 +642,7 @@ function QuestionTranslationsSection({ questions, searching, loading }: { questi
             <div className="qa-meta">
               {question.topic && <span className="material-topic">{question.topic}</span>}
               <span>{formatDate(question.created_at)}</span>
+              <button type="button" className="text-button" onClick={() => onDelete(question.id)}>{t.common.delete}</button>
             </div>
           </article>
         ))}
