@@ -171,14 +171,29 @@ Agent 中调用 Skill
 
 - [x] `learn run -- <agent>`：CLI 用系统 `script` 在 PTY 中运行 agent、录制终端会话、脱敏后写入本地库（`source=terminal`），作为 macOS Companion 终端采集能力的第一刀（本地优先、离线可用）；
 - macOS Companion 应用层：全局快捷键、菜单栏、离线兜底、自动采集（依赖 `learn run` 采集内核）。**M1 最小壳已落地**：`apps/companion` 是基于 Electron 的菜单栏应用，作为薄壳复用 `learn` CLI（spawn 仓库内 `tsx` 跑 `apps/cli/src/index.ts`，因此必须在 better-sqlite3 编译所用的 Node 下启动），菜单栏显示「今日采集 / 待复习 / 本地待推送 / 上次同步」，并提供「采集剪贴板 / 同步云端 / 打开 Web」三个按钮；**全局快捷键（M2）已落地**：默认 `⌘⇧L`（可用 `WORK_LEARN_HOTKEY` 覆盖）触发「拷贝当前选中文本 → `learn capture` → 还原剪贴板」并弹通知，需在本机「系统设置 › 隐私与安全性 › 辅助功能」授予权限；**离线兜底 UI（M3）已落地**：面板顶部横幅强调「离线可用 · 数据先存本地」，并展示本地库/云端状态点（绿=连通、黄=未配置 Token、红=云端不可达），同步失败按「Token 缺失 / 云端不可达」分类提示，每 8s 自动探活（`learn doctor`）；**自动采集（M4）已落地**：「自动采集」开关（持久化于 `userData` 的 `companion-config.json`）开启后，Companion 用 `osascript` 自动打开一个被 `learn run -- <shell>` 包裹的 Terminal 窗口，用户在其中进行终端 Agent 会话、关窗即自动存盘，无需手动敲 `learn run`；托盘菜单与面板均有「打开录制终端」入口（目前默认 Terminal.app，iTerm 留待增强）。
-- 间隔重复算法（SRS）：当前先不做，等练习记录积累后再替换简单复习队列。
+  - **M4 增强（rc-hook 自动录制，暂不做）**：在用户 shell 启动文件（`~/.zshrc` / `~/.bashrc`）写入 snippet + 设置 `WORK_LEARN_AUTO_CAPTURE=1` 环境变量，使**用户正常新开的任何终端窗口**默认被 `learn run` 包裹、自动录制，无需改用 Companion 开的录制窗口。决策：**排到可选增强队列末尾，主线闭环（录制→存→回看）跑顺后再做**；若做，必须默认关、显式一键开启 + 一键干净卸载，且只在原生 Terminal.app/iTerm 启用（Warp/Tmux 明确不支持），用 `unset` 环境变量防重入、并顺手 `fnm use 22` 注入 Node 22（better-sqlite3 ABI 约束）。理由：当前 M4 已能录，rc-hook 仅省「记得用录制窗口」一步，属体验优化非能力补齐；而改动用户系统级 rc 文件信任成本高、跨终端表现不一致、需兜底重入/环境注入等，性价比低于其他 P3。
+- 间隔重复算法（SRS）：**本轮已实现**。在 `shared-schema` 新增纯函数 `scheduleNextReview(prevIntervalDays, grade)`（SM-2 风格：again→立即重学、hard×1.3、good×2.1、easy×3.2；easy 且间隔≥21 天判为已掌握），云端 `direct.ts` 与本地 `local-store` 两处 `markMastered` 同步改为「按评级重排 due_at/interval_days」而非一次性标完成；API `/api/reviews/:id/complete?grade=`、web `completeReview`、MCP `mark_mastered` 均透传评级；复习卡片展开答案后显示 Again/Hard/Good/Easy 四档按钮（CSS `.grade-button`）。
+
+## 本轮功能迭代（2026-08-26）
+
+在语料库/复习闭环上新增三项能力，均已实现且 Web 类型检查通过（`apps/web` 下 `npx tsc --noEmit` 无错）：
+
+1. **SRS + 今日待复习队列**：见上「间隔重复算法」。复习从「一次性标完成」升级为按评级递增间隔的间隔重复；待复习队列即现有 ReviewList（`getReviewItems` 返回 `due_at ≤ now` 的 pending 项）。
+2. **多题型测验（确定性生成，无 LLM）**：`generatePracticeFromItems` 在原有 reuse/recall/correction/apply/question 基础上，新增 `mcq` / `fill` / `scenario` 三种可自测题型（选择、语境填空、情境应用），由材料的 vocabulary/usefulExpressions/practicePrompts 确定性生成；Web `PracticeButton` 新增 `PracticeExerciseItem` 交互组件（选项点击 / 填空检查 + 对错揭示，配套 CSS `.practice-options` / `.practice-fill`）。**说明**：全仓此前无任何 LLM 调用，高质量「AI 出题」需另接 LLM（API Key + 依赖），本轮未引入，作为后续升级项。
+3. **主动复用推送（in-app nudge）**：语料库在搜索词或选中 topic 时，顶部出现「相关已存表达」面板（`ReuseNudgePanel`，debounce 300ms 调 `/api/reuse/suggestions`），把存过的相似表达在浏览/检索时浮出。Companion 内的主动 nudge 表面（Agent 工作中浮层）留待下一步（需 Mac 重编 Electron）。
+
+### 本地预览提示
+- Web 默认 `pnpm --filter @work-learn/web dev --port 3101`；Vite proxy 把 `/api` 指向 `WORK_LEARN_API_TARGET`（默认 `http://localhost:3000`）。
+- **API 运行在 Node 20+ 即可**：Supabase JS 的 realtime 客户端原本需要原生 WebSocket（Node 22+ 才有），但 API 从不使用实时订阅，已在 `apps/api/src/lib/supabase.ts` 用 `ws` 做 polyfill（仅当 `globalThis.WebSocket` 缺失时挂上，Node 22+ 走原生）。仓库根 `.node-version` / `.nvmrc` 钉到 `20.20.2`，进入任意子目录 `fnm` 自动切到 Node 20。
+- 启动示例：`cd apps/api && SUPABASE_URL=… SUPABASE_ANON_KEY=… SUPABASE_SERVICE_ROLE_KEY=… PORT=3100 pnpm dev`
+- 注：`shared-schema` 的 `exports` 直接指向 `src/index.ts`（源码），tsx/Vite 均用源码，无需先 build；其 `tsc` 脚本仅类型检查，`generatePracticeFromItems` 在 `noUncheckedIndexedAccess` 下有预存类型告警，esbuild 运行时不校验，不影响功能。
 
 ## 需要后续确认的问题
 
-- 是否引入间隔重复算法，替换当前的一次性复习队列（当前决定暂缓）；
+- 间隔重复算法（SRS）：**本轮（2026-08-26）已实现**，见上文「间隔重复算法（SRS）」与「本轮功能迭代」；复习改为按评级递增间隔（SM-2 风格），不再是一致性标完成，原「暂缓」决定已推翻。
 - `generate_practice` 目前生成结构化练习提示，覆盖材料和提问翻译，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
 - 使用本地模型还是云端模型做语料分析；
-- 是否需要 macOS Companion 做终端会话的自动采集（手动采集已由 `learn run` 提供，自动采集待做）。
+- macOS Companion 终端自动采集（M4）：**已落地**（「自动采集」开关开启后 `osascript` 自动开录制终端，关窗即存盘）；更激进的 rc-hook 自动录制仍排到可选增强队尾（见 M4 增强）。
 
 ## 本轮修复
 
