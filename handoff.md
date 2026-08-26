@@ -169,7 +169,8 @@ Agent 中调用 Skill
 
 ### P3：更大入口
 
-- macOS Companion：全局快捷键、菜单栏、离线兜底和终端会话辅助采集；
+- [x] `learn run -- <agent>`：CLI 用系统 `script` 在 PTY 中运行 agent、录制终端会话、脱敏后写入本地库（`source=terminal`），作为 macOS Companion 终端采集能力的第一刀（本地优先、离线可用）；
+- macOS Companion 应用层：全局快捷键、菜单栏、离线兜底、自动采集（待做，依赖 `learn run` 采集内核）；
 - 间隔重复算法（SRS）：当前先不做，等练习记录积累后再替换简单复习队列。
 
 ## 需要后续确认的问题
@@ -177,7 +178,11 @@ Agent 中调用 Skill
 - 是否引入间隔重复算法，替换当前的一次性复习队列（当前决定暂缓）；
 - `generate_practice` 目前生成结构化练习提示，覆盖材料和提问翻译，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
 - 使用本地模型还是云端模型做语料分析；
-- 是否需要 macOS Companion 做终端会话的自动采集。
+- 是否需要 macOS Companion 做终端会话的自动采集（手动采集已由 `learn run` 提供，自动采集待做）。
+
+## 本轮修复
+
+- `LocalStore` 构造函数现在读取 `WORK_LEARN_DB_PATH`（原为 `options.dbPath ?? DEFAULT_DB_PATH`，忽略了该环境变量），与文档一致；可用它隔离测试库，避免污染 `~/.work-learn/work-learn.db`。
 
 CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 

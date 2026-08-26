@@ -15,7 +15,10 @@ learn delete   # 删除本地材料或提问，并记录 tombstone
 learn backup   # 备份本地 SQLite 数据库
 learn restore  # 从 SQLite 备份恢复本地数据库（需 --file 和 --yes）
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
+learn run     # 在 PTY 中运行 agent 并录制终端会话，脱敏后写入本地库
 ```
+
+可用 `WORK_LEARN_DB_PATH` 覆盖本地 SQLite 路径（例如隔离测试或同时维护多个库）。
 
 ### search
 
@@ -83,6 +86,18 @@ learn delete question --id <question-id>
 ```
 
 Web 端的材料卡片和提问卡片也提供了删除按钮，删除会直接写云端 tombstone。
+
+### run
+
+`learn run -- <command> [args...]` 通过系统 `script` 命令分配一个 PTY，运行指定 agent（如 `hermes`、`openclaw`），把整段终端会话录制下来，脱敏（API Key / 密码 / Token 等会被替换）后作为一条 `source=terminal` 的材料写入本地库，并进入复习队列。支持 `learn run -- hermes` 与 `learn run hermes` 两种写法；`--topic` 可覆盖默认主题（默认 `terminal: <command>`）。
+
+```bash
+learn run -- hermes
+learn run -- openclaw "summarize this repo"
+learn run -- bash -c "npm test" --topic "test run"
+```
+
+录制内容是原始终端 I/O，会去掉 ANSI 转义、退格和 caret 记号控制字符；超过 100k 字符会截断。该命令目前仅支持 macOS / Linux（依赖系统 `script`）。这是 macOS Companion 终端采集能力的第一刀：本地优先、离线可用，后续再由菜单栏应用封装全局快捷键。
 
 ### backup
 

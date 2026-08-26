@@ -90,6 +90,7 @@
 | `learn search` | 查本地库（原占位） |
 | **`learn sync`** | 先拉云端增量，再推送本地增量，最后再拉一次；复习状态一起同步 |
 | **`learn export`** | 本地库 → markdown（`--all` / `--from` / `--to` / `--source` / `--tag`） |
+| **`learn run`** | 在 PTY 中运行 agent，录制终端会话并脱敏后写入本地库（`source=terminal`）；仅 macOS / Linux |
 
 ### 3.4 `apps/api`
 

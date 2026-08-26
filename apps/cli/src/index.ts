@@ -1,12 +1,13 @@
-import { execFile } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { execFile, spawn } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { redactSecrets } from "@work-learn/learning-core";
 import { DEFAULT_BACKUP_DIR, DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
 
 const execFileAsync = promisify(execFile);
+const MAX_TRANSCRIPT_CHARS = 100_000;
 const [command, ...args] = process.argv.slice(2);
 
 const commands = {
@@ -20,7 +21,8 @@ const commands = {
   backup: "Back up the local SQLite database.",
   restore: "Restore the local SQLite database from a backup.",
   export: "Export local data to markdown notes.",
-  nudges: "Show or change local reuse nudge settings (on/off/status)."
+  nudges: "Show or change local reuse nudge settings (on/off/status).",
+  run: "Run an agent in a PTY and record the terminal session to the local store."
 } as const;
 
 if (command === "capture") {
@@ -45,6 +47,8 @@ if (command === "capture") {
   await exportNotes(args);
 } else if (command === "nudges") {
   await nudges(args);
+} else if (command === "run") {
+  await run(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -367,5 +371,86 @@ async function exportNotes(args: string[]) {
     console.log(JSON.stringify({ exported: written.length, files: written }, null, 2));
   } finally {
     store.close();
+  }
+}
+
+// Strip ANSI escape sequences and common terminal control codes so the
+// recorded transcript is plain, searchable text.
+function stripAnsi(input: string): string {
+  return input
+    .replace(/\x1b\[[0-9;?]*[ -/]*[@-~]/g, "")
+    .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b[()][AB0-1]/g, "")
+    .replace(/\x1b[=>]/g, "");
+}
+
+async function run(args: string[]) {
+  if (process.platform !== "darwin" && process.platform !== "linux") {
+    throw new Error("learn run requires macOS or Linux (it uses the system `script` command to allocate a PTY).");
+  }
+
+  // Accept both `learn run -- hermes` and `learn run hermes`; `--` is a separator.
+  const spawnArgs = args[0] === "--" ? args.slice(1) : args;
+  const command = spawnArgs[0];
+  if (!command) {
+    throw new Error("Usage: learn run -- <command> [args...]\nExample: learn run -- hermes");
+  }
+  const agentArgs = spawnArgs.slice(1);
+  const topic = option(args, "--topic") ?? `terminal: ${command}`;
+
+  const typescriptPath = join(tmpdir(), `work-learn-run-${Date.now()}.typescript`);
+  // `script` allocates a PTY, mirrors the session to the terminal (stdio inherited),
+  // and writes the raw I/O to typescriptPath for us to capture on exit.
+  const child = spawn("script", ["-q", typescriptPath, command, ...agentArgs], { stdio: "inherit" });
+
+  const exitCode = await new Promise<number>((resolve, reject) => {
+    child.on("exit", (code) => resolve(code ?? 0));
+    child.on("error", (error) => reject(new Error(`Failed to start ${command}: ${error.message}`)));
+  });
+
+  const raw = existsSync(typescriptPath) ? readFileSync(typescriptPath, "utf8") : "";
+  const cleaned = stripAnsi(raw)
+    .replace(/\x08/g, "")                  // backspaces emitted by full-screen TUIs
+    .replace(/\^[\x40-\x5F]/g, "")         // caret-notation control chars (e.g. ^D EOF, ^C)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/^\n+/, "")
+    .replace(/\n+$/, "");
+  const redacted = redactSecrets(cleaned);
+  const truncated = redacted.text.length > MAX_TRANSCRIPT_CHARS;
+  const originalText = truncated ? `${redacted.text.slice(0, MAX_TRANSCRIPT_CHARS)}\n…[truncated]` : redacted.text;
+
+  const store = openStore();
+  try {
+    const session = store.createSession({ source: "terminal", topic });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "terminal",
+      topic,
+      originalText,
+      usefulExpressions: [],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: [command]
+    });
+    console.log(JSON.stringify({
+      saved: true,
+      sessionId: session.id,
+      materialId: material.id,
+      command,
+      agentArgs,
+      exitCode,
+      bytes: Buffer.byteLength(originalText, "utf8"),
+      redactions: redacted.replacements,
+      truncated
+    }, null, 2));
+  } finally {
+    store.close();
+    try {
+      if (existsSync(typescriptPath)) unlinkSync(typescriptPath);
+    } catch {
+      /* best effort cleanup */
+    }
   }
 }
