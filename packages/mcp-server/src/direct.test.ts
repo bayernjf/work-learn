@@ -35,6 +35,12 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       call.filters.push([column, value]);
       return builder;
     };
+    for (const method of ["in", "contains"] as const) {
+      builder[method] = (column: string, value: unknown) => {
+        call.filters.push([column, value]);
+        return builder;
+      };
+    }
     builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
       if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
       return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
@@ -88,10 +94,11 @@ test("searchCorpus passes the user to the search function", async () => {
   ]);
 });
 
-test("getReviewItems scopes due items to the user", async () => {
+test("getReviewItems scopes due pending and snoozed items to the user", async () => {
   const { client, calls } = stubClient();
   await createDirectContext(client, USER).getReviewItems();
   assert.ok(calls[0]?.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.deepEqual(calls[0]?.filters.find(([column]) => column === "status")?.[1], ["pending", "snoozed"]);
 });
 
 test("markMastered cannot complete another user's review item", async () => {
