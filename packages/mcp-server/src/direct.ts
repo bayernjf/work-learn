@@ -12,6 +12,7 @@ import {
   questionTranslationColumns,
   recordReuseInputSchema,
   redactSecrets,
+  defaultReuseNudgeSettings,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
   findReuseMatches,
@@ -26,6 +27,8 @@ import {
   syncBatchInputSchema,
   syncReviewColumns,
   syncTombstoneColumns,
+  reuseNudgeSettingsSchema,
+  updateReuseNudgeSettingsSchema,
   type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
@@ -171,13 +174,102 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     requireScope(scopes, "read");
     const parsed = suggestReuseInputSchema.parse(input);
     const safeText = redactSecrets(parsed.text).text;
-    const expressionRows = ok(await supabase
-      .from("saved_expressions")
-      .select(syncSavedExpressionColumns)
-      .eq("user_id", userId)) as Record<string, unknown>[];
-    return suggestReuse(safeText, expressionRows.map(normalizeSavedExpression), {
+    const now = new Date().toISOString();
+    const [expressionRows, eventRows, settingRows] = await Promise.all([
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId),
+      supabase
+        .from("reuse_events")
+        .select("expression_id,match_kind,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("user_settings")
+        .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+        .eq("user_id", userId)
+        .maybeSingle()
+    ]);
+    const settingRow = ok(settingRows) as Record<string, unknown> | null;
+    const settings = reuseNudgeSettingsSchema.parse(settingRow ? {
+      enabled: settingRow.reuse_nudge_enabled,
+      cooldownHours: settingRow.reuse_nudge_cooldown_hours,
+      dailyLimit: settingRow.reuse_nudge_daily_limit,
+      updatedAt: settingRow.updated_at
+    } : defaultReuseNudgeSettings(now));
+    const result = suggestReuse(safeText, (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression), {
       source: parsed.source,
       limit: parsed.limit
+    }, {
+      settings,
+      events: (ok(eventRows) as Record<string, unknown>[]).map((row) => ({
+        expressionId: String(row.expression_id),
+        matchKind: row.match_kind as "exact" | "variant" | "nudge",
+        createdAt: String(row.created_at)
+      })),
+      now
+    });
+    const suggestion = result.suggestions[0];
+    if (suggestion) {
+      const inserted = await supabase
+        .from("reuse_events")
+        .insert({
+          user_id: userId,
+          expression_id: suggestion.expressionId,
+          source: parsed.source ?? null,
+          matched_text: suggestion.text,
+          match_kind: "nudge",
+          confidence: 0.5,
+          created_at: now
+        })
+        .select("id")
+        .single();
+      if (inserted.error) throw new Error(inserted.error.message);
+    }
+    return result;
+  },
+
+  async getReuseNudgeSettings() {
+    requireScope(scopes, "read");
+    const result = await supabase
+      .from("user_settings")
+      .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const row = ok(result) as Record<string, unknown> | null;
+    return row ? reuseNudgeSettingsSchema.parse({
+      enabled: row.reuse_nudge_enabled,
+      cooldownHours: row.reuse_nudge_cooldown_hours,
+      dailyLimit: row.reuse_nudge_daily_limit,
+      updatedAt: row.updated_at
+    }) : defaultReuseNudgeSettings();
+  },
+
+  async updateReuseNudgeSettings(input) {
+    requireScope(scopes, "write");
+    const parsed = updateReuseNudgeSettingsSchema.parse(input);
+    const now = new Date().toISOString();
+    const current = reuseNudgeSettingsSchema.parse(await this.getReuseNudgeSettings());
+    const next = { ...current, ...parsed, updatedAt: now };
+    const result = await supabase
+      .from("user_settings")
+      .upsert({
+        user_id: userId,
+        reuse_nudge_enabled: next.enabled,
+        reuse_nudge_cooldown_hours: next.cooldownHours,
+        reuse_nudge_daily_limit: next.dailyLimit,
+        updated_at: now
+      }, { onConflict: "user_id" })
+      .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+      .single();
+    const row = ok(result) as Record<string, unknown>;
+    return reuseNudgeSettingsSchema.parse({
+      enabled: row.reuse_nudge_enabled,
+      cooldownHours: row.reuse_nudge_cooldown_hours,
+      dailyLimit: row.reuse_nudge_daily_limit,
+      updatedAt: row.updated_at
     });
   },
 

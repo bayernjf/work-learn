@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -23,6 +23,8 @@ export interface WorkLearnContext {
   recordReuse(input: unknown): Promise<unknown> | unknown;
   getReuseSummary(): Promise<unknown> | unknown;
   suggestReuse(input: unknown): Promise<unknown> | unknown;
+  getReuseNudgeSettings(): Promise<unknown> | unknown;
+  updateReuseNudgeSettings(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
@@ -121,6 +123,15 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       limit: z.number().int().min(1).max(1).optional().describe("Reserved for compatibility; the product allows at most one suggestion per turn.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.suggestReuse(suggestReuseInputSchema.parse(input))) }] }));
+
+  server.registerTool("configure_reuse_nudges", {
+    description: "Update the user's reuse nudge settings. Use this when the user asks to turn same-intent expansion on or off, or asks to make nudges quieter.",
+    inputSchema: {
+      enabled: z.boolean().optional().describe("Whether reuse nudges are allowed."),
+      cooldownHours: z.number().int().min(0).max(168).optional().describe("Minimum hours between nudges."),
+      dailyLimit: z.number().int().min(0).max(20).optional().describe("Maximum nudges per UTC day.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.updateReuseNudgeSettings(updateReuseNudgeSettingsSchema.parse(input))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

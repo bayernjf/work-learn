@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -13,7 +13,8 @@ export type McpToolName =
   | "get_user_patterns"
   | "get_reuse_summary"
   | "record_reuse"
-  | "suggest_reuse";
+  | "suggest_reuse"
+  | "configure_reuse_nudges";
 
 type McpConfig = {
   apiUrl: string;
@@ -33,7 +34,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse", "configure_reuse_nudges"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -88,6 +89,13 @@ export const suggestReuse = (config: McpConfig, input: unknown) => {
   return json(config, "/reuse/suggestions", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const getReuseNudgeSettings = (config: McpConfig) => json(config, "/reuse/settings");
+
+export const updateReuseNudgeSettings = (config: McpConfig, input: unknown) => {
+  const parsed = updateReuseNudgeSettingsSchema.parse(input);
+  return json(config, "/reuse/settings", { method: "PATCH", body: JSON.stringify(parsed) });
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -113,5 +121,7 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   getUserPatterns: (input) => getUserPatterns(config, input),
   recordReuse: (input) => recordReuse(config, input),
   getReuseSummary: () => getReuseSummary(config),
-  suggestReuse: (input) => suggestReuse(config, input)
+  suggestReuse: (input) => suggestReuse(config, input),
+  getReuseNudgeSettings: () => getReuseNudgeSettings(config),
+  updateReuseNudgeSettings: (input) => updateReuseNudgeSettings(config, input)
 });
