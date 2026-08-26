@@ -27,6 +27,7 @@ async function refresh() {
   document.getElementById("unsynced").textContent = unsynced;
   document.getElementById("lastSync").textContent = fmtDate(s.lastPulledAt);
   setStatus("");
+  await updateHealth();
 }
 
 document.getElementById("refresh").addEventListener("click", refresh);
@@ -48,11 +49,49 @@ document.getElementById("captureSelection").addEventListener("click", async () =
 document.getElementById("sync").addEventListener("click", async () => {
   setStatus("同步中…");
   const res = await wl.sync();
-  setStatus(res.ok ? "同步完成" : "同步失败：" + res.output, res.ok ? "ok" : "error");
+  setStatus(res.ok ? "同步完成" : classifySyncError(res.output), res.ok ? "ok" : "error");
   refresh();
 });
 
 document.getElementById("openWeb").addEventListener("click", () => wl.openWeb());
 
+function setDot(id, state) {
+  const el = document.getElementById(id);
+  el.className = "dot" + (state === true ? " ok" : state === "amber" ? " amber" : " bad");
+}
+
+async function updateHealth() {
+  try {
+    const res = await wl.doctor();
+    if (!res || !res.ok) return;
+    const checks = (res.report && res.report.checks) || {};
+    const tokenOk = !!(checks.token && checks.token.ok);
+    const apiOk = !!(checks.api && checks.api.ok);
+    const localOk = !!(checks.localDb && checks.localDb.ok);
+    setDot("localDot", localOk);
+    document.getElementById("localText").textContent = localOk ? "本地库正常（离线可用）" : "本地库异常";
+    if (tokenOk && apiOk) {
+      setDot("cloudDot", true);
+      document.getElementById("cloudText").textContent = "云端已连通";
+    } else if (!tokenOk) {
+      setDot("cloudDot", "amber");
+      document.getElementById("cloudText").textContent = "未配置 Token：采集仅存本地";
+    } else {
+      setDot("cloudDot", false);
+      document.getElementById("cloudText").textContent = "云端不可达（离线）：本地已保存";
+    }
+  } catch {
+    /* ignore health probe errors */
+  }
+}
+
+function classifySyncError(output) {
+  if (/WORK_LEARN_ACCESS_TOKEN/.test(output)) return "未配置 Token：采集已存本地，配置后点「同步云端」上传";
+  if (/fetch failed|ENOTFOUND|ETIMEDOUT|ECONNREFUSED/i.test(output)) return "云端不可达（离线）：本地已保存，联网后点「同步云端」重试";
+  const msg = (output || "").split("\n").slice(0, 2).join(" ");
+  return "同步失败：" + msg;
+}
+
 wl.onRefresh(refresh);
 window.addEventListener("DOMContentLoaded", refresh);
+setInterval(refresh, 8000); // keep stats and cloud health fresh while the app runs

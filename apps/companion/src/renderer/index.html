@@ -15,6 +15,8 @@
       <button id="refresh" title="刷新">↻</button>
     </header>
 
+    <p class="guarantee">离线可用 · 数据先存本地，无需联网也不会丢</p>
+
     <section class="stats">
       <div class="stat">
         <span class="num" id="today">–</span>
@@ -32,6 +34,11 @@
         <span class="num small" id="lastSync">–</span>
         <span class="label">上次同步</span>
       </div>
+    </section>
+
+    <section class="sync-state">
+      <div class="row"><span class="dot" id="cloudDot"></span><span id="cloudText">云端状态检测中…</span></div>
+      <div class="row"><span class="dot local" id="localDot"></span><span id="localText">本地库检测中…</span></div>
     </section>
 
     <section class="actions">

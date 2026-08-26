@@ -96,6 +96,52 @@ header {
   padding: 0 12px;
 }
 
+.guarantee {
+  margin: 0;
+  padding: 8px 12px 0;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.sync-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+}
+
+.sync-state .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex: none;
+}
+
+.dot.ok {
+  background: var(--ok);
+}
+
+.dot.amber {
+  background: #d29922;
+}
+
+.dot.bad {
+  background: var(--error);
+}
+
+.dot.local {
+  background: var(--ok);
+}
+
 button {
   padding: 9px 10px;
   border: none;

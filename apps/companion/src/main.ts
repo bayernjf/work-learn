@@ -161,6 +161,15 @@ app.whenReady().then(() => {
     await captureSelection();
     return { ok: true, output: "" };
   });
+  ipcMain.handle("doctor", async (): Promise<unknown> => {
+    const { ok, output } = await runLearn(["doctor"]);
+    if (!ok) return { ok: false, error: output };
+    try {
+      return { ok: true, report: JSON.parse(output) };
+    } catch {
+      return { ok: false, error: output };
+    }
+  });
 
   // Stay alive in the background after the panel is closed.
   app.on("window-all-closed", () => {});
