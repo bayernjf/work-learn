@@ -45,6 +45,14 @@ export const en = {
     allTopics: "All topics",
     newest: "Newest",
     oldest: "Oldest",
+    sortTopic: "Topic",
+    sortSource: "Source",
+    viewCard: "Cards",
+    viewList: "List",
+    prevPage: "Prev",
+    nextPage: "Next",
+    pageOf: (cur: number, total: number) => `Page ${cur} of ${total}`,
+    perPage: "Per page",
     noMatchQuery: (query: string) => `Nothing matches “${query}” yet.`,
     noMatchTopic: "Nothing matches this topic yet.",
   },
@@ -86,6 +94,7 @@ export const en = {
     intentCluster: "Could not create intent",
     intentMerge: "Could not merge intents",
     intentSplit: "Could not split intent",
+    load: "Could not load",
   },
 
   empty: {
@@ -169,12 +178,18 @@ export const en = {
     hide: "Hide",
     heading: "Practice this",
     empty: "No exercises generated for this item yet.",
+    check: "Check",
+    correct: "Correct —",
+    incorrect: "Not quite. The answer is",
     types: {
       reuse: "Reuse",
       recall: "Recall",
       correction: "Correction",
       apply: "Apply",
-      question: "Question"
+      question: "Question",
+      mcq: "Pick",
+      fill: "Fill",
+      scenario: "Scenario"
     }
   },
 
@@ -201,6 +216,8 @@ export const en = {
     nudgeOff: "Off",
     nudgeDescription: "When an agent sees a saved phrase in your English, it can offer one same-intent alternative at most every few hours.",
     nudgeUpdated: "Nudge setting saved.",
+    relatedTitle: "Related saved expressions",
+    relatedEmpty: "No closely related expressions yet.",
   },
 
   connect: {
@@ -322,6 +339,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     errCreate: "Could not create token",
     errRevoke: "Could not revoke token",
     errDelete: "Could not delete token",
+    load: "Could not load",
   },
 
   review: {
@@ -334,6 +352,10 @@ The skill it installs is the same one published at ${skillUrl}.`,
     showAnswer: "Show answer",
     hideAnswer: "Hide",
     recallHint: "Recall the better version, then check yourself.",
+    gradeAgain: "Again",
+    gradeHard: "Hard",
+    gradeGood: "Good",
+    gradeEasy: "Easy",
     fallback: "Saved expression",
   },
 
@@ -448,6 +470,14 @@ export const zh: Strings = {
     allTopics: "全部话题",
     newest: "最新",
     oldest: "最早",
+    sortTopic: "话题",
+    sortSource: "来源",
+    viewCard: "卡片",
+    viewList: "列表",
+    prevPage: "上一页",
+    nextPage: "下一页",
+    pageOf: (cur: number, total: number) => `第 ${cur} / ${total} 页`,
+    perPage: "每页",
     noMatchQuery: (query: string) => `没有匹配「${query}」的内容。`,
     noMatchTopic: "这个话题下还没有内容。",
   },
@@ -488,7 +518,8 @@ export const zh: Strings = {
     intentsLoad: "加载意图失败",
     intentCluster: "创建意图失败",
     intentMerge: "合并意图失败",
-    intentSplit: "拆分意图失败"
+    intentSplit: "拆分意图失败",
+    load: "加载失败"
   },
 
   empty: {
@@ -572,12 +603,18 @@ export const zh: Strings = {
     hide: "收起",
     heading: "练习这条",
     empty: "这条还没有生成练习。",
+    check: "检查",
+    correct: "答对了 —",
+    incorrect: "差一点。答案是",
     types: {
       reuse: "复用",
       recall: "回忆",
       correction: "纠错",
       apply: "应用",
-      question: "提问"
+      question: "提问",
+      mcq: "选择",
+      fill: "填空",
+      scenario: "情境"
     }
   },
 
@@ -604,6 +641,8 @@ export const zh: Strings = {
     nudgeOff: "关闭",
     nudgeDescription: "当 Agent 在你的英文里看到已保存表达时，可以每几小时最多提供一个同一意图下的其他说法。",
     nudgeUpdated: "复用提示设置已保存。",
+    relatedTitle: "相关已存表达",
+    relatedEmpty: "暂时没有高度相关的表达。",
   },
 
   connect: {
@@ -725,6 +764,7 @@ export const zh: Strings = {
     errCreate: "token 创建失败",
     errRevoke: "token 吊销失败",
     errDelete: "token 删除失败",
+    load: "加载失败",
   },
 
   review: {
@@ -737,6 +777,10 @@ export const zh: Strings = {
     showAnswer: "显示答案",
     hideAnswer: "收起",
     recallHint: "先回忆更自然的说法，再展开对照。",
+    gradeAgain: "忘了",
+    gradeHard: "困难",
+    gradeGood: "良好",
+    gradeEasy: "简单",
     fallback: "已保存的表达",
   },
 

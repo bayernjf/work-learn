@@ -26,6 +26,8 @@ import {
   summarizeReuse,
   reuseNudgeSettingsSchema,
   updateReuseNudgeSettingsSchema,
+  scheduleNextReview,
+  type ReviewGrade,
   syncBatchInputSchema,
   type ClusterIntentsInput,
   type ListExpressionsInput,
@@ -756,15 +758,21 @@ export class LocalStore {
     return { intents, unclustered };
   }
 
-  markMastered(reviewId: string) {
+  markMastered(reviewId: string, grade: ReviewGrade = "good") {
+    const row = this.db
+      .prepare("SELECT interval_days FROM review_items WHERE id = ? AND status = 'pending'")
+      .get(reviewId) as { interval_days: number } | undefined;
+    if (!row) throw new Error("Review item not found or already completed");
+    const { intervalDays, dueAt, mastered } = scheduleNextReview(row.interval_days ?? 0, grade);
     const result = this.db
       .prepare(
-        `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = 1, updated_at = ?, sync_status = 'local_only'
-         WHERE id = ? AND status = 'pending'`
+        mastered
+          ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
+          : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
       )
-      .run(new Date().toISOString(), new Date().toISOString(), reviewId);
+      .run(new Date().toISOString(), intervalDays, new Date().toISOString(), reviewId);
     if (result.changes === 0) throw new Error("Review item not found or already completed");
-    return { id: reviewId, status: "completed" };
+    return { id: reviewId, status: mastered ? ("completed" as const) : ("pending" as const), dueAt, intervalDays };
   }
 
   snoozeReview(reviewId: string, days = 1) {

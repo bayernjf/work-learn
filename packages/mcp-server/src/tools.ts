@@ -16,7 +16,7 @@ export interface WorkLearnContext {
   saveQuestionTranslation(input: unknown): Promise<unknown> | unknown;
   searchCorpus(query?: string, filters?: { source?: string; tag?: string }): Promise<unknown> | unknown;
   getReviewItems(): Promise<unknown> | unknown;
-  markMastered(reviewId: string): Promise<unknown> | unknown;
+  markMastered(reviewId: string, grade?: string): Promise<unknown> | unknown;
   snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
   generatePractice(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
@@ -80,9 +80,12 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
   }, async () => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getReviewItems()) }] }));
 
   server.registerTool("mark_mastered", {
-    description: "Mark a Work Learn review item as completed.",
-    inputSchema: { reviewId: z.string() }
-  }, async ({ reviewId }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.markMastered(reviewId)) }] }));
+    description: "Grade a Work Learn review item (again/hard/good/easy) and reschedule it via spaced repetition.",
+    inputSchema: {
+      reviewId: z.string(),
+      grade: z.enum(["again", "hard", "good", "easy"]).optional()
+    }
+  }, async ({ reviewId, grade }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.markMastered(reviewId, grade)) }] }));
 
   server.registerTool("snooze_review", {
     description: "Snooze a Work Learn review item until later (default tomorrow).",

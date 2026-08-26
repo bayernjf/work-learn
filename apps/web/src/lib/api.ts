@@ -132,6 +132,25 @@ export const fetchReuseNudgeSettings = async (session: Session) => {
   return (await response.json()) as { data: ReuseNudgeSettings };
 };
 
+export type ReuseSuggestionItem = {
+  expressionId: string;
+  text: string;
+  register: "formal" | "neutral" | "casual" | null;
+  scene: string | null;
+  note: string | null;
+  reason: "same_intent" | "scene" | "recent";
+};
+
+export const fetchReuseSuggestions = async (session: Session, text: string, limit = 5) => {
+  const response = await fetch(`/api/reuse/suggestions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ text, limit })
+  });
+  if (!response.ok) throw new Error("Could not load reuse suggestions");
+  return (await response.json()) as { data: { suggestions: ReuseSuggestionItem[]; suppressedReason: string | null } };
+};
+
 export const updateReuseNudgeSettings = async (session: Session, settings: Partial<ReuseNudgeSettings>) => {
   const response = await fetch(`/api/reuse/settings`, {
     method: "PATCH",
@@ -186,8 +205,8 @@ export const deleteQuestionTranslation = async (session: Session, questionId: st
   if (!response.ok) throw new Error(activeStrings().errors.deleteQuestion);
 };
 
-export const completeReview = async (session: Session, reviewId: string) => {
-  const response = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/complete`, {
+export const completeReview = async (session: Session, reviewId: string, grade: "again" | "hard" | "good" | "easy" = "good") => {
+  const response = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/complete?grade=${encodeURIComponent(grade)}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
@@ -202,14 +221,12 @@ export const snoozeReview = async (session: Session, reviewId: string, days = 1)
   });
   if (!response.ok) throw new Error(activeStrings().errors.completeReview);
 };
-export type PracticeExercise = {
-  type: "reuse" | "recall" | "correction" | "apply" | "question";
-  materialId?: string;
-  questionId?: string;
-  focus: string;
-  prompt: string;
-  answer?: string;
-};
+export type PracticeExercise =
+  | { type: "reuse" | "recall" | "correction" | "apply"; materialId?: string; focus: string; prompt: string }
+  | { type: "question"; questionId?: string; focus: string; prompt: string; answer: string }
+  | { type: "mcq"; materialId?: string; focus: string; prompt: string; question: string; options: string[]; answer: string }
+  | { type: "fill"; materialId?: string; focus: string; prompt: string; sentence: string; answer: string }
+  | { type: "scenario"; materialId?: string; focus: string; prompt: string; scenario: string; options: string[]; answer: string };
 
 export type PracticeResult = {
   generatedAt: string;

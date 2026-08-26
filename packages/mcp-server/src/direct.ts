@@ -34,6 +34,8 @@ import {
   syncTombstoneColumns,
   reuseNudgeSettingsSchema,
   updateReuseNudgeSettingsSchema,
+  scheduleNextReview,
+  type ReviewGrade,
   type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
@@ -486,11 +488,32 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     return ok(result) ?? [];
   },
 
-  async markMastered(reviewId) {
+  async markMastered(reviewId, grade = "good") {
     requireScope(scopes, "write");
+    const current = await supabase
+      .from("review_items")
+      .select("interval_days")
+      .eq("id", reviewId)
+      .eq("user_id", userId)
+      .eq("status", "pending")
+      .single();
+    if (current.error) throw new Error(current.error.message);
+    const prev = (current.data?.interval_days as number | undefined) ?? 0;
+    const { intervalDays, dueAt, mastered } = scheduleNextReview(prev, grade as ReviewGrade);
+    if (mastered) {
+      const result = await supabase
+        .from("review_items")
+        .update({ status: "completed", completed_at: new Date().toISOString(), interval_days: intervalDays })
+        .eq("id", reviewId)
+        .eq("user_id", userId)
+        .eq("status", "pending")
+        .select()
+        .single();
+      return ok(result);
+    }
     const result = await supabase
       .from("review_items")
-      .update({ status: "completed", completed_at: new Date().toISOString(), interval_days: 1 })
+      .update({ status: "pending", due_at: dueAt, interval_days: intervalDays })
       .eq("id", reviewId)
       .eq("user_id", userId)
       .eq("status", "pending")

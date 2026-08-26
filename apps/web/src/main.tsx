@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, fetchReuseSuggestions, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSuggestionItem, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -48,7 +48,10 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [topic, setTopic] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
-  const [sort, setSort] = useState<"newest" | "oldest">("newest");
+  const [sort, setSort] = useState<"newest" | "oldest" | "topic" | "source">("newest");
+  const [view, setView] = useState<"card" | "list">("card");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [questions, setQuestions] = useState<QuestionTranslation[]>([]);
   const [questionResults, setQuestionResults] = useState<QuestionTranslation[] | null>(null);
@@ -140,10 +143,30 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const visible = useMemo(() => {
     const base = results ?? materials;
     const filtered = topic ? base.filter((material) => material.topic === topic) : base;
-    return [...filtered].sort((a, b) => sort === "newest"
-      ? b.created_at.localeCompare(a.created_at)
-      : a.created_at.localeCompare(b.created_at));
+    const sorted = [...filtered];
+    switch (sort) {
+      case "oldest":
+        sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
+        break;
+      case "topic":
+        sorted.sort((a, b) => a.topic.localeCompare(b.topic));
+        break;
+      case "source":
+        sorted.sort((a, b) => a.source.localeCompare(b.source));
+        break;
+      case "newest":
+      default:
+        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
+        break;
+    }
+    return sorted;
   }, [results, materials, topic, sort]);
+
+  useEffect(() => { setPage(1); }, [query, source, tag, topic, sort, view, pageSize]);
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageItems = visible.slice((safePage - 1) * pageSize, safePage * pageSize);
   const visibleQuestions = questionResults ?? questions;
 
   const empty = materials.length === 0 && questions.length === 0;
@@ -179,10 +202,10 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setQuestionResults(null);
   };
 
-  const handleCompleteReview = async (reviewId: string) => {
+  const handleCompleteReview = async (reviewId: string, grade: "again" | "hard" | "good" | "easy" = "good") => {
     if (!session) return;
     try {
-      await completeReview(session, reviewId);
+      await completeReview(session, reviewId, grade);
       setReviews((current) => current.filter((review) => review.id !== reviewId));
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t.errors.completeReview);
@@ -427,16 +450,40 @@ function App({ supabase }: { supabase: SupabaseClient }) {
               <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>{t.desk.allTopics} <b>{materials.length}</b></button>
               {topics.map(([name, count]) => <button key={name} className={topic === name ? "facet on" : "facet"} onClick={() => setTopic(name)}>{name} <b>{count}</b></button>)}
             </div>
+            <div className="view-toggle" data-empty={empty}>
+              <button className={view === "card" ? "on" : ""} aria-pressed={view === "card"} onClick={() => setView("card")}>{t.desk.viewCard}</button>
+              <button className={view === "list" ? "on" : ""} aria-pressed={view === "list"} onClick={() => setView("list")}>{t.desk.viewList}</button>
+            </div>
             <div className="sort" data-empty={empty}>
               <button className={sort === "newest" ? "on" : ""} onClick={() => setSort("newest")}>{t.desk.newest}</button>
               <button className={sort === "oldest" ? "on" : ""} onClick={() => setSort("oldest")}>{t.desk.oldest}</button>
+              <button className={sort === "topic" ? "on" : ""} onClick={() => setSort("topic")}>{t.desk.sortTopic}</button>
+              <button className={sort === "source" ? "on" : ""} onClick={() => setSort("source")}>{t.desk.sortSource}</button>
             </div>
           </div>
           {loadingMaterials || searching ? <CorpusSkeleton />
             : empty ? <EmptyCorpus />
             : visible.length === 0
               ? <p className="corpus-empty">{query.trim() ? t.desk.noMatchQuery(query.trim()) : t.desk.noMatchTopic}</p>
-              : <MaterialList session={session} materials={visible} onDelete={handleDeleteMaterial} onUpdate={handleUpdateMaterial} />}
+              : <>
+                <ReuseNudgePanel session={session} text={query.trim() || topic || ""} />
+                <MaterialList session={session} materials={pageItems} view={view} onDelete={handleDeleteMaterial} onUpdate={handleUpdateMaterial} />
+                {totalPages > 1 && (
+                  <nav className="pagination" aria-label={t.desk.pageOf(safePage, totalPages)}>
+                    <button className="ghost-button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>{t.desk.prevPage}</button>
+                    <span className="page-indicator">{t.desk.pageOf(safePage, totalPages)}</span>
+                    <button className="ghost-button" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>{t.desk.nextPage}</button>
+                    <label className="page-size">
+                      {t.desk.perPage}
+                      <select value={pageSize} onChange={(event) => setPageSize(Number(event.target.value))}>
+                        <option value={12}>12</option>
+                        <option value={24}>24</option>
+                        <option value={48}>48</option>
+                      </select>
+                    </label>
+                  </nav>
+                )}
+              </>}
         </>}
       </section>
       <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
@@ -893,10 +940,7 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
           {result?.exercises.length ? (
             <ol className="practice-list">
               {result.exercises.map((exercise, index) => (
-                <li key={`${exercise.type}-${index}`}>
-                  <span className={`practice-type practice-type-${exercise.type}`}>{t.practice.types[exercise.type]}</span>
-                  <div><p>{exercise.prompt}</p>{exercise.answer ? <p className="practice-answer"><strong>{t.practice.answer}</strong> {exercise.answer}</p> : null}</div>
-                </li>
+                <PracticeExerciseItem key={`${exercise.type}-${index}`} exercise={exercise} label={t.practice.types[exercise.type]} />
               ))}
             </ol>
           ) : null}
@@ -904,6 +948,104 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
         </div>
       ) : null}
     </div>
+  );
+}
+
+type PracticeExerciseItemData = PracticeResult["exercises"][number];
+
+function PracticeExerciseItem({ exercise, label }: { exercise: PracticeExerciseItemData; label: string }) {
+  const { t } = useI18n();
+  const [picked, setPicked] = useState<string | null>(null);
+  const [text, setText] = useState("");
+  const [revealed, setRevealed] = useState(false);
+  const hasOptions = "options" in exercise;
+  const hasSentence = "sentence" in exercise;
+  const stem = "question" in exercise ? exercise.question : "scenario" in exercise ? exercise.scenario : exercise.prompt;
+  const correct = hasOptions && picked !== null && picked === exercise.answer;
+
+  return (
+    <li>
+      <span className={`practice-type practice-type-${exercise.type}`}>{label}</span>
+      <div>
+        <p>{stem}</p>
+        {hasOptions ? (
+          <div className="practice-options">
+            {exercise.options.map((option) => {
+              const chosen = picked === option;
+              const isAnswer = option === exercise.answer;
+              const cls = revealed ? (isAnswer ? "opt correct" : chosen ? "opt wrong" : "opt") : chosen ? "opt picked" : "opt";
+              return (
+                <button type="button" key={option} className={cls} disabled={revealed} onClick={() => setPicked(option)}>{option}</button>
+              );
+            })}
+          </div>
+        ) : null}
+        {hasSentence ? (
+          <div className="practice-fill">
+            <p className="practice-sentence">{exercise.sentence}</p>
+            <input className="practice-input" value={text} disabled={revealed} onChange={(event) => setText(event.target.value)} placeholder="…" />
+            {!revealed ? <button type="button" className="text-button" onClick={() => setRevealed(true)}>{t.practice.check}</button> : null}
+            {revealed ? (
+              <p className={text.trim().toLowerCase() === exercise.answer.toLowerCase() ? "practice-answer ok" : "practice-answer"}>
+                <strong>{t.practice.answer}</strong> {exercise.answer}
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+        {revealed && hasOptions ? (
+          <p className={correct ? "practice-answer ok" : "practice-answer"}>
+            {correct ? t.practice.correct : t.practice.incorrect} <strong>{exercise.answer}</strong>
+          </p>
+        ) : null}
+        {!hasOptions && !hasSentence && "answer" in exercise ? <p className="practice-answer"><strong>{t.practice.answer}</strong> {exercise.answer}</p> : null}
+      </div>
+    </li>
+  );
+}
+
+function ReuseNudgePanel({ session, text }: { session: Session; text: string }) {
+  const { t } = useI18n();
+  const [items, setItems] = useState<ReuseSuggestionItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      if (!text.trim()) { setItems([]); return; }
+      setLoading(true);
+      setError("");
+      try {
+        const response = await fetchReuseSuggestions(session, text, 5);
+        if (!cancelled) setItems(response.data.suggestions);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : t.errors.load);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [session, text]);
+
+  if (!text.trim()) return null;
+  return (
+    <aside className="reuse-nudge" aria-live="polite">
+      <p className="eyebrow">{t.reuse.relatedTitle}</p>
+      {loading ? <p className="reuse-meta">{t.reuse.loading}</p> : null}
+      {error ? <p className="reuse-meta reuse-error">{error}</p> : null}
+      {!loading && !error && items.length === 0 ? <p className="reuse-meta">{t.reuse.relatedEmpty}</p> : null}
+      {items.length ? (
+        <ul className="reuse-nudge-list">
+          {items.map((suggestion) => (
+            <li key={suggestion.expressionId}>
+              <span className="reuse-text">{suggestion.text}</span>
+              {suggestion.scene ? <span className="reuse-meta"> · {suggestion.scene}</span> : null}
+              {suggestion.note ? <span className="reuse-note">{suggestion.note}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </aside>
   );
 }
 
@@ -1023,13 +1165,70 @@ function MaterialCard({ session, material, index, onDelete, onUpdate }: { sessio
   );
 }
 
-function MaterialList({ session, materials, onDelete, onUpdate }: { session: Session; materials: LearningMaterial[]; onDelete: (id: string) => void; onUpdate: (id: string, updates: { topic?: string; explanation?: string; tags?: string[] }) => void }) {
+function MaterialList({ session, materials, view, onDelete, onUpdate }: { session: Session; materials: LearningMaterial[]; view: "card" | "list"; onDelete: (id: string) => void; onUpdate: (id: string, updates: { topic?: string; explanation?: string; tags?: string[] }) => void }) {
   return (
-    <div className="material-list">
+    <div className={view === "list" ? "material-list list" : "material-list"}>
       {materials.map((material, index) => (
-        <MaterialCard key={material.id} session={session} material={material} index={index} onDelete={onDelete} onUpdate={onUpdate} />
+        view === "list"
+          ? <MaterialRow key={material.id} session={session} material={material} onDelete={onDelete} onUpdate={onUpdate} />
+          : <MaterialCard key={material.id} session={session} material={material} index={index} onDelete={onDelete} onUpdate={onUpdate} />
       ))}
     </div>
+  );
+}
+
+function MaterialRow({ session, material, onDelete, onUpdate }: { session: Session; material: LearningMaterial; onDelete: (id: string) => void; onUpdate: (id: string, updates: { topic?: string; explanation?: string; tags?: string[] }) => void }) {
+  const { t, formatDate } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [topic, setTopic] = useState(material.topic);
+  const [explanation, setExplanation] = useState(material.explanation);
+  const [tags, setTags] = useState(material.tags.join(", "));
+
+  const save = () => {
+    onUpdate(material.id, {
+      topic: topic.trim() || material.topic,
+      explanation: explanation.trim(),
+      tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+    });
+    setEditing(false);
+  };
+
+  const title = material.useful_expressions[0] ?? t.material.fallback;
+
+  return (
+    <article className="material-row">
+      <div className="row-main">
+        <p className="material-topic">{material.topic}</p>
+        <h3>{title}</h3>
+        {!editing && <p className="row-original">{material.original_text}</p>}
+        {!editing && material.tags.length > 0 && (
+          <p className="material-tags">
+            {material.tags.map((tag) => <span key={tag} className="tag">{tag}</span>)}
+          </p>
+        )}
+        {editing && (
+          <div className="edit-fields">
+            <label className="edit-label">{t.material.editTopic}<input value={topic} onChange={(event) => setTopic(event.target.value)} /></label>
+            <label className="edit-label">{t.material.editExplanation}<textarea value={explanation} onChange={(event) => setExplanation(event.target.value)} rows={2} /></label>
+            <label className="edit-label">{t.material.editTags}<input value={tags} onChange={(event) => setTags(event.target.value)} /></label>
+            <div className="edit-actions">
+              <button type="button" className="text-button" onClick={() => setEditing(false)}>{t.material.cancel}</button>
+              <button type="button" className="complete-button" onClick={save}>{t.material.save}</button>
+            </div>
+          </div>
+        )}
+      </div>
+      <div className="row-side">
+        <PracticeButton session={session} materialId={material.id} />
+        <span className="row-date">{formatDate(material.created_at)}</span>
+        {!editing
+          ? <div className="card-action-buttons">
+            <button type="button" className="text-button" onClick={() => setEditing(true)}>{t.material.edit}</button>
+            <button type="button" className="text-button danger" onClick={() => onDelete(material.id)}>{t.common.delete}</button>
+          </div>
+          : null}
+      </div>
+    </article>
   );
 }
 
@@ -1061,7 +1260,7 @@ function QuestionTranslationsSection({ questions, searching, loading, onDelete }
   );
 }
 
-function ReviewCard({ session, review, index, onComplete, onSnooze }: { session: Session; review: ReviewItem; index: number; onComplete: (reviewId: string) => void; onSnooze: (reviewId: string) => void }) {
+function ReviewCard({ session, review, index, onComplete, onSnooze }: { session: Session; review: ReviewItem; index: number; onComplete: (reviewId: string, grade?: "again" | "hard" | "good" | "easy") => void; onSnooze: (reviewId: string) => void }) {
   const { t } = useI18n();
   const [showAnswer, setShowAnswer] = useState(false);
   const material = review.learning_materials;
@@ -1088,7 +1287,13 @@ function ReviewCard({ session, review, index, onComplete, onSnooze }: { session:
         <button type="button" className="text-button" onClick={() => setShowAnswer((value) => !value)}>
           {showAnswer ? t.review.hideAnswer : t.review.showAnswer}
         </button>
-        {showAnswer ? <><button type="button" className="text-button" onClick={() => onSnooze(review.id)}>{t.review.snooze}</button><button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button></> : null}
+        {showAnswer ? <><button type="button" className="text-button" onClick={() => onSnooze(review.id)}>{t.review.snooze}</button>
+          <span className="grade-buttons">
+            <button type="button" className="grade-button again" onClick={() => onComplete(review.id, "again")}>{t.review.gradeAgain}</button>
+            <button type="button" className="grade-button hard" onClick={() => onComplete(review.id, "hard")}>{t.review.gradeHard}</button>
+            <button type="button" className="grade-button good" onClick={() => onComplete(review.id, "good")}>{t.review.gradeGood}</button>
+            <button type="button" className="grade-button easy" onClick={() => onComplete(review.id, "easy")}>{t.review.gradeEasy}</button>
+          </span></> : null}
       </div>
     </article>
   );
