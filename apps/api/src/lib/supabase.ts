@@ -1,4 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
+
+// Supabase JS eagerly builds a RealtimeClient on every `createClient` call. On
+// Node 20 the realtime-js runtime can't find a native `WebSocket` global (it
+// only became global in Node 22+), so client construction throws
+// "Node.js detected but native WebSocket not found". The API never uses realtime
+// subscriptions, so we polyfill a `WebSocket` global with `ws` when the runtime
+// lacks one. On Node 22+ the native global already exists and this is a no-op.
+if (typeof (globalThis as { WebSocket?: unknown }).WebSocket === "undefined") {
+  (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
+}
 
 const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL;

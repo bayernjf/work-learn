@@ -27,7 +27,7 @@ Authorization: Bearer <your-access-token>
 ## 前置条件
 
 - 已把本仓库 clone 到本机。下文示例统一用 `/path/to/work-learn` 代指这个目录，照抄时替换成你自己的路径
-- 本机已安装 pnpm 和 Node 22+（`@supabase/supabase-js` 在 `createClient` 就要求 22，Node 20 会直接报错）
+- 本机已安装 pnpm 和 Node 20+（Supabase JS 的 realtime 客户端原本要求 Node 22 原生 WebSocket，已由 API 端 `ws` polyfill 解决；本地 stdio MCP / CLI 走 `better-sqlite3`，按安装时所用 Node 编译原生模块即可，无需 22+）
 - Hono API 可访问（默认 `http://localhost:3000`，部署后改为线上 URL）
 - 已在 Web 端创建一个 personal access token
 
