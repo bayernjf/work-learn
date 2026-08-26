@@ -63,8 +63,42 @@ export const fetchQuestionTranslations = async (session: Session, query = "", so
 };
 
 export type SyncStatus = {
-  counts: { sessions: number; materials: number; questions: number; reviews: number; tombstones: number };
+  counts: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; tombstones: number };
   latestMaterialUpdatedAt: string | null;
+};
+
+export type ReuseSummary = {
+  generatedAt: string;
+  counts: {
+    expressions: number;
+    activeVocabulary: number;
+    sleepingExpressions: number;
+    reuseEvents: number;
+    expressionBreadth: number;
+    crossContextReuse: number;
+  };
+  activeExpressions: Array<{
+    id: string;
+    text: string;
+    scene: string | null;
+    reuseCount: number;
+    firstReusedAt: string | null;
+    lastReusedAt: string | null;
+    createdAt: string;
+  }>;
+  sleepingExpressions: Array<{
+    id: string;
+    text: string;
+    scene: string | null;
+    createdAt: string;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    text: string;
+    source: string | null;
+    matchedText: string;
+    createdAt: string;
+  }>;
 };
 
 export const fetchSyncStatus = async (session: Session) => {
@@ -73,6 +107,14 @@ export const fetchSyncStatus = async (session: Session) => {
   });
   if (!response.ok) throw new Error(activeStrings().errors.syncStatus);
   return (await response.json()) as { data: SyncStatus };
+};
+
+export const fetchReuseSummary = async (session: Session) => {
+  const response = await fetch(`/api/reuse`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSummary);
+  return (await response.json()) as { data: ReuseSummary };
 };
 
 export const fetchReviews = async (session: Session) => {
