@@ -1683,6 +1683,38 @@ code {
 .practice-input { padding: 6px 10px; border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-sans); font-size: 14px; min-width: 180px; }
 .practice-answer.ok { color: #1a7f37; }
 .practice-answer.ok strong { color: #1a7f37; }
+.practice-item { align-items: start; }
+.practice-write { margin: 8px 0 0; }
+.practice-write textarea {
+  width: 100%;
+  min-height: 64px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.6;
+  resize: vertical;
+}
+.practice-mark { display: flex; gap: 8px; margin-top: 8px; }
+.practice-recorded { display: inline-block; margin-top: 8px; font-size: 12px; color: #1a7f37; }
+
+/* Practice history / mistake book */
+.practice-history .dashboard-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.practice-history .checkbox { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-3); cursor: pointer; }
+.practice-history-list { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.practice-history-item { display: grid; grid-template-columns: auto 1fr; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: var(--bg); }
+.practice-history-body { min-width: 0; }
+.practice-history-prompt { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.practice-history-answer { margin: 4px 0 0; font-size: 12px; color: var(--ink-3); word-break: break-word; }
+.practice-history-meta { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.practice-history-meta .muted { font-size: 11px; color: var(--ink-3); }
+.badge { padding: 1px 8px; border-radius: 999px; font-size: 11px; }
+.badge.ok { color: #1a7f37; background: rgba(26,127,55,.12); }
+.badge.bad { color: var(--danger); background: var(--danger-soft); }
+.badge.status-remembered { color: #0e7490; background: rgba(14,116,140,.12); }
+.badge.status-practice_again { color: #b45309; background: rgba(180,83,9,.12); }
+.badge.status-pending { color: var(--ink-3); background: var(--bg-sunken); }
 
 /* Review grade buttons (spaced repetition) */
 .grade-buttons { display: flex; flex-wrap: wrap; gap: 6px; }

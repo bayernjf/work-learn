@@ -9,6 +9,7 @@ export const en = {
 
   common: {
     signIn: "Sign in",
+    loading: "Loading…",
     createAccount: "Create account",
     signOut: "Sign out",
     email: "Email",
@@ -190,7 +191,18 @@ export const en = {
       mcq: "Pick",
       fill: "Fill",
       scenario: "Scenario"
-    }
+    },
+    writePrompt: "Write your answer first",
+    reveal: "Reveal reference",
+    remember: "Remembered",
+    practiceAgain: "Practice again",
+    recorded: "Saved",
+    recordedHint: "Saved to your practice history",
+    pending: "Pending",
+    mistakeBook: "Mistake book",
+    practiceLog: "Practice log",
+    onlyMistakes: "Mistakes only",
+    noRecords: "No practice recorded yet. Finish an exercise to start your log."
   },
 
   reuse: {
@@ -434,6 +446,7 @@ export const zh: Strings = {
 
   common: {
     signIn: "登录",
+    loading: "加载中…",
     createAccount: "注册",
     signOut: "退出",
     email: "邮箱",
@@ -615,7 +628,18 @@ export const zh: Strings = {
       mcq: "选择",
       fill: "填空",
       scenario: "情境"
-    }
+    },
+    writePrompt: "先自己写一写",
+    reveal: "对照参考",
+    remember: "记住了",
+    practiceAgain: "再练一次",
+    recorded: "已保存",
+    recordedHint: "已记入你的练习历史",
+    pending: "待复习",
+    mistakeBook: "错题本",
+    practiceLog: "练习记录",
+    onlyMistakes: "只看错题",
+    noRecords: "还没有练习记录。完成一次练习就会开始累积。"
   },
 
   reuse: {

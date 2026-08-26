@@ -180,11 +180,64 @@ export type GetUserPatternsInput = z.input<typeof getUserPatternsInputSchema>;
 export type PracticeMaterial = Pick<LearningMaterial, "id" | "source" | "topic" | "originalText" | "explanation" | "usefulExpressions" | "corrections" | "vocabulary" | "practicePrompts" | "tags" | "createdAt">;
 export type PracticeQuestion = Pick<QuestionTranslation, "id" | "source" | "question" | "translation" | "topic" | "createdAt">;
 export type PracticeExercise =
-  | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }
+  | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string; reference?: string }
   | { type: "question"; questionId: string; focus: string; prompt: string; answer: string }
   | { type: "mcq"; materialId?: string; focus: string; prompt: string; question: string; options: string[]; answer: string }
   | { type: "fill"; materialId?: string; focus: string; prompt: string; sentence: string; answer: string }
   | { type: "scenario"; materialId?: string; focus: string; prompt: string; scenario: string; options: string[]; answer: string };
+
+export type PracticeStatus = "pending" | "remembered" | "practice_again";
+
+// A persisted practice attempt. The practice loop records one row per completed
+// exercise (graded types carry isCorrect; open-ended types carry the user's
+// written answer + a remembered/practice_again status).
+export type PracticeRecord = {
+  id: string;
+  materialId: string | null;
+  questionId: string | null;
+  exerciseType: PracticeExercise["type"];
+  focus: string;
+  prompt: string;
+  userAnswer: string;
+  isCorrect: boolean | null;
+  status: PracticeStatus;
+  createdAt: string;
+};
+
+export const recordPracticeInputSchema = z.object({
+  exerciseType: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
+  materialId: z.string().min(1).optional(),
+  questionId: z.string().min(1).optional(),
+  focus: z.string().max(500).default(""),
+  prompt: z.string().max(5000).default(""),
+  userAnswer: z.string().max(50_000).default(""),
+  isCorrect: z.boolean().nullable().optional(),
+  status: z.enum(["remembered", "practice_again", "pending"]).default("pending")
+});
+export type RecordPracticeInput = z.infer<typeof recordPracticeInputSchema>;
+
+export const getPracticeHistoryInputSchema = z.object({
+  onlyMistakes: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).optional()
+});
+export type GetPracticeHistoryInput = z.infer<typeof getPracticeHistoryInputSchema>;
+
+export const practiceRecordColumns =
+  "id,material_id,question_id,exercise_type,focus,prompt,user_answer,is_correct,status,created_at";
+
+export const toPracticeRecord = (row: Record<string, unknown>): PracticeRecord => ({
+  id: String(row.id),
+  materialId: row.material_id ? String(row.material_id) : null,
+  questionId: row.question_id ? String(row.question_id) : null,
+  exerciseType: (row.exercise_type as PracticeExercise["type"]) ?? "reuse",
+  focus: String(row.focus ?? ""),
+  prompt: String(row.prompt ?? ""),
+  userAnswer: String(row.user_answer ?? ""),
+  isCorrect: row.is_correct === null || row.is_correct === undefined ? null : Boolean(row.is_correct),
+  status: ((row.status as PracticeStatus) ?? "pending"),
+  createdAt: String(row.created_at)
+});
+
 export type CorpusFilters = { source?: string; tag?: string };
 
 // A single session being synced from a local store. The id is preserved so the
@@ -442,13 +495,15 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "reuse",
         materialId: material.id,
         focus,
-        prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`
+        prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`,
+        reference: focus
       },
       {
         type: "recall",
         materialId: material.id,
         focus,
-        prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`
+        prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`,
+        reference: focus
       }
     ];
     if (material.corrections[0]) {
@@ -456,7 +511,8 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "correction",
         materialId: material.id,
         focus,
-        prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`
+        prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`,
+        reference: material.corrections[0]
       });
     }
     if (material.practicePrompts[0]) {
@@ -464,7 +520,8 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "apply",
         materialId: material.id,
         focus,
-        prompt: material.practicePrompts[0]
+        prompt: material.practicePrompts[0],
+        reference: material.usefulExpressions[0] ?? focus
       });
     }
     return output;

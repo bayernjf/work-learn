@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -19,6 +19,8 @@ export interface WorkLearnContext {
   markMastered(reviewId: string, grade?: string): Promise<unknown> | unknown;
   snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
   generatePractice(input: unknown): Promise<unknown> | unknown;
+  recordPractice(input: unknown): Promise<unknown> | unknown;
+  getPracticeHistory(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
   recordReuse(input: unknown): Promise<unknown> | unknown;
   getReuseSummary(): Promise<unknown> | unknown;
@@ -99,6 +101,28 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       limit: z.number().int().min(1).max(10).optional().describe("Number of recent materials to use, default 3.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.generatePractice(generatePracticeInputSchema.parse(input))) }] }));
+
+  server.registerTool("record_practice", {
+    description: "Record a completed Work Learn practice attempt: the user's written answer, whether a graded exercise was correct, and whether they marked it remembered or want to practice again. Powers the practice loop and the mistake book (get_practice_history).",
+    inputSchema: {
+      exerciseType: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
+      materialId: z.string().optional(),
+      questionId: z.string().optional(),
+      focus: z.string().optional(),
+      prompt: z.string().optional(),
+      userAnswer: z.string().optional(),
+      isCorrect: z.boolean().nullable().optional(),
+      status: z.enum(["remembered", "practice_again", "pending"]).optional()
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.recordPractice(recordPracticeInputSchema.parse(input))) }] }));
+
+  server.registerTool("get_practice_history", {
+    description: "List the user's past Work Learn practice attempts, newest first. Pass onlyMistakes=true to show just incorrect attempts (the mistake book).",
+    inputSchema: {
+      onlyMistakes: z.boolean().optional(),
+      limit: z.number().int().min(1).max(200).optional()
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getPracticeHistory(getPracticeHistoryInputSchema.parse(input))) }] }));
 
   server.registerTool("get_user_patterns", {
     description: "Summarize the user's recent saved English patterns: recurring topics, expressions, corrections, vocabulary, and practice suggestions.",

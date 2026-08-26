@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getPracticeHistoryInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -86,6 +86,19 @@ export const recordReuse = (config: McpConfig, input: unknown) => {
   return json(config, "/reuse", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const recordPractice = (config: McpConfig, input: unknown) => {
+  const parsed = recordPracticeInputSchema.parse(input);
+  return json(config, "/practice/record", { method: "POST", body: JSON.stringify(parsed) });
+};
+
+export const getPracticeHistory = (config: McpConfig, input: unknown) => {
+  const parsed = getPracticeHistoryInputSchema.parse(input);
+  const params = new URLSearchParams();
+  if (parsed.onlyMistakes) params.set("onlyMistakes", "true");
+  if (parsed.limit) params.set("limit", String(parsed.limit));
+  return json(config, `/practice/history?${params.toString()}`);
+};
+
 export const getReuseSummary = (config: McpConfig) => json(config, "/reuse");
 
 export const suggestReuse = (config: McpConfig, input: unknown) => {
@@ -156,6 +169,8 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input),
+  recordPractice: (input) => recordPractice(config, input),
+  getPracticeHistory: (input) => getPracticeHistory(config, input),
   recordReuse: (input) => recordReuse(config, input),
   getReuseSummary: () => getReuseSummary(config),
   suggestReuse: (input) => suggestReuse(config, input),

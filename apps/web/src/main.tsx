@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, fetchReuseSuggestions, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSuggestionItem, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, fetchReuseSuggestions, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, recordPractice, getPracticeHistory, LearningMaterial, PortableCorpus, PracticeRecord, PracticeResult, QuestionTranslation, ReuseSuggestionItem, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -489,6 +489,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
       <ReuseDashboard summary={reuseSummary} settings={reuseSettings} loading={reuseLoading} error={reuseError} settingsError={reuseSettingsError} saving={reuseSettingsSaving} onToggleNudges={handleToggleReuseNudges} />
       <IntentDashboard session={session} />
+      <PracticeHistoryDashboard session={session} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
         <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
@@ -940,7 +941,7 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
           {result?.exercises.length ? (
             <ol className="practice-list">
               {result.exercises.map((exercise, index) => (
-                <PracticeExerciseItem key={`${exercise.type}-${index}`} exercise={exercise} label={t.practice.types[exercise.type]} />
+                <PracticeExerciseItem key={`${exercise.type}-${index}`} exercise={exercise} label={t.practice.types[exercise.type]} session={session} />
               ))}
             </ol>
           ) : null}
@@ -953,18 +954,50 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
 
 type PracticeExerciseItemData = PracticeResult["exercises"][number];
 
-function PracticeExerciseItem({ exercise, label }: { exercise: PracticeExerciseItemData; label: string }) {
+function PracticeExerciseItem({ exercise, label, session }: { exercise: PracticeExerciseItemData; label: string; session: Session }) {
   const { t } = useI18n();
   const [picked, setPicked] = useState<string | null>(null);
   const [text, setText] = useState("");
   const [revealed, setRevealed] = useState(false);
+  const [recorded, setRecorded] = useState(false);
   const hasOptions = "options" in exercise;
   const hasSentence = "sentence" in exercise;
+  const openEnded = !hasOptions && !hasSentence;
   const stem = "question" in exercise ? exercise.question : "scenario" in exercise ? exercise.scenario : exercise.prompt;
-  const correct = hasOptions && picked !== null && picked === exercise.answer;
+  const isCorrect = hasOptions ? picked !== null && picked === exercise.answer : hasSentence ? text.trim().toLowerCase() === exercise.answer.toLowerCase() : null;
+  const answerText =
+    hasOptions || hasSentence || "answer" in exercise
+      ? exercise.answer
+      : "reference" in exercise && exercise.reference
+        ? exercise.reference
+        : exercise.prompt;
+
+  const save = async (correctValue: boolean | null, status: "remembered" | "practice_again") => {
+    try {
+      await recordPractice(session, {
+        exerciseType: exercise.type,
+        materialId: "materialId" in exercise ? exercise.materialId : undefined,
+        questionId: "questionId" in exercise ? exercise.questionId : undefined,
+        focus: exercise.focus,
+        prompt: exercise.prompt,
+        userAnswer: text || picked || "",
+        isCorrect: correctValue,
+        status
+      });
+    } catch {
+      /* recording is best-effort; never block the practice UI */
+    } finally {
+      setRecorded(true);
+    }
+  };
+
+  const reveal = async () => {
+    setRevealed(true);
+    if (isCorrect !== null) await save(isCorrect, "remembered");
+  };
 
   return (
-    <li>
+    <li className="practice-item">
       <span className={`practice-type practice-type-${exercise.type}`}>{label}</span>
       <div>
         <p>{stem}</p>
@@ -984,22 +1017,89 @@ function PracticeExerciseItem({ exercise, label }: { exercise: PracticeExerciseI
           <div className="practice-fill">
             <p className="practice-sentence">{exercise.sentence}</p>
             <input className="practice-input" value={text} disabled={revealed} onChange={(event) => setText(event.target.value)} placeholder="…" />
-            {!revealed ? <button type="button" className="text-button" onClick={() => setRevealed(true)}>{t.practice.check}</button> : null}
-            {revealed ? (
-              <p className={text.trim().toLowerCase() === exercise.answer.toLowerCase() ? "practice-answer ok" : "practice-answer"}>
-                <strong>{t.practice.answer}</strong> {exercise.answer}
-              </p>
-            ) : null}
           </div>
         ) : null}
-        {revealed && hasOptions ? (
-          <p className={correct ? "practice-answer ok" : "practice-answer"}>
-            {correct ? t.practice.correct : t.practice.incorrect} <strong>{exercise.answer}</strong>
-          </p>
+        {openEnded ? (
+          <div className="practice-write">
+            <textarea value={text} disabled={revealed} onChange={(event) => setText(event.target.value)} placeholder={t.practice.writePrompt} />
+          </div>
         ) : null}
-        {!hasOptions && !hasSentence && "answer" in exercise ? <p className="practice-answer"><strong>{t.practice.answer}</strong> {exercise.answer}</p> : null}
+        {!revealed ? (
+          <button type="button" className="text-button" onClick={reveal}>
+            {hasOptions || hasSentence ? t.practice.check : t.practice.reveal}
+          </button>
+        ) : (
+          <>
+            <p className="practice-answer"><strong>{t.practice.answer}</strong> {answerText}</p>
+            {isCorrect !== null ? (
+              <p className={isCorrect ? "practice-answer ok" : "practice-answer"}>{isCorrect ? t.practice.correct : t.practice.incorrect}</p>
+            ) : null}
+            {recorded ? (
+              <span className="practice-recorded">{t.practice.recorded} ✓</span>
+            ) : (
+              <div className="practice-mark">
+                <button type="button" className="text-button" onClick={() => save(null, "remembered")}>{t.practice.remember}</button>
+                <button type="button" className="text-button" onClick={() => save(null, "practice_again")}>{t.practice.practiceAgain}</button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </li>
+  );
+}
+
+function PracticeHistoryDashboard({ session }: { session: Session }) {
+  const { t } = useI18n();
+  const [records, setRecords] = useState<PracticeRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [onlyMistakes, setOnlyMistakes] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    getPracticeHistory(session, onlyMistakes)
+      .then((res) => { if (!cancelled) setRecords(res.data); })
+      .catch((err) => { if (!cancelled) setError(String((err as Error)?.message ?? err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [session, onlyMistakes]);
+
+  return (
+    <section className="dashboard practice-history">
+      <div className="dashboard-head">
+        <h2>{onlyMistakes ? t.practice.mistakeBook : t.practice.practiceLog}</h2>
+        <label className="checkbox">
+          <input type="checkbox" checked={onlyMistakes} onChange={(event) => setOnlyMistakes(event.target.checked)} />
+          {t.practice.onlyMistakes}
+        </label>
+      </div>
+      {loading ? <p className="dashboard-meta">{t.common.loading}</p> : null}
+      {error ? <p className="practice-meta practice-error">{error}</p> : null}
+      {!loading && !error && records.length === 0 ? <p className="dashboard-meta">{t.practice.noRecords}</p> : null}
+      {records.length ? (
+        <ul className="practice-history-list">
+          {records.map((rec) => (
+            <li key={rec.id} className="practice-history-item">
+              <span className={`practice-type practice-type-${rec.exerciseType}`}>{t.practice.types[rec.exerciseType]}</span>
+              <div className="practice-history-body">
+                <p className="practice-history-prompt">{rec.prompt}</p>
+                {rec.userAnswer ? <p className="practice-history-answer"><strong>{t.practice.answer}</strong> {rec.userAnswer}</p> : null}
+                <div className="practice-history-meta">
+                  {rec.isCorrect === null ? (
+                    <span className={`badge status-${rec.status}`}>{rec.status === "remembered" ? t.practice.remember : rec.status === "practice_again" ? t.practice.practiceAgain : t.practice.pending}</span>
+                  ) : (
+                    <span className={`badge ${rec.isCorrect ? "ok" : "bad"}`}>{rec.isCorrect ? t.practice.correct : t.practice.incorrect}</span>
+                  )}
+                  <span className="muted">{new Date(rec.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </section>
   );
 }
 

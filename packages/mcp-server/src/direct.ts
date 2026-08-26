@@ -4,6 +4,10 @@ import {
   createSessionInputSchema,
   generatePracticeFromItems,
   generatePracticeInputSchema,
+  getPracticeHistoryInputSchema,
+  practiceRecordColumns,
+  recordPracticeInputSchema,
+  toPracticeRecord,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
   hasScope,
@@ -558,6 +562,42 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       (ok(questionRows) as Record<string, unknown>[]).map(normalizeQuestionRow),
       parsed
     );
+  },
+
+  async recordPractice(input) {
+    requireScope(scopes, "write");
+    const parsed = recordPracticeInputSchema.parse(input);
+    const inserted = await supabase
+      .from("practice_records")
+      .insert({
+        user_id: userId,
+        material_id: parsed.materialId ?? null,
+        question_id: parsed.questionId ?? null,
+        exercise_type: parsed.exerciseType,
+        focus: parsed.focus,
+        prompt: parsed.prompt,
+        user_answer: parsed.userAnswer,
+        is_correct: parsed.isCorrect ?? null,
+        status: parsed.status
+      })
+      .select("id")
+      .single();
+    if (inserted.error) throw new Error(inserted.error.message);
+    return { id: String((inserted.data as { id: string }).id), recordedAt: new Date().toISOString() };
+  },
+
+  async getPracticeHistory(input) {
+    requireScope(scopes, "read");
+    const parsed = getPracticeHistoryInputSchema.parse(input);
+    let query = supabase
+      .from("practice_records")
+      .select(practiceRecordColumns)
+      .eq("user_id", userId);
+    if (parsed.onlyMistakes) query = query.eq("is_correct", false);
+    query = query.order("created_at", { ascending: false }).limit(parsed.limit ?? 50);
+    const result = await query;
+    if (result.error) throw new Error(result.error.message);
+    return (ok(result) as Record<string, unknown>[]).map(toPracticeRecord);
   },
 
   async getUserPatterns(input) {

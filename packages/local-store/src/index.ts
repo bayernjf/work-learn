@@ -9,6 +9,8 @@ import {
   normalizeQuestion,
   generatePracticeFromItems,
   generatePracticeInputSchema,
+  getPracticeHistoryInputSchema,
+  recordPracticeInputSchema,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
   clusterIntentsInputSchema,
@@ -37,6 +39,9 @@ import {
   type PracticeQuestion,
   type QuestionTranslation,
   type RecordReuseInput,
+  type RecordPracticeInput,
+  type GetPracticeHistoryInput,
+  type PracticeRecord,
   type ReuseNudgeSettings,
   type SaveMaterialInput,
   type SplitIntentInput,
@@ -152,11 +157,26 @@ type ReuseEventRow = {
   synced_at: string | null;
 };
 
+type PracticeRecordRow = {
+  id: string;
+  material_id: string | null;
+  question_id: string | null;
+  exercise_type: string;
+  focus: string;
+  prompt: string;
+  user_answer: string;
+  is_correct: number | null;
+  status: "pending" | "remembered" | "practice_again";
+  created_at: string;
+  sync_status: SyncStatus;
+  synced_at: string | null;
+};
+
 export const DEFAULT_DB_PATH = join(homedir(), ".work-learn", "work-learn.db");
 export const DEFAULT_BACKUP_DIR = join(homedir(), ".work-learn", "backups");
 export const DEFAULT_NOTES_DIR = join(homedir(), ".work-learn", "notes");
 
-const REQUIRED_TABLES = ["sessions", "learning_materials", "question_translations", "review_items", "intents", "saved_expressions", "reuse_events", "sync_meta", "sync_tombstones"];
+const REQUIRED_TABLES = ["sessions", "learning_materials", "question_translations", "review_items", "intents", "saved_expressions", "reuse_events", "practice_records", "sync_meta", "sync_tombstones"];
 
 const schema = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -254,6 +274,21 @@ CREATE TABLE IF NOT EXISTS reuse_events (
 );
 CREATE INDEX IF NOT EXISTS expressions_norm_idx ON saved_expressions(text_norm);
 CREATE INDEX IF NOT EXISTS reuse_events_expression_idx ON reuse_events(expression_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS practice_records (
+  id TEXT PRIMARY KEY,
+  material_id TEXT REFERENCES learning_materials(id) ON DELETE CASCADE,
+  question_id TEXT REFERENCES question_translations(id) ON DELETE CASCADE,
+  exercise_type TEXT NOT NULL CHECK(exercise_type IN ('reuse','recall','correction','apply','question','mcq','fill','scenario')),
+  focus TEXT NOT NULL DEFAULT '',
+  prompt TEXT NOT NULL DEFAULT '',
+  user_answer TEXT NOT NULL DEFAULT '',
+  is_correct INTEGER,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','remembered','practice_again')),
+  created_at TEXT NOT NULL,
+  sync_status TEXT NOT NULL DEFAULT 'local_only',
+  synced_at TEXT
+);
+CREATE INDEX IF NOT EXISTS practice_records_created_idx ON practice_records(created_at DESC);
 CREATE TABLE IF NOT EXISTS sync_meta (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -590,6 +625,42 @@ export class LocalStore {
     });
     tx();
     return { recordedAt, recorded: matches.length, matches };
+  }
+
+  recordPractice(input: unknown) {
+    const parsed = recordPracticeInputSchema.parse(input) as RecordPracticeInput;
+    const recordedAt = new Date().toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO practice_records
+         (id, material_id, question_id, exercise_type, focus, prompt, user_answer, is_correct, status, created_at, sync_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'local_only')`
+      )
+      .run(
+        crypto.randomUUID(),
+        parsed.materialId ?? null,
+        parsed.questionId ?? null,
+        parsed.exerciseType,
+        parsed.focus,
+        parsed.prompt,
+        parsed.userAnswer,
+        parsed.isCorrect === null || parsed.isCorrect === undefined ? null : parsed.isCorrect ? 1 : 0,
+        parsed.status,
+        recordedAt
+      );
+    return { id: "", recordedAt };
+  }
+
+  getPracticeHistory(input: unknown) {
+    const parsed = getPracticeHistoryInputSchema.parse(input) as GetPracticeHistoryInput;
+    let query = "SELECT * FROM practice_records ORDER BY created_at DESC";
+    const params: unknown[] = [];
+    if (parsed.onlyMistakes) {
+      query = "SELECT * FROM practice_records WHERE is_correct = 0 ORDER BY created_at DESC";
+    }
+    query += ` LIMIT ${parsed.limit ?? 50}`;
+    const rows = this.db.prepare(query).all(...params) as PracticeRecordRow[];
+    return rows.map(toPracticeRecordRow);
   }
 
   getReuseSummary() {
@@ -1194,6 +1265,21 @@ function toReuseEvent(row: ReuseEventRow) {
   };
 }
 
+function toPracticeRecordRow(row: PracticeRecordRow): PracticeRecord {
+  return {
+    id: row.id,
+    materialId: row.material_id,
+    questionId: row.question_id,
+    exerciseType: row.exercise_type as PracticeRecord["exerciseType"],
+    focus: row.focus,
+    prompt: row.prompt,
+    userAnswer: row.user_answer,
+    isCorrect: row.is_correct === null ? null : row.is_correct === 1,
+    status: row.status,
+    createdAt: row.created_at
+  };
+}
+
 function toQuestion(row: QuestionRow): QuestionTranslation {
   return {
     id: row.id,
@@ -1232,6 +1318,8 @@ export const createLocalContext = (store: LocalStore) => ({
   snoozeReview: (reviewId: string, days?: number) => store.snoozeReview(reviewId, days),
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
+  recordPractice: (input: unknown) => store.recordPractice(input),
+  getPracticeHistory: (input: unknown) => store.getPracticeHistory(input),
   recordReuse: (input: unknown) => store.recordReuse(input),
   getReuseSummary: () => store.getReuseSummary(),
   suggestReuse: (input: unknown) => store.suggestReuse(input),
