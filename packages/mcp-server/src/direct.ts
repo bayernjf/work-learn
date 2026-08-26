@@ -12,6 +12,7 @@ import {
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
   updateMaterialSchema,
+  portableImportSchema,
   syncBatchInputSchema,
   syncReviewColumns,
   syncTombstoneColumns,
@@ -455,6 +456,80 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
   };
+};
+
+export const importPortableData = async (supabase: SupabaseClient, userId: string, input: unknown) => {
+  const parsed = portableImportSchema.parse(input);
+  const providedSessions = new Map(parsed.sessions.map((session) => [session.id, session]));
+  for (const item of [...parsed.materials, ...parsed.questionTranslations]) {
+    if (providedSessions.has(item.sessionId)) continue;
+    const createdAt = item.createdAt;
+    providedSessions.set(item.sessionId, {
+      id: item.sessionId,
+      source: item.source,
+      topic: item.topic ?? null,
+      createdAt,
+      updatedAt: "updatedAt" in item ? item.updatedAt : createdAt
+    });
+  }
+
+  const existing = {
+    sessions: new Set((ok(await supabase.from("sessions").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => row.id)),
+    materials: new Map((ok(await supabase.from("learning_materials").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => [row.id, row.updated_at])),
+    questions: new Map((ok(await supabase.from("question_translations").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => [row.id, row.updated_at]))
+  };
+
+  const counts = {
+    sessions: { inserted: 0, updated: 0, skipped: 0 },
+    materials: { inserted: 0, updated: 0, skipped: 0 },
+    questions: { inserted: 0, updated: 0, skipped: 0 },
+    reviews: { inserted: 0, updated: 0, skipped: 0 }
+  };
+  for (const session of providedSessions.values()) {
+    if (!existing.sessions.has(session.id)) counts.sessions.inserted += 1;
+    else counts.sessions.updated += 1;
+  }
+  for (const material of parsed.materials) classify(material, existing.materials, counts.materials);
+  for (const question of parsed.questionTranslations) classify(question, existing.questions, counts.questions);
+
+  await syncToCloud(supabase, userId, {
+    sessions: [...providedSessions.values()],
+    materials: parsed.materials,
+    questions: parsed.questionTranslations,
+    reviews: parsed.reviews,
+    tombstones: []
+  });
+
+  for (const material of parsed.materials) {
+    const reviewExists = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", material.id).maybeSingle();
+    if (reviewExists.error) throw new Error(reviewExists.error.message);
+    if (!reviewExists.data) {
+      const now = new Date().toISOString();
+      const inserted = await supabase.from("review_items").insert({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        material_id: material.id,
+        status: "pending",
+        due_at: now,
+        interval_days: 0,
+        created_at: now,
+        updated_at: now
+      });
+      if (inserted.error) throw new Error(inserted.error.message);
+      counts.reviews.inserted += 1;
+    } else {
+      counts.reviews.skipped += 1;
+    }
+  }
+
+  return { importedAt: new Date().toISOString(), counts };
+};
+
+const classify = (item: { id: string; updatedAt: string }, existing: Map<string, string>, counts: { inserted: number; updated: number; skipped: number }) => {
+  const current = existing.get(item.id);
+  if (!current) counts.inserted += 1;
+  else if (item.updatedAt >= current) counts.updated += 1;
+  else counts.skipped += 1;
 };
 
 /** Return lightweight cloud corpus counts for the settings/doctor screens. */
