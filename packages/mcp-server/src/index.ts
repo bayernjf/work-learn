@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -14,7 +14,11 @@ export type McpToolName =
   | "get_reuse_summary"
   | "record_reuse"
   | "suggest_reuse"
-  | "configure_reuse_nudges";
+  | "configure_reuse_nudges"
+  | "list_expressions"
+  | "cluster_intents"
+  | "merge_intents"
+  | "split_intent";
 
 type McpConfig = {
   apiUrl: string;
@@ -34,7 +38,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse", "configure_reuse_nudges"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse", "configure_reuse_nudges", "list_expressions", "cluster_intents", "merge_intents", "split_intent"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -96,6 +100,31 @@ export const updateReuseNudgeSettings = (config: McpConfig, input: unknown) => {
   return json(config, "/reuse/settings", { method: "PATCH", body: JSON.stringify(parsed) });
 };
 
+export const listExpressions = (config: McpConfig, input: unknown) => {
+  const parsed = listExpressionsInputSchema.parse(input);
+  const params = new URLSearchParams();
+  if (parsed.includeUnclustered) params.set("includeUnclustered", "true");
+  if (parsed.intentId !== undefined) params.set("intentId", parsed.intentId === null ? "null" : parsed.intentId);
+  params.set("limit", String(parsed.limit));
+  const qs = params.toString();
+  return json(config, `/expressions${qs ? `?${qs}` : ""}`);
+};
+
+export const clusterIntents = (config: McpConfig, input: unknown) => {
+  const parsed = clusterIntentsInputSchema.parse(input);
+  return json(config, "/intents/cluster", { method: "POST", body: JSON.stringify(parsed) });
+};
+
+export const mergeIntents = (config: McpConfig, input: unknown) => {
+  const parsed = mergeIntentsInputSchema.parse(input);
+  return json(config, "/intents/merge", { method: "POST", body: JSON.stringify(parsed) });
+};
+
+export const splitIntent = (config: McpConfig, input: unknown) => {
+  const parsed = splitIntentInputSchema.parse(input);
+  return json(config, "/intents/split", { method: "POST", body: JSON.stringify(parsed) });
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -123,5 +152,9 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   getReuseSummary: () => getReuseSummary(config),
   suggestReuse: (input) => suggestReuse(config, input),
   getReuseNudgeSettings: () => getReuseNudgeSettings(config),
-  updateReuseNudgeSettings: (input) => updateReuseNudgeSettings(config, input)
+  updateReuseNudgeSettings: (input) => updateReuseNudgeSettings(config, input),
+  listExpressions: (input) => listExpressions(config, input),
+  clusterIntents: (input) => clusterIntents(config, input),
+  mergeIntents: (input) => mergeIntents(config, input),
+  splitIntent: (input) => splitIntent(config, input)
 });

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -25,6 +25,10 @@ export interface WorkLearnContext {
   suggestReuse(input: unknown): Promise<unknown> | unknown;
   getReuseNudgeSettings(): Promise<unknown> | unknown;
   updateReuseNudgeSettings(input: unknown): Promise<unknown> | unknown;
+  listExpressions(input: unknown): Promise<unknown> | unknown;
+  clusterIntents(input: unknown): Promise<unknown> | unknown;
+  mergeIntents(input: unknown): Promise<unknown> | unknown;
+  splitIntent(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
@@ -132,6 +136,46 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       dailyLimit: z.number().int().min(0).max(20).optional().describe("Maximum nudges per UTC day.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.updateReuseNudgeSettings(updateReuseNudgeSettingsSchema.parse(input))) }] }));
+
+  server.registerTool("list_expressions", {
+    description: "List saved expressions with their current intent assignment. Use this before clustering so the host model can see which expressions still need an intent. Pass includeUnclustered=true to see only expressions without an intent.",
+    inputSchema: {
+      includeUnclustered: z.boolean().optional().describe("Only return expressions that have no intent assigned."),
+      intentId: z.string().nullable().optional().describe("Filter by a specific intent id, or null to list unclustered expressions."),
+      limit: z.number().int().min(1).max(500).optional().describe("Maximum expressions to return, default 200.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.listExpressions(listExpressionsInputSchema.parse(input))) }] }));
+
+  server.registerTool("cluster_intents", {
+    description: "Create intents and assign saved expressions to them. The host model decides the semantic grouping; this tool persists it. Each group becomes one intent. Use after list_expressions.",
+    inputSchema: {
+      groups: z.array(z.object({
+        label: z.string().describe("Short human label for the communicative goal."),
+        description: z.string().nullable().optional().describe("Optional nuance or scope note."),
+        expressionIds: z.array(z.string()).describe("Saved expression ids that belong to this intent.")
+      })).min(1).describe("One or more intent groups to create.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.clusterIntents(clusterIntentsInputSchema.parse(input))) }] }));
+
+  server.registerTool("merge_intents", {
+    description: "Merge one intent into another. All expressions move to the target intent and the source intent is deleted. Use when two intents describe the same communicative goal.",
+    inputSchema: {
+      sourceIntentId: z.string().describe("The intent to remove after merging."),
+      targetIntentId: z.string().describe("The intent that receives the expressions.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.mergeIntents(mergeIntentsInputSchema.parse(input))) }] }));
+
+  server.registerTool("split_intent", {
+    description: "Split an intent into two or more new intents. Every expression id must currently belong to the source intent. The source intent is deleted once it has no expressions left.",
+    inputSchema: {
+      intentId: z.string().describe("The intent to split."),
+      groups: z.array(z.object({
+        label: z.string(),
+        description: z.string().nullable().optional(),
+        expressionIds: z.array(z.string())
+      })).min(2).describe("At least two new intent groups.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.splitIntent(splitIntentInputSchema.parse(input))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

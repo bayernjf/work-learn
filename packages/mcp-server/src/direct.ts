@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  clusterIntentsInputSchema,
   createSessionInputSchema,
   generatePracticeFromItems,
   generatePracticeInputSchema,
@@ -13,7 +14,10 @@ import {
   recordReuseInputSchema,
   redactSecrets,
   defaultReuseNudgeSettings,
+  listExpressionsInputSchema,
+  mergeIntentsInputSchema,
   saveMaterialInputSchema,
+  splitIntentInputSchema,
   saveQuestionTranslationInputSchema,
   findReuseMatches,
   suggestReuse,
@@ -271,6 +275,108 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       dailyLimit: row.reuse_nudge_daily_limit,
       updatedAt: row.updated_at
     });
+  },
+
+  async listExpressions(input) {
+    requireScope(scopes, "read");
+    const parsed = listExpressionsInputSchema.parse(input);
+    let query = supabase
+      .from("saved_expressions")
+      .select(syncSavedExpressionColumns)
+      .eq("user_id", userId);
+    if (parsed.includeUnclustered || parsed.intentId === null) query = query.is("intent_id", null);
+    else if (parsed.intentId) query = query.eq("intent_id", parsed.intentId);
+    const result = await query.order("updated_at", { ascending: false }).limit(parsed.limit);
+    return (ok(result) as Record<string, unknown>[]).map(normalizeSavedExpression);
+  },
+
+  async clusterIntents(input) {
+    requireScope(scopes, "write");
+    const parsed = clusterIntentsInputSchema.parse(input);
+    const now = new Date().toISOString();
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    for (const group of parsed.groups) {
+      const intent = await supabase
+        .from("intents")
+        .insert({ user_id: userId, label: group.label, description: group.description ?? null, created_at: now, updated_at: now })
+        .select("id")
+        .single();
+      if (intent.error) throw new Error(intent.error.message);
+      const intentId = String((intent.data as { id: string }).id);
+      const assigned = await supabase
+        .from("saved_expressions")
+        .update({ intent_id: intentId, updated_at: now })
+        .eq("user_id", userId)
+        .in("id", group.expressionIds);
+      if (assigned.error) throw new Error(assigned.error.message);
+      created.push({ id: intentId, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+    }
+    return { clusteredAt: now, intents: created };
+  },
+
+  async mergeIntents(input) {
+    requireScope(scopes, "write");
+    const parsed = mergeIntentsInputSchema.parse(input);
+    if (parsed.sourceIntentId === parsed.targetIntentId) throw new Error("Source and target intents must differ");
+    const now = new Date().toISOString();
+    const [source, target] = await Promise.all([
+      supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.sourceIntentId).maybeSingle(),
+      supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.targetIntentId).maybeSingle()
+    ]);
+    if (source.error) throw new Error(source.error.message);
+    if (target.error) throw new Error(target.error.message);
+    if (!source.data) throw new Error("Source intent not found");
+    if (!target.data) throw new Error("Target intent not found");
+    const moved = await supabase
+      .from("saved_expressions")
+      .update({ intent_id: parsed.targetIntentId, updated_at: now })
+      .eq("user_id", userId)
+      .eq("intent_id", parsed.sourceIntentId)
+      .select("id");
+    if (moved.error) throw new Error(moved.error.message);
+    const touched = await supabase.from("intents").update({ updated_at: now }).eq("user_id", userId).eq("id", parsed.targetIntentId);
+    if (touched.error) throw new Error(touched.error.message);
+    await applyCloudTombstones(supabase, userId, [{ id: parsed.sourceIntentId, entity: "intent", deletedAt: now }]);
+    return { mergedAt: now, sourceIntentId: parsed.sourceIntentId, targetIntentId: parsed.targetIntentId, movedExpressionIds: ((moved.data ?? []) as Array<{ id: string }>).map((row) => row.id) };
+  },
+
+  async splitIntent(input) {
+    requireScope(scopes, "write");
+    const parsed = splitIntentInputSchema.parse(input);
+    const source = await supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.intentId).maybeSingle();
+    if (source.error) throw new Error(source.error.message);
+    if (!source.data) throw new Error("Intent not found");
+    const allIds = parsed.groups.flatMap((group) => group.expressionIds);
+    if (new Set(allIds).size !== allIds.length) throw new Error("An expression cannot be assigned to more than one split group");
+    const now = new Date().toISOString();
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    for (const group of parsed.groups) {
+      const intent = await supabase
+        .from("intents")
+        .insert({ user_id: userId, label: group.label, description: group.description ?? null, created_at: now, updated_at: now })
+        .select("id")
+        .single();
+      if (intent.error) throw new Error(intent.error.message);
+      const intentId = String((intent.data as { id: string }).id);
+      const assigned = await supabase
+        .from("saved_expressions")
+        .update({ intent_id: intentId, updated_at: now })
+        .eq("user_id", userId)
+        .eq("intent_id", parsed.intentId)
+        .in("id", group.expressionIds)
+        .select("id");
+      if (assigned.error) throw new Error(assigned.error.message);
+      if ((assigned.data ?? []).length !== group.expressionIds.length) throw new Error("One or more expressions do not belong to the intent being split");
+      created.push({ id: intentId, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+    }
+    const remaining = await supabase.from("saved_expressions").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("intent_id", parsed.intentId);
+    if (remaining.error) throw new Error(remaining.error.message);
+    let sourceDeleted = false;
+    if ((remaining.count ?? 0) === 0) {
+      await applyCloudTombstones(supabase, userId, [{ id: parsed.intentId, entity: "intent", deletedAt: now }]);
+      sourceDeleted = true;
+    }
+    return { splitAt: now, sourceIntentId: parsed.intentId, intents: created, sourceDeleted };
   },
 
   async saveQuestionTranslation(input) {
