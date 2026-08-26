@@ -219,7 +219,7 @@ learn restore --file ~/Downloads/work-learn-backup.db
 
 ### 7.3 JSON 导出 / 导入用于跨账号或人工迁移
 
-JSON 是结构化迁移格式，保留业务字段但不应替代 SQLite 全量备份：
+JSON 是结构化迁移格式，保留业务字段但不应替代 SQLite 全量备份。Web 端已提供 `Export JSON` / `Import JSON`，导入走后端 `POST /api/import`：
 
 ```json
 {
@@ -232,7 +232,7 @@ JSON 是结构化迁移格式，保留业务字段但不应替代 SQLite 全量�
 }
 ```
 
-Web 端 JSON 导出 / 导入仍在 backlog。导入应走后端 API，按原始 id 幂等 upsert，沿用 last-write-wins，并在结果里返回新增、更新、跳过数量。浏览器不直接批量写 Supabase，避免权限、限流和大批量失败处理散落在前端。
+导入按原始 id 幂等 upsert，沿用 last-write-wins，并在结果里返回新增、更新、跳过数量。浏览器不直接批量写 Supabase，避免权限、限流和大批量失败处理散落在前端。
 
 **结论**：Markdown 用于阅读；SQLite backup/restore 用于本机无损恢复；云端 sync 用于换设备；JSON import/export 用于跨账号或人工迁移。
 

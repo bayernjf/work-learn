@@ -146,6 +146,23 @@ MCP 当前提供：
 - `generate_practice`
 - `get_user_patterns`
 
+### import API
+
+Web 端 JSON 导入调用 `POST /api/import`，需要 write scope。请求体是版本化 JSON：
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-08-26T00:00:00.000Z",
+  "sessions": [],
+  "materials": [],
+  "questionTranslations": [],
+  "reviews": []
+}
+```
+
+服务端按稳定 id 做 last-write-wins upsert，并为缺失复习项的材料补建 pending review。
+
 Claude Desktop 的本地配置示例（本地优先，无需 env）：
 
 ```json
