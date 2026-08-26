@@ -23,7 +23,8 @@ const commands = {
   export: "Export local data to markdown notes.",
   nudges: "Show or change local reuse nudge settings (on/off/status).",
   run: "Run an agent in a PTY and record the terminal session to the local store.",
-  stats: "Show local store statistics (pass --json for machine-readable output)."
+  stats: "Show local store statistics (pass --json for machine-readable output).",
+  expressions: "List saved expressions (pass --json, --limit N)."
 } as const;
 
 if (command === "capture") {
@@ -52,6 +53,8 @@ if (command === "capture") {
   await run(args);
 } else if (command === "stats") {
   await stats(args);
+} else if (command === "expressions") {
+  await listExpressionsCmd(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -132,6 +135,27 @@ async function stats(args: string[]) {
   try {
     const payload = { ...store.stats(), today: store.countCreatedToday() };
     console.log(args.includes("--json") ? JSON.stringify(payload) : JSON.stringify(payload, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function listExpressionsCmd(args: string[]) {
+  const json = args.includes("--json");
+  const limitArg = args.indexOf("--limit");
+  const limit = limitArg >= 0 && !Number.isNaN(Number(args[limitArg + 1])) ? Number(args[limitArg + 1]) : 12;
+  const store = openStore();
+  try {
+    const rows = store.listExpressions({ limit });
+    if (json) {
+      console.log(JSON.stringify(rows));
+      return;
+    }
+    if (rows.length === 0) {
+      console.log("（暂无已保存表达）");
+      return;
+    }
+    for (const row of rows) console.log(`- ${row.text}${row.scene ? `  ·  ${row.scene}` : ""}`);
   } finally {
     store.close();
   }
