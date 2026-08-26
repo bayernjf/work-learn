@@ -1,15 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   createSessionInputSchema,
-  generatePracticeFromMaterials,
+  generatePracticeFromItems,
   generatePracticeInputSchema,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
   hasScope,
   materialColumns,
+  normalizeQuestion,
   questionTranslationColumns,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
+  updateMaterialSchema,
   syncBatchInputSchema,
   syncReviewColumns,
   syncTombstoneColumns,
@@ -97,8 +99,21 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
   async saveQuestionTranslation(input) {
     requireScope(scopes, "write");
     const parsed = saveQuestionTranslationInputSchema.parse(input);
-    // Deliberately no review_item row: question/translation pairs are archival
-    // (recall and search), not queue items. Save them plainly.
+    const norm = normalizeQuestion(parsed.question);
+
+    // Exact dedupe within the same session, matching the local store.
+    const existing = await supabase
+      .from("question_translations")
+      .select(questionTranslationColumns)
+      .eq("user_id", userId)
+      .eq("session_id", parsed.sessionId)
+      .eq("question_norm", norm)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (existing.error) throw new Error(existing.error.message);
+    if (existing.data) return { skipped: true, existingId: (existing.data as { id: string }).id };
+
     const result = await supabase
       .from("question_translations")
       .insert({
@@ -106,6 +121,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
         session_id: parsed.sessionId,
         source: parsed.source,
         question: parsed.question,
+        question_norm: norm,
         translation: parsed.translation,
         topic: parsed.topic ?? null
       })
@@ -114,21 +130,22 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     return ok(result);
   },
 
-  async searchCorpus(query) {
+  async searchCorpus(query, filters) {
     requireScope(scopes, "read");
     const trimmed = query?.trim();
-    if (trimmed) {
-      const result = await supabase
+    const result = trimmed
+      ? await supabase
         .rpc("search_learning_materials", { p_user: userId, p_query: trimmed })
-        .select(materialColumns);
-      return ok(result) ?? [];
-    }
-    const result = await supabase
-      .from("learning_materials")
-      .select(materialColumns)
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    return ok(result) ?? [];
+        .select(materialColumns)
+      : await supabase
+        .from("learning_materials")
+        .select(materialColumns)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+    let rows = ((ok(result) as Record<string, unknown>[]) ?? []) as Record<string, unknown>[];
+    if (filters?.source) rows = rows.filter((row) => String(row.source) === filters.source);
+    if (filters?.tag) rows = rows.filter((row) => Array.isArray(row.tags) && row.tags.includes(filters.tag as string));
+    return rows;
   },
 
   async getReviewItems() {
@@ -137,7 +154,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       .from("review_items")
       .select(`*, learning_materials(${materialColumns})`)
       .eq("user_id", userId)
-      .eq("status", "pending")
+      .in("status", ["pending", "snoozed"])
       .lte("due_at", new Date().toISOString())
       .order("due_at", { ascending: true });
     return ok(result) ?? [];
@@ -156,18 +173,42 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     return ok(result);
   },
 
+  async snoozeReview(reviewId, days = 1) {
+    requireScope(scopes, "write");
+    const dueAt = new Date(Date.now() + days * 86_400_000).toISOString();
+    const result = await supabase
+      .from("review_items")
+      .update({ status: "snoozed", due_at: dueAt })
+      .eq("id", reviewId)
+      .eq("user_id", userId)
+      .in("status", ["pending", "snoozed"])
+      .select()
+      .single();
+    return ok(result);
+  },
+
   async generatePractice(input) {
     requireScope(scopes, "read");
     const parsed = generatePracticeInputSchema.parse(input);
-    let query = supabase
+    let materialQuery = supabase
       .from("learning_materials")
       .select(materialColumns)
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
-    if (parsed.materialId) query = query.eq("id", parsed.materialId).limit(1);
-    else query = query.limit(50);
-    const rows = ok(await query) as unknown[];
-    return generatePracticeFromMaterials((rows as Record<string, unknown>[]).map(normalizeMaterial), parsed);
+    if (parsed.materialId) materialQuery = materialQuery.eq("id", parsed.materialId).limit(1);
+    else materialQuery = materialQuery.limit(50);
+    const questionQuery = supabase
+      .from("question_translations")
+      .select(questionTranslationColumns)
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(parsed.materialId ? 0 : 50);
+    const [materialRows, questionRows] = await Promise.all([materialQuery, questionQuery]);
+    return generatePracticeFromItems(
+      (ok(materialRows) as Record<string, unknown>[]).map(normalizeMaterial),
+      (ok(questionRows) as Record<string, unknown>[]).map(normalizeQuestionRow),
+      parsed
+    );
   },
 
   async getUserPatterns(input) {
@@ -189,7 +230,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     ]);
     return getUserPatternsFromItems(
       (ok(materialRows) as Record<string, unknown>[]).map(normalizeMaterial),
-      (ok(questionRows) as Record<string, unknown>[]).map(normalizeQuestion),
+      (ok(questionRows) as Record<string, unknown>[]).map(normalizeQuestionRow),
       parsed
     );
   }
@@ -211,7 +252,7 @@ const normalizeMaterial = (row: Record<string, unknown>) => ({
   updatedAt: String(row.updated_at)
 });
 
-const normalizeQuestion = (row: Record<string, unknown>) => ({
+const normalizeQuestionRow = (row: Record<string, unknown>) => ({
   id: String(row.id),
   sessionId: String(row.session_id),
   source: String(row.source),
@@ -240,14 +281,15 @@ const toStringArray = (value: unknown): string[] => Array.isArray(value) ? value
  * `WorkLearnContext` because listing these is a read-only endpoint concern, not
  * one of the five MCP tools.
  */
-export const searchQuestionTranslations = async (supabase: SupabaseClient, userId: string, query?: string) => {
+export const searchQuestionTranslations = async (supabase: SupabaseClient, userId: string, query?: string, source?: string) => {
   const trimmed = query?.trim();
   let statement = supabase
     .from("question_translations")
     .select(questionTranslationColumns)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (trimmed) statement = statement.or(`question.ilike.%${trimmed}%,translation.ilike.%${trimmed}%`);
+  if (trimmed) statement = statement.or(`question.ilike.%${trimmed}%,translation.ilike.%${trimmed}%,topic.ilike.%${trimmed}%`);
+  if (source) statement = statement.eq("source", source);
   const result = await statement;
   return ok(result) ?? [];
 };
@@ -282,7 +324,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
   return {
     sessions: (ok(sessions) as Record<string, unknown>[]).map(normalizeSyncSession),
     materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
-    questions: (ok(questions) as Record<string, unknown>[]).map(normalizeQuestion),
+    questions: (ok(questions) as Record<string, unknown>[]).map(normalizeQuestionRow),
     reviews: (ok(reviews) as Record<string, unknown>[]).map(normalizeReview),
     tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id),
@@ -376,6 +418,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     session_id: q.sessionId,
     source: q.source,
     question: q.question,
+    question_norm: normalizeQuestion(q.question),
     translation: q.translation,
     topic: q.topic ?? null,
     created_at: q.createdAt,
@@ -436,6 +479,21 @@ export const getSyncStatus = async (supabase: SupabaseClient, userId: string) =>
 };
 
 /** Delete a cloud material and its review, recording tombstones first. */
+
+/** Update editable fields on a cloud material. */
+export const updateCloudMaterial = async (supabase: SupabaseClient, userId: string, materialId: string, input: unknown) => {
+  const parsed = updateMaterialSchema.parse(input);
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (parsed.topic !== undefined) updates.topic = parsed.topic;
+  if (parsed.explanation !== undefined) updates.explanation = parsed.explanation;
+  if (parsed.usefulExpressions !== undefined) updates.useful_expressions = parsed.usefulExpressions;
+  if (parsed.corrections !== undefined) updates.corrections = parsed.corrections;
+  if (parsed.vocabulary !== undefined) updates.vocabulary = parsed.vocabulary;
+  if (parsed.practicePrompts !== undefined) updates.practice_prompts = parsed.practicePrompts;
+  if (parsed.tags !== undefined) updates.tags = parsed.tags;
+  const result = await supabase.from("learning_materials").update(updates).eq("user_id", userId).eq("id", materialId).select(materialColumns).single();
+  return ok(result);
+};
 export const deleteCloudMaterial = async (supabase: SupabaseClient, userId: string, materialId: string) => {
   const deletedAt = new Date().toISOString();
   const reviews = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", materialId);
