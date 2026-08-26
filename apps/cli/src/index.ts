@@ -22,7 +22,8 @@ const commands = {
   restore: "Restore the local SQLite database from a backup.",
   export: "Export local data to markdown notes.",
   nudges: "Show or change local reuse nudge settings (on/off/status).",
-  run: "Run an agent in a PTY and record the terminal session to the local store."
+  run: "Run an agent in a PTY and record the terminal session to the local store.",
+  stats: "Show local store statistics (pass --json for machine-readable output)."
 } as const;
 
 if (command === "capture") {
@@ -49,6 +50,8 @@ if (command === "capture") {
   await nudges(args);
 } else if (command === "run") {
   await run(args);
+} else if (command === "stats") {
+  await stats(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -119,6 +122,16 @@ async function review() {
   const store = openStore();
   try {
     console.log(JSON.stringify(store.getReviewItems(), null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function stats(args: string[]) {
+  const store = openStore();
+  try {
+    const payload = { ...store.stats(), today: store.countCreatedToday() };
+    console.log(args.includes("--json") ? JSON.stringify(payload) : JSON.stringify(payload, null, 2));
   } finally {
     store.close();
   }

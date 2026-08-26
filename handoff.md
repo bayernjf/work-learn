@@ -170,7 +170,7 @@ Agent 中调用 Skill
 ### P3：更大入口
 
 - [x] `learn run -- <agent>`：CLI 用系统 `script` 在 PTY 中运行 agent、录制终端会话、脱敏后写入本地库（`source=terminal`），作为 macOS Companion 终端采集能力的第一刀（本地优先、离线可用）；
-- macOS Companion 应用层：全局快捷键、菜单栏、离线兜底、自动采集（待做，依赖 `learn run` 采集内核）；
+- macOS Companion 应用层：全局快捷键、菜单栏、离线兜底、自动采集（依赖 `learn run` 采集内核）。**M1 最小壳已落地**：`apps/companion` 是基于 Electron 的菜单栏应用，作为薄壳复用 `learn` CLI（spawn 仓库内 `tsx` 跑 `apps/cli/src/index.ts`，因此必须在 better-sqlite3 编译所用的 Node 下启动），菜单栏显示「今日采集 / 待复习 / 本地待推送 / 上次同步」，并提供「采集剪贴板 / 同步云端 / 打开 Web」三个按钮；全局快捷键（M2）、自动采集（M4）待做。
 - 间隔重复算法（SRS）：当前先不做，等练习记录积累后再替换简单复习队列。
 
 ## 需要后续确认的问题

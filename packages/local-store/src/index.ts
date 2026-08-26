@@ -894,6 +894,14 @@ export class LocalStore {
     };
   }
 
+  /** Count materials and questions created since the start of the local day. */
+  countCreatedToday() {
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD (ISO sorts lexicographically)
+    const materials = (this.db.prepare("SELECT count(*) AS count FROM learning_materials WHERE created_at >= ?").get(`${today}T00:00:00`) as { count: number }).count;
+    const questions = (this.db.prepare("SELECT count(*) AS count FROM question_translations WHERE created_at >= ?").get(`${today}T00:00:00`) as { count: number }).count;
+    return { materials, questions, total: materials + questions };
+  }
+
   /** Apply a cloud snapshot using last-write-wins by updated_at. */
   applyRemoteBatch(batch: unknown) {
     const parsed = syncBatchInputSchema.parse(batch);

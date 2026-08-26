@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <link rel="stylesheet" href="renderer.css" />
+    <title>Work Learn</title>
+  </head>
+  <body>
+    <header>
+      <span class="brand">Work Learn</span>
+      <button id="refresh" title="刷新">↻</button>
+    </header>
+
+    <section class="stats">
+      <div class="stat">
+        <span class="num" id="today">–</span>
+        <span class="label">今日采集</span>
+      </div>
+      <div class="stat">
+        <span class="num" id="pending">–</span>
+        <span class="label">待复习</span>
+      </div>
+      <div class="stat">
+        <span class="num" id="unsynced">–</span>
+        <span class="label">本地待推送</span>
+      </div>
+      <div class="stat wide">
+        <span class="num small" id="lastSync">–</span>
+        <span class="label">上次同步</span>
+      </div>
+    </section>
+
+    <section class="actions">
+      <button id="capture">采集剪贴板</button>
+      <button id="sync">同步云端</button>
+      <button id="openWeb">打开 Web</button>
+    </section>
+
+    <footer id="status" class="status"></footer>
+    <script src="renderer.js"></script>
+  </body>
+</html>

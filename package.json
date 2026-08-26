@@ -6,6 +6,7 @@
     "dev:web": "pnpm --filter @work-learn/web dev",
     "dev:api": "pnpm --filter @work-learn/api dev",
     "dev:cli": "pnpm --filter @work-learn/cli dev",
+    "dev:companion": "pnpm --filter @work-learn/companion dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
@@ -16,6 +17,6 @@
     "wrangler": "4.86.0"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3"]
+    "onlyBuiltDependencies": ["better-sqlite3", "electron"]
   }
 }
