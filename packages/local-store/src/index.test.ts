@@ -146,6 +146,37 @@ test("suggestReuse expands a matched phrase to another expression with the same 
   });
 });
 
+test("reuse nudge settings default on and can suppress suggestions", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "deploy" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "deploy",
+      originalText: "Database deployment wording.",
+      usefulExpressions: ["roll out a migration", "deploy the migration"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["deploy"]
+    });
+    const db = (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): void } } }).db;
+    db.prepare("INSERT INTO intents (id, label, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run("intent-deploy", "deploy a database change", null, "2026-08-26T09:00:00.000Z", "2026-08-26T09:00:00.000Z");
+    db.prepare("UPDATE saved_expressions SET intent_id = ? WHERE text_norm IN (?, ?)")
+      .run("intent-deploy", "roll out a migration", "deploy the migration");
+
+    const enabled = store.suggestReuse({ text: "Let's roll out a migration today.", source: "codex" });
+    assert.equal(enabled.suggestions.length, 1);
+    const disabled = store.updateReuseNudgeSettings({ enabled: false });
+    assert.equal(disabled.enabled, false);
+    const quiet = store.suggestReuse({ text: "Let's roll out a migration today.", source: "codex" });
+    assert.equal(quiet.enabled, false);
+    assert.equal(quiet.suggestions.length, 0);
+    assert.equal(quiet.suppressedReason, "disabled");
+  });
+});
+
 test("generatePractice turns recent materials into exercise prompts", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "api design" });
