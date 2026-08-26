@@ -446,3 +446,69 @@ export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
 export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
+
+export type ReuseSummary = {
+  generatedAt: string;
+  counts: {
+    expressions: number;
+    activeVocabulary: number;
+    sleepingExpressions: number;
+    reuseEvents: number;
+    expressionBreadth: number;
+    crossContextReuse: number;
+  };
+  activeExpressions: SyncSavedExpression[];
+  sleepingExpressions: SyncSavedExpression[];
+  recentEvents: Array<SyncReuseEvent & { text: string }>;
+};
+
+export const summarizeReuse = (
+  expressions: ReadonlyArray<SyncSavedExpression>,
+  events: ReadonlyArray<SyncReuseEvent>,
+  limit = 6
+): ReuseSummary => {
+  const byId = new Map(expressions.map((expression) => [expression.id, expression]));
+  const contextsByExpression = new Map<string, Set<string>>();
+  for (const event of events) {
+    const context = event.sessionId ?? event.source ?? "unknown";
+    const contexts = contextsByExpression.get(event.expressionId) ?? new Set<string>();
+    contexts.add(context);
+    contextsByExpression.set(event.expressionId, contexts);
+  }
+  const reused = expressions.filter((expression) => expression.reuseCount > 0 || expression.lastReusedAt);
+  const intentsWithMultipleReusedExpressions = new Set(
+    reused.filter((expression) => expression.intentId).map((expression) => expression.intentId)
+  );
+  // Counts are conservative: an intent only contributes to breadth when at least
+  // two distinct saved expressions under it have actually been reused.
+  for (const intentId of [...intentsWithMultipleReusedExpressions]) {
+    const count = reused.filter((expression) => expression.intentId === intentId).length;
+    if (count < 2) intentsWithMultipleReusedExpressions.delete(intentId);
+  }
+  const recentEvents = events
+    .map((event) => ({ event, expression: byId.get(event.expressionId) }))
+    .filter((entry): entry is { event: SyncReuseEvent; expression: SyncSavedExpression } => Boolean(entry.expression))
+    .slice(0, limit)
+    .map(({ event, expression }) => ({ ...event, text: expression.text }));
+  return {
+    generatedAt: new Date().toISOString(),
+    counts: {
+      expressions: expressions.length,
+      activeVocabulary: reused.length,
+      sleepingExpressions: expressions.length - reused.length,
+      reuseEvents: events.length,
+      expressionBreadth: intentsWithMultipleReusedExpressions.size,
+      crossContextReuse: [...contextsByExpression.values()].filter((contexts) => contexts.size >= 2).length
+    },
+    activeExpressions: reused
+      .slice()
+      .sort((a, b) => (b.lastReusedAt ?? "").localeCompare(a.lastReusedAt ?? ""))
+      .slice(0, limit),
+    sleepingExpressions: expressions
+      .filter((expression) => expression.reuseCount === 0 && !expression.lastReusedAt)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit),
+    recentEvents
+  };
+};
