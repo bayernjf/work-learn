@@ -1,4 +1,15 @@
 import { createClient } from "@supabase/supabase-js";
+import WebSocket from "ws";
+
+// Supabase JS eagerly builds a RealtimeClient on every `createClient` call. On
+// Node 20 the realtime-js runtime can't find a native `WebSocket` global (it
+// only became global in Node 22+), so client construction throws
+// "Node.js detected but native WebSocket not found". The API never uses realtime
+// subscriptions, so we polyfill a `WebSocket` global with `ws` when the runtime
+// lacks one. On Node 22+ the native global already exists and this is a no-op.
+if (typeof (globalThis as { WebSocket?: unknown }).WebSocket === "undefined") {
+  (globalThis as { WebSocket?: unknown }).WebSocket = WebSocket;
+}
 
 const getSupabaseConfig = () => {
   const url = process.env.SUPABASE_URL;
@@ -16,11 +27,7 @@ export const createSupabaseUserClient = (accessToken: string) => {
 
   return createClient(url, anonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { autoRefreshToken: false, persistSession: false },
-    // The API never uses realtime subscriptions, so disable the RealtimeClient.
-    // realtime-js v2 dropped its `ws` fallback and requires the native
-    // `globalThis.WebSocket` (Node 22+); disabling avoids forcing Node 22 locally.
-    realtime: false
+    auth: { autoRefreshToken: false, persistSession: false }
   });
 };
 
@@ -35,8 +42,7 @@ export const createSupabaseServiceClient = () => {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required");
   }
   return createClient(url, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-    realtime: false
+    auth: { autoRefreshToken: false, persistSession: false }
   });
 };
 
