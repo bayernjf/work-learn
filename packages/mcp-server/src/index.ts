@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -12,7 +12,8 @@ export type McpToolName =
   | "generate_practice"
   | "get_user_patterns"
   | "get_reuse_summary"
-  | "record_reuse";
+  | "record_reuse"
+  | "suggest_reuse";
 
 type McpConfig = {
   apiUrl: string;
@@ -32,7 +33,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -82,6 +83,11 @@ export const recordReuse = (config: McpConfig, input: unknown) => {
 
 export const getReuseSummary = (config: McpConfig) => json(config, "/reuse");
 
+export const suggestReuse = (config: McpConfig, input: unknown) => {
+  const parsed = suggestReuseInputSchema.parse(input);
+  return json(config, "/reuse/suggestions", { method: "POST", body: JSON.stringify(parsed) });
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -106,5 +112,6 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   generatePractice: (input) => generatePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input),
   recordReuse: (input) => recordReuse(config, input),
-  getReuseSummary: () => getReuseSummary(config)
+  getReuseSummary: () => getReuseSummary(config),
+  suggestReuse: (input) => suggestReuse(config, input)
 });

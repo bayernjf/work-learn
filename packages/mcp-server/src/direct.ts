@@ -15,6 +15,8 @@ import {
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
   findReuseMatches,
+  suggestReuse,
+  suggestReuseInputSchema,
   syncIntentColumns,
   syncReuseEventColumns,
   syncSavedExpressionColumns,
@@ -163,6 +165,20 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression),
       (ok(eventRows) as Record<string, unknown>[]).map(normalizeReuseEvent)
     );
+  },
+
+  async suggestReuse(input) {
+    requireScope(scopes, "read");
+    const parsed = suggestReuseInputSchema.parse(input);
+    const safeText = redactSecrets(parsed.text).text;
+    const expressionRows = ok(await supabase
+      .from("saved_expressions")
+      .select(syncSavedExpressionColumns)
+      .eq("user_id", userId)) as Record<string, unknown>[];
+    return suggestReuse(safeText, expressionRows.map(normalizeSavedExpression), {
+      source: parsed.source,
+      limit: parsed.limit
+    });
   },
 
   async saveQuestionTranslation(input) {

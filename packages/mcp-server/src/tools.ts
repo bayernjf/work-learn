@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -22,6 +22,7 @@ export interface WorkLearnContext {
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
   recordReuse(input: unknown): Promise<unknown> | unknown;
   getReuseSummary(): Promise<unknown> | unknown;
+  suggestReuse(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
@@ -111,6 +112,15 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       contextSnippet: z.string().optional().describe("Short redacted surrounding context to store with the reuse event.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.recordReuse(recordReuseInputSchema.parse(input))) }] }));
+
+  server.registerTool("suggest_reuse", {
+    description: "Suggest other saved expressions for the same intent as expressions already present in the current English text. This is expansion, not correction: offer at most one gentle nudge per turn and never call the user's wording wrong.",
+    inputSchema: {
+      text: z.string().describe("The user's current English text. It must already contain one saved expression for deterministic same-intent suggestions."),
+      source: sourceSchema.optional().describe("Current agent/client source, such as codex or claude, used to rank context-specific alternatives."),
+      limit: z.number().int().min(1).max(1).optional().describe("Reserved for compatibility; the product allows at most one suggestion per turn.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.suggestReuse(suggestReuseInputSchema.parse(input))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };
