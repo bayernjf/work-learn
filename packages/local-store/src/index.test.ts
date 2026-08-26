@@ -106,6 +106,11 @@ test("saved material creates trackable expressions and records later reuse", () 
     assert.equal(expression?.reuseCount, 1);
     assert.ok(expression?.lastReusedAt);
     assert.equal(store.unsynced().reuseEvents.length, 1);
+
+    const summary = store.getReuseSummary();
+    assert.equal(summary.counts.activeVocabulary, 1);
+    assert.equal(summary.counts.sleepingExpressions, 1);
+    assert.equal(summary.counts.reuseEvents, 1);
   });
 });
 
