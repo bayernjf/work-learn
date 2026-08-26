@@ -8,6 +8,7 @@ export type McpToolName =
   | "search_corpus"
   | "get_review_items"
   | "mark_mastered"
+  | "snooze_review"
   | "generate_practice"
   | "get_user_patterns";
 
@@ -29,7 +30,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "generate_practice", "get_user_patterns"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -47,11 +48,20 @@ export const saveQuestionTranslation = (config: McpConfig, input: unknown) => {
   return json(config, "/question-translations", { method: "POST", body: JSON.stringify(parsed) });
 };
 
-export const searchCorpus = (config: McpConfig, query?: string) => json(config, `/materials${query ? `?q=${encodeURIComponent(query)}` : ""}`);
+export const searchCorpus = (config: McpConfig, query?: string, filters?: { source?: string; tag?: string }) => {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (filters?.source) params.set("source", filters.source);
+  if (filters?.tag) params.set("tag", filters.tag);
+  const qs = params.toString();
+  return json(config, `/materials${qs ? `?${qs}` : ""}`);
+};
 
 export const getReviewItems = (config: McpConfig) => json(config, "/reviews");
 
 export const markMastered = (config: McpConfig, reviewId: string) => json(config, `/reviews/${encodeURIComponent(reviewId)}/complete`, { method: "POST" });
+
+export const snoozeReview = (config: McpConfig, reviewId: string, days = 1) => json(config, `/reviews/${encodeURIComponent(reviewId)}/snooze?days=${days}`, { method: "POST" });
 
 export const generatePractice = (config: McpConfig, input: unknown) => {
   const parsed = generatePracticeInputSchema.parse(input);
@@ -80,9 +90,10 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   createSession: (input) => createSession(config, input),
   saveMaterial: (input) => saveMaterial(config, input),
   saveQuestionTranslation: (input) => saveQuestionTranslation(config, input),
-  searchCorpus: (query) => searchCorpus(config, query),
+  searchCorpus: (query, filters) => searchCorpus(config, query, filters),
   getReviewItems: () => getReviewItems(config),
   markMastered: (reviewId) => markMastered(config, reviewId),
+  snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input)
 });

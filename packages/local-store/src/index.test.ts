@@ -3,7 +3,8 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { LocalStore, normalizeQuestion } from "./index.js";
+import { normalizeQuestion } from "@work-learn/shared-schema";
+import { LocalStore } from "./index.js";
 
 const withStore = (fn: (store: LocalStore, dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "work-learn-"));
@@ -340,5 +341,58 @@ test("exportMarkdown writes an overwritable day file", () => {
     const path2 = store.exportMarkdown(date, notesDir);
     assert.equal(path, path2);
     assert.equal(readFileSync(path, "utf8"), content);
+  });
+});
+
+test("generatePractice includes saved question translations", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "questions" });
+    store.saveQuestionTranslation({
+      sessionId: session.id,
+      source: "codex",
+      question: "这个接口怎么鉴权？",
+      translation: "How does this API handle authentication?"
+    });
+
+    const practice = store.generatePractice({ limit: 3 });
+    assert.equal(practice.questions.length, 1);
+    assert.ok(practice.exercises.some((exercise: { type: string; answer?: string }) => exercise.type === "question"));
+    assert.ok(practice.exercises.some((exercise: { type: string; answer?: string }) => exercise.type === 'question' && exercise.answer === "How does this API handle authentication?"));
+  });
+});
+
+test("searchCorpus can filter by source and tag", () => {
+  withStore((store) => {
+    const codex = store.createSession({ source: "codex", topic: "api" });
+    const claude = store.createSession({ source: "claude", topic: "review" });
+    store.saveMaterial({
+      sessionId: codex.id,
+      source: "codex",
+      topic: "api auth",
+      originalText: "wire up bearer auth",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [],
+      tags: ["auth"]
+    });
+    store.saveMaterial({
+      sessionId: claude.id,
+      source: "claude",
+      topic: "review notes",
+      originalText: "leave a review comment",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [],
+      tags: ["review"]
+    });
+    store.saveQuestionTranslation({
+      sessionId: claude.id,
+      source: "claude",
+      question: "怎么评审？",
+      translation: "How should I review this?"
+    });
+
+    const bySource = store.searchCorpus("", { source: "codex" });
+    assert.equal(bySource.materials.length, 1);
+    assert.equal(bySource.questions.length, 0);
+    const byTag = store.searchCorpus("", { tag: "review" });
+    assert.equal(byTag.materials.length, 1);
+    assert.equal(byTag.materials[0]?.source, "claude");
   });
 });

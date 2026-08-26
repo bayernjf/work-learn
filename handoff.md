@@ -62,6 +62,13 @@ Agent 中调用 Skill
 - [x] Web 练习入口：语料卡片"练习"按钮调用 /api/practice；首页"你的学习模式"面板调用 /api/patterns
 - [x] 复习卡片改为先回忆再展开：默认只显示原文，点"显示答案"后展开 better/why/reuse/词汇和练习按钮
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
+- [x] 云端提问翻译按规范化问题去重，新增并已执行 `014_question_norm_dedupe.sql`
+- [x] 复习项支持 snooze 到明天，Web/API/MCP/本地队列均支持
+- [x] Web 端支持编辑语料的 topic、explanation、tags 等字段
+- [x] `learn practice` 可从本地库生成练习
+- [x] `generate_practice` 将已保存的提问翻译纳入练习
+- [x] 语料库支持按 source/tag 筛选，CLI `learn search` 支持 `--source`/`--tag`
+- [x] Web 端支持导出当前视图为 Markdown
 
 ## 接入分发待办
 
@@ -136,11 +143,16 @@ Agent 中调用 Skill
 ## 需要后续确认的问题
 
 - 是否引入间隔重复算法，替换当前的一次性复习队列（当前决定暂缓）；
-- `generate_practice` 目前只生成结构化练习提示，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
+- `generate_practice` 目前生成结构化练习提示，覆盖材料和提问翻译，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
 - 使用本地模型还是云端模型做语料分析；
 - 是否需要 macOS Companion 做终端会话的自动采集。
 
 CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
+
+## 本轮新增后的待执行项
+
+- 合入 dev 后由 GitHub Actions 部署 API/Web；
+- 真实 Agent 验证 `snooze_review`、提问翻译练习、source/tag 筛选和 Web 导出。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 

@@ -40,6 +40,9 @@ export const en = {
     searchLabel: "Search your corpus",
     loadingLabel: "Loading your corpus",
     all: "All",
+    allSources: "All sources",
+    allTags: "All tags",
+    allTopics: "All topics",
     newest: "Newest",
     oldest: "Oldest",
     noMatchQuery: (query: string) => `Nothing matches “${query}” yet.`,
@@ -131,7 +134,20 @@ export const en = {
     refresh: "Refresh",
   },
 
+  export: {
+    button: "Export markdown",
+    generatedAt: "Generated at",
+    source: "Source",
+    created: "Created",
+    tags: "Tags",
+    material: "material",
+    materials: "materials",
+    question: "question",
+    questions: "questions",
+  },
+
   practice: {
+    answer: "Reference:",
     practice: "Practice",
     practicing: "Preparing…",
     hide: "Hide",
@@ -141,7 +157,8 @@ export const en = {
       reuse: "Reuse",
       recall: "Recall",
       correction: "Correction",
-      apply: "Apply"
+      apply: "Apply",
+      question: "Question"
     }
   },
 
@@ -177,7 +194,7 @@ Do this:
 3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
-6. Tell me to restart the client, then confirm these eight tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, generate_practice, get_user_patterns.`,
+6. Tell me to restart the client, then confirm these nine tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns.`,
     modesLabel: "Where the token goes",
     modeInline: "Token in the prompt",
     modeFile: "Token in a file",
@@ -193,7 +210,7 @@ Do this:
    If you run it from anywhere else, add --repo <path to the clone>.
 3. That installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor and OpenCode, backs up each config file before writing it, records the path instead of the token, and installs the Work Learn skill. Do not hand-edit the config files yourself.
 4. If it fails, show me its output and stop. Do not fall back to putting a token in a config file.
-5. Tell me to restart the client, then confirm these eight tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, generate_practice, get_user_patterns.
+5. Tell me to restart the client, then confirm these nine tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns.
 
 The skill it installs is the same one published at ${skillUrl}.`,
     tokenStep: "Create a personal access token. Every route below needs one.",
@@ -272,6 +289,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     due: (count: number) => `${count} due`,
     empty: "No reviews due. Keep working, then save the next useful expression.",
     mark: "Mark mastered",
+    snooze: "Tomorrow",
     showAnswer: "Show answer",
     hideAnswer: "Hide",
     recallHint: "Recall the better version, then check yourself.",
@@ -285,6 +303,13 @@ The skill it installs is the same one published at ${skillUrl}.`,
     reuse: "Reuse",
     vocabulary: "Vocabulary",
     deleteConfirm: "Delete this learning material? It will be removed from your other devices too.",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    editTopic: "Topic",
+    editTags: "Tags (comma separated)",
+    editExplanation: "Why",
+    editError: "Could not save changes",
   },
 
   footer: {
@@ -351,6 +376,9 @@ export const zh: Strings = {
     searchLabel: "搜索你的语料",
     loadingLabel: "正在加载语料",
     all: "全部",
+    allSources: "全部来源",
+    allTags: "全部标签",
+    allTopics: "全部话题",
     newest: "最新",
     oldest: "最早",
     noMatchQuery: (query: string) => `没有匹配「${query}」的内容。`,
@@ -442,7 +470,20 @@ export const zh: Strings = {
     refresh: "刷新",
   },
 
+  export: {
+    button: "导出 Markdown",
+    generatedAt: "生成时间",
+    source: "来源",
+    created: "保存时间",
+    tags: "标签",
+    material: "条材料",
+    materials: "条材料",
+    question: "条提问",
+    questions: "条提问",
+  },
+
   practice: {
+    answer: "参考说法：",
     practice: "练习",
     practicing: "准备中…",
     hide: "收起",
@@ -452,7 +493,8 @@ export const zh: Strings = {
       reuse: "复用",
       recall: "回忆",
       correction: "纠错",
-      apply: "应用"
+      apply: "应用",
+      question: "提问"
     }
   },
 
@@ -488,7 +530,7 @@ export const zh: Strings = {
 3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
-6. 告诉我需要重启客户端，然后确认这 8 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、generate_practice、get_user_patterns。`,
+6. 告诉我需要重启客户端，然后确认这 9 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns。`,
     modesLabel: "token 放在哪",
     modeInline: "token 写进提示词",
     modeFile: "token 存在文件里",
@@ -504,7 +546,7 @@ export const zh: Strings = {
    如果你在别的目录执行，就加上 --repo <clone 的路径>。
 3. 这个安装器会自己检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，写入前先备份各自的配置文件，配置里记的是这个路径而不是 token，并且会顺带装上 Work Learn 的 skill。不要自己手改这些配置文件。
 4. 如果它失败了，把它的输出给我看然后停下。不要退而把 token 写进配置文件。
-5. 告诉我需要重启客户端，然后确认这 8 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、generate_practice、get_user_patterns。
+5. 告诉我需要重启客户端，然后确认这 9 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns。
 
 它装的 skill 就是 ${skillUrl} 这一份。`,
     tokenStep: "创建一个 personal access token，下面三种方式都需要它。",
@@ -583,6 +625,7 @@ export const zh: Strings = {
     due: (count: number) => `${count} 条待复习`,
     empty: "没有待复习的。继续工作，下次遇到有用的表达再存。",
     mark: "标为已掌握",
+    snooze: "明天再说",
     showAnswer: "显示答案",
     hideAnswer: "收起",
     recallHint: "先回忆更自然的说法，再展开对照。",
@@ -596,6 +639,13 @@ export const zh: Strings = {
     reuse: "造句练习",
     vocabulary: "词汇",
     deleteConfirm: "删除这条学习材料？删除也会同步到你的其他设备。",
+    edit: "编辑",
+    save: "保存",
+    cancel: "取消",
+    editTopic: "话题",
+    editTags: "标签（逗号分隔）",
+    editExplanation: "为什么",
+    editError: "保存修改失败",
   },
 
   footer: {

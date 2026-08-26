@@ -21,8 +21,14 @@ export type ReviewItem = {
   learning_materials: LearningMaterial;
 };
 
-export const fetchMaterials = async (session: Session, query = "") => {
-  const search = query ? `?q=${encodeURIComponent(query)}` : "";
+export type CorpusFilters = { source?: string; tag?: string };
+
+export const fetchMaterials = async (session: Session, query = "", filters: CorpusFilters = {}) => {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (filters.source) params.set("source", filters.source);
+  if (filters.tag) params.set("tag", filters.tag);
+  const search = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`/api/materials${search}`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
@@ -41,8 +47,11 @@ export type QuestionTranslation = {
   created_at: string;
 };
 
-export const fetchQuestionTranslations = async (session: Session, query = "") => {
-  const search = query ? `?q=${encodeURIComponent(query)}` : "";
+export const fetchQuestionTranslations = async (session: Session, query = "", source?: string) => {
+  const params = new URLSearchParams();
+  if (query) params.set("q", query);
+  if (source) params.set("source", source);
+  const search = params.toString() ? `?${params.toString()}` : "";
   const response = await fetch(`/api/question-translations${search}`, {
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
@@ -79,6 +88,26 @@ export const deleteMaterial = async (session: Session, materialId: string) => {
   if (!response.ok) throw new Error(activeStrings().errors.deleteMaterial);
 };
 
+export type MaterialUpdate = {
+  topic?: string;
+  explanation?: string;
+  usefulExpressions?: string[];
+  corrections?: string[];
+  vocabulary?: string[];
+  practicePrompts?: string[];
+  tags?: string[];
+};
+
+export const updateMaterial = async (session: Session, materialId: string, updates: MaterialUpdate) => {
+  const response = await fetch(`/api/materials/${encodeURIComponent(materialId)}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(updates)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.deleteMaterial);
+  return (await response.json()) as { data: LearningMaterial };
+};
+
 export const deleteQuestionTranslation = async (session: Session, questionId: string) => {
   const response = await fetch(`/api/question-translations/${encodeURIComponent(questionId)}`, {
     method: "DELETE",
@@ -95,16 +124,27 @@ export const completeReview = async (session: Session, reviewId: string) => {
   if (!response.ok) throw new Error(activeStrings().errors.completeReview);
 };
 
+
+export const snoozeReview = async (session: Session, reviewId: string, days = 1) => {
+  const response = await fetch(`/api/reviews/${encodeURIComponent(reviewId)}/snooze?days=${days}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.completeReview);
+};
 export type PracticeExercise = {
-  type: "reuse" | "recall" | "correction" | "apply";
-  materialId: string;
+  type: "reuse" | "recall" | "correction" | "apply" | "question";
+  materialId?: string;
+  questionId?: string;
   focus: string;
   prompt: string;
+  answer?: string;
 };
 
 export type PracticeResult = {
   generatedAt: string;
   materials: LearningMaterial[];
+  questions: QuestionTranslation[];
   exercises: PracticeExercise[];
 };
 

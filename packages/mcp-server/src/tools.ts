@@ -14,9 +14,10 @@ export interface WorkLearnContext {
   createSession(input: unknown): Promise<unknown> | unknown;
   saveMaterial(input: unknown): Promise<unknown> | unknown;
   saveQuestionTranslation(input: unknown): Promise<unknown> | unknown;
-  searchCorpus(query?: string): Promise<unknown> | unknown;
+  searchCorpus(query?: string, filters?: { source?: string; tag?: string }): Promise<unknown> | unknown;
   getReviewItems(): Promise<unknown> | unknown;
   markMastered(reviewId: string): Promise<unknown> | unknown;
+  snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
   generatePractice(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
 }
@@ -59,9 +60,9 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.saveQuestionTranslation(input)) }] }));
 
   server.registerTool("search_corpus", {
-    description: "Search the user's saved Work Learn corpus.",
-    inputSchema: { query: z.string().optional() }
-  }, async ({ query }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.searchCorpus(query)) }] }));
+    description: "Search the user's saved Work Learn corpus, optionally filtered by source or tag.",
+    inputSchema: { query: z.string().optional(), source: z.string().optional(), tag: z.string().optional() }
+  }, async ({ query, source, tag }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.searchCorpus(query, { source, tag })) }] }));
 
   server.registerTool("get_review_items", {
     description: "Get the user's next Work Learn review items.",
@@ -72,6 +73,11 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
     description: "Mark a Work Learn review item as completed.",
     inputSchema: { reviewId: z.string() }
   }, async ({ reviewId }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.markMastered(reviewId)) }] }));
+
+  server.registerTool("snooze_review", {
+    description: "Snooze a Work Learn review item until later (default tomorrow).",
+    inputSchema: { reviewId: z.string(), days: z.number().int().min(1).max(365).optional() }
+  }, async ({ reviewId, days }) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.snoozeReview(reviewId, days)) }] }));
 
   server.registerTool("generate_practice", {
     description: "Generate structured practice prompts from recent Work Learn materials, or one material when materialId is provided. The host agent asks the questions and gives feedback; this tool does not call a model.",

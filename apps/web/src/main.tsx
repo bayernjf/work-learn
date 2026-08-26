@@ -1,7 +1,7 @@
 import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, generatePractice, getUserPatterns, LearningMaterial, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -46,6 +46,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [topic, setTopic] = useState<string | null>(null);
+  const [source, setSource] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(null);
   const [sort, setSort] = useState<"newest" | "oldest">("newest");
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [questions, setQuestions] = useState<QuestionTranslation[]>([]);
@@ -73,7 +75,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setLoadingMaterials(true);
     setLoadError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session), fetchQuestionTranslations(session)])
-      .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); })
+      .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); setResults(null); setQuestionResults(null); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
     void refreshSyncStatus(session);
@@ -81,13 +83,15 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   }, [session, reloadKey]);
 
   useEffect(() => {
+    if (!session) return;
     const trimmed = query.trim();
-    if (!session || !trimmed) { setResults(null); setSearching(false); return; }
+    const filters = { source: source ?? undefined, tag: tag ?? undefined };
+    if (!trimmed && !source && !tag) { setResults(null); setQuestionResults(null); setSearching(false); return; }
 
     setSearching(true);
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void Promise.all([fetchMaterials(session, trimmed), fetchQuestionTranslations(session, trimmed)])
+      void Promise.all([fetchMaterials(session, trimmed, filters), fetchQuestionTranslations(session, trimmed, source ?? undefined)])
         .then(([materialResult, questionResult]) => {
           if (!cancelled) { setResults(materialResult.data); setQuestionResults(questionResult.data); }
         })
@@ -96,7 +100,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }, 220);
 
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [query, session]);
+  }, [query, session, source, tag]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -109,11 +113,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
-  const topics = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const material of materials) counts.set(material.topic, (counts.get(material.topic) ?? 0) + 1);
-    return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  }, [materials]);
+  const topics = useMemo(() => facetCounts(materials.map((material) => material.topic)), [materials]);
+  const sources = useMemo(() => facetCounts(materials.map((material) => material.source).concat(questions.map((question) => question.source))), [materials, questions]);
+  const tags = useMemo(() => facetCounts(materials.flatMap((material) => material.tags)), [materials]);
 
   const visible = useMemo(() => {
     const base = results ?? materials;
@@ -122,6 +124,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       ? b.created_at.localeCompare(a.created_at)
       : a.created_at.localeCompare(b.created_at));
   }, [results, materials, topic, sort]);
+  const visibleQuestions = questionResults ?? questions;
 
   const empty = materials.length === 0 && questions.length === 0;
 
@@ -166,6 +169,16 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const handleSnoozeReview = async (reviewId: string) => {
+    if (!session) return;
+    try {
+      await snoozeReview(session, reviewId, 1);
+      setReviews((current) => current.filter((review) => review.id !== reviewId));
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t.errors.completeReview);
+    }
+  };
+
   const handleDeleteMaterial = async (materialId: string) => {
     if (!session || !window.confirm(t.material.deleteConfirm)) return;
     try {
@@ -186,6 +199,18 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       setQuestionResults((current) => current?.filter((question) => question.id !== questionId) ?? current);
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : t.errors.deleteQuestion);
+    }
+  };
+
+  const handleUpdateMaterial = async (materialId: string, updates: Parameters<typeof updateMaterial>[2]) => {
+    if (!session) return;
+    try {
+      const result = await updateMaterial(session, materialId, updates);
+      const replace = (items: LearningMaterial[]) => items.map((m) => m.id === materialId ? result.data : m);
+      setMaterials(replace);
+      setResults((current) => current ? replace(current) : current);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : t.material.editError);
     }
   };
 
@@ -217,6 +242,19 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const handleExport = () => {
+    const markdown = buildExportMarkdown(visible, visibleQuestions, t);
+    const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `work-learn-${new Date().toISOString().slice(0, 10)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   if (!session) {
     return <AuthScreen
       mode={authMode}
@@ -246,8 +284,11 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       </header>
       <section className="desk" id="corpus">
         <div className="desk-title">
-          <h1>{t.desk.title}</h1>
-          <span>{loadError ? t.desk.couldNotLoad : corpusSummary(materials, t)}</span>
+          <div>
+            <h1>{t.desk.title}</h1>
+            <span>{loadError ? t.desk.couldNotLoad : corpusSummary(materials, t)}</span>
+          </div>
+          <button type="button" className="ghost-button" disabled={empty} onClick={handleExport}>{t.export.button}</button>
         </div>
         {loadError ? (
           <div className="desk-error" role="alert">
@@ -271,7 +312,15 @@ function App({ supabase }: { supabase: SupabaseClient }) {
           </label>
           <div className="filters">
             <div className="facets">
-              <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>{t.desk.all} <b>{materials.length}</b></button>
+              <button className={source === null ? "facet on" : "facet"} onClick={() => setSource(null)}>{t.desk.allSources} <b>{materials.length + questions.length}</b></button>
+              {sources.slice(0, 8).map(([name, count]) => <button key={name} className={source === name ? "facet on" : "facet"} onClick={() => setSource(name)}>{name} <b>{count}</b></button>)}
+            </div>
+            <div className="facets">
+              <button className={tag === null ? "facet on" : "facet"} onClick={() => setTag(null)}>{t.desk.allTags} <b>{materials.length}</b></button>
+              {tags.slice(0, 10).map(([name, count]) => <button key={name} className={tag === name ? "facet on" : "facet"} onClick={() => setTag(name)}>#{name} <b>{count}</b></button>)}
+            </div>
+            <div className="facets">
+              <button className={topic === null ? "facet on" : "facet"} onClick={() => setTopic(null)}>{t.desk.allTopics} <b>{materials.length}</b></button>
               {topics.map(([name, count]) => <button key={name} className={topic === name ? "facet on" : "facet"} onClick={() => setTopic(name)}>{name} <b>{count}</b></button>)}
             </div>
             <div className="sort" data-empty={empty}>
@@ -283,20 +332,57 @@ function App({ supabase }: { supabase: SupabaseClient }) {
             : empty ? <EmptyCorpus />
             : visible.length === 0
               ? <p className="corpus-empty">{query.trim() ? t.desk.noMatchQuery(query.trim()) : t.desk.noMatchTopic}</p>
-              : <MaterialList session={session} materials={visible} onDelete={handleDeleteMaterial} />}
+              : <MaterialList session={session} materials={visible} onDelete={handleDeleteMaterial} onUpdate={handleUpdateMaterial} />}
         </>}
       </section>
-      <QuestionTranslationsSection questions={questionResults ?? questions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
+      <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
-        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} />
+        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
       </> : <>
-        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} />
+        <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
         <AgentConnect key="filled" session={session} initialOpen={false} syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
       </>}
       <AppFooter />
     </main>
   );
+}
+
+function facetCounts(values: string[]) {
+  const counts = new Map<string, number>();
+  for (const value of values) {
+    const normalized = value.trim();
+    if (normalized) counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+function buildExportMarkdown(materials: LearningMaterial[], questions: QuestionTranslation[], t: Strings) {
+  const lines = [
+    "# Work Learn export",
+    "",
+    `- ${t.export.generatedAt} ${new Date().toISOString()}`,
+    `- ${materials.length} ${materials.length === 1 ? t.export.material : t.export.materials}`,
+    `- ${questions.length} ${questions.length === 1 ? t.export.question : t.export.questions}`,
+    ""
+  ];
+  for (const material of materials) {
+    lines.push(`## ${material.topic}`, "");
+    lines.push(`- ${t.export.source}: ${material.source}`);
+    lines.push(`- ${t.export.created}: ${material.created_at}`);
+    if (material.tags.length) lines.push(`- ${t.export.tags}: ${material.tags.join(", ")}`);
+    lines.push("", material.original_text, "");
+    if (material.explanation) lines.push(`**${t.material.why}:** ${material.explanation}`, "");
+    if (material.corrections.length) lines.push(`**${t.material.better}:** ${material.corrections.join("; ")}`, "");
+    if (material.useful_expressions.length) lines.push(`**${t.practice.types.reuse}:** ${material.useful_expressions.join("; ")}`, "");
+  }
+  if (questions.length) {
+    lines.push(`## ${t.qa.heading}`, "");
+    for (const question of questions) {
+      lines.push(`- ${question.question}`, `  - ${question.translation}`, `  - ${question.source} · ${question.created_at}`, "");
+    }
+  }
+  return lines.join("\n");
 }
 
 function SyncStatusPanel({ status, loading, error, onRefresh }: { status: SyncStatus | null; loading: boolean; error: string; onRefresh: () => void }) {
@@ -692,7 +778,7 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
               {result.exercises.map((exercise, index) => (
                 <li key={`${exercise.type}-${index}`}>
                   <span className={`practice-type practice-type-${exercise.type}`}>{t.practice.types[exercise.type]}</span>
-                  <p>{exercise.prompt}</p>
+                  <div><p>{exercise.prompt}</p>{exercise.answer ? <p className="practice-answer"><strong>{t.practice.answer}</strong> {exercise.answer}</p> : null}</div>
                 </li>
               ))}
             </ol>
@@ -772,12 +858,32 @@ function MaterialDetail({ label, value }: { label: string; value: string | undef
   );
 }
 
-function MaterialList({ session, materials, onDelete }: { session: Session; materials: LearningMaterial[]; onDelete: (id: string) => void }) {
+function MaterialCard({ session, material, index, onDelete, onUpdate }: { session: Session; material: LearningMaterial; index: number; onDelete: (id: string) => void; onUpdate: (id: string, updates: { topic?: string; explanation?: string; tags?: string[] }) => void }) {
   const { t, formatDate } = useI18n();
+  const [editing, setEditing] = useState(false);
+  const [topic, setTopic] = useState(material.topic);
+  const [explanation, setExplanation] = useState(material.explanation);
+  const [tags, setTags] = useState(material.tags.join(", "));
+
+  const save = () => {
+    onUpdate(material.id, { topic: topic.trim() || material.topic, explanation, tags: tags.split(",").map((s) => s.trim()).filter(Boolean) });
+    setEditing(false);
+  };
+
   return (
-    <div className="material-list">
-      {materials.map((material, index) => (
-        <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}>
+    <article className={index % 4 === 0 ? "material-card featured" : "material-card"} key={material.id}>
+      {editing ? (
+        <>
+          <label className="edit-label">{t.material.editTopic}<input value={topic} onChange={(e) => setTopic(e.target.value)} /></label>
+          <label className="edit-label">{t.material.editExplanation}<textarea value={explanation} onChange={(e) => setExplanation(e.target.value)} rows={2} /></label>
+          <label className="edit-label">{t.material.editTags}<input value={tags} onChange={(e) => setTags(e.target.value)} /></label>
+          <div className="card-actions">
+            <button type="button" className="text-button" onClick={() => setEditing(false)}>{t.material.cancel}</button>
+            <button type="button" className="complete-button" onClick={save}>{t.material.save}</button>
+          </div>
+        </>
+      ) : (
+        <>
           <p className="material-topic">{material.topic}</p>
           <h2>{material.useful_expressions[0] ?? t.material.fallback}</h2>
           <p>{material.original_text}</p>
@@ -785,12 +891,26 @@ function MaterialList({ session, materials, onDelete }: { session: Session; mate
           <MaterialDetail label={t.material.why} value={material.explanation} />
           <MaterialDetail label={t.material.reuse} value={material.practice_prompts[0]} />
           <MaterialDetail label={t.material.vocabulary} value={material.vocabulary.join(", ")} />
+          {material.tags.length > 0 ? <p className="material-tags">{material.tags.map((tag) => <span key={tag}>{tag}</span>)}</p> : null}
           <PracticeButton session={session} materialId={material.id} />
           <div className="card-actions">
             <span>{formatDate(material.created_at)}</span>
-            <button type="button" className="text-button" onClick={() => onDelete(material.id)}>{t.common.delete}</button>
+            <span className="card-action-buttons">
+              <button type="button" className="text-button" onClick={() => setEditing(true)}>{t.material.edit}</button>
+              <button type="button" className="text-button" onClick={() => onDelete(material.id)}>{t.common.delete}</button>
+            </span>
           </div>
-        </article>
+        </>
+      )}
+    </article>
+  );
+}
+
+function MaterialList({ session, materials, onDelete, onUpdate }: { session: Session; materials: LearningMaterial[]; onDelete: (id: string) => void; onUpdate: (id: string, updates: { topic?: string; explanation?: string; tags?: string[] }) => void }) {
+  return (
+    <div className="material-list">
+      {materials.map((material, index) => (
+        <MaterialCard key={material.id} session={session} material={material} index={index} onDelete={onDelete} onUpdate={onUpdate} />
       ))}
     </div>
   );
@@ -824,7 +944,7 @@ function QuestionTranslationsSection({ questions, searching, loading, onDelete }
   );
 }
 
-function ReviewCard({ session, review, index, onComplete }: { session: Session; review: ReviewItem; index: number; onComplete: (reviewId: string) => void }) {
+function ReviewCard({ session, review, index, onComplete, onSnooze }: { session: Session; review: ReviewItem; index: number; onComplete: (reviewId: string) => void; onSnooze: (reviewId: string) => void }) {
   const { t } = useI18n();
   const [showAnswer, setShowAnswer] = useState(false);
   const material = review.learning_materials;
@@ -851,20 +971,20 @@ function ReviewCard({ session, review, index, onComplete }: { session: Session; 
         <button type="button" className="text-button" onClick={() => setShowAnswer((value) => !value)}>
           {showAnswer ? t.review.hideAnswer : t.review.showAnswer}
         </button>
-        {showAnswer ? <button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button> : null}
+        {showAnswer ? <><button type="button" className="text-button" onClick={() => onSnooze(review.id)}>{t.review.snooze}</button><button className="complete-button" onClick={() => onComplete(review.id)}>{t.review.mark}</button></> : null}
       </div>
     </article>
   );
 }
 
-function ReviewList({ session, reviews, onComplete }: { session: Session; reviews: ReviewItem[]; onComplete: (reviewId: string) => void }) {
+function ReviewList({ session, reviews, onComplete, onSnooze }: { session: Session; reviews: ReviewItem[]; onComplete: (reviewId: string) => void; onSnooze: (reviewId: string) => void }) {
   const { t } = useI18n();
   return (
     <section className="review-section">
       <div className="section-heading"><div><p className="eyebrow">{t.review.eyebrow}</p><h2>{t.review.heading}</h2></div><span className="review-count">{t.review.due(reviews.length)}</span></div>
       {reviews.length === 0 ? <p className="review-empty">{t.review.empty}</p> : (
         <div className="review-list">
-          {reviews.map((review, index) => <ReviewCard key={review.id} session={session} review={review} index={index} onComplete={onComplete} />)}
+          {reviews.map((review, index) => <ReviewCard key={review.id} session={session} review={review} index={index} onComplete={onComplete} onSnooze={onSnooze} />)}
         </div>
       )}
     </section>
