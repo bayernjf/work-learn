@@ -4,7 +4,7 @@
 
 全部实现并提交到 `dev`（未 push）。CI 在 `a275748` 修复 `noUncheckedIndexedAccess` 后转绿，PR #40 已合并并部署生产。
 
-- **C1 练习闭环·状态保存**：新增 `practice_records` 表（迁移 `supabase/migrations/017_practice_records.sql`，需 `supabase db push` 应用到线上）。Web 练习改为「先写→对照→记住了/再练一次」，每次练习与错题落库；首页新增全局「练习记录 / 错题本」分区。覆盖 shared-schema / direct(Supabase) / local-store / api / mcp-server / web。
+- **C1 练习闭环·状态保存**：新增 `practice_records` 表（迁移 `supabase/migrations/017_practice_records.sql`，**已于 2026-08-27 推到云端并验证表结构与代码查询一致**）。Web 练习改为「先写→对照→记住了/再练一次」，每次练习与错题落库；首页新增全局「练习记录 / 错题本」分区。覆盖 shared-schema / direct(Supabase) / local-store / api / mcp-server / web。
 - **C2 模型驱动自适应出题**：新增 OpenAI 兼容 LLM 客户端，由 env 开关：`WORK_LEARN_LLM_BASE_URL`、`WORK_LEARN_LLM_API_KEY`、`WORK_LEARN_LLM_MODEL`（默认 `gpt-4o-mini`）。`generateAdaptivePractice` 基于近期错题生成练习；未配置 LLM 时回退规则生成。Web 练习面板新增「AI 出题」按钮。
 - **C3 Companion Agent 浮层**：默认关。检测前台 Agent（Claude / Cursor / Codex / 终端）时弹出透明 always-on-top 浮层，显示已存表达以 nudate 复用。新增 `learn expressions` CLI 命令供浮层取数。
 - **C4 rc-hook 自动录制**：新增 `learn hook install|uninstall|status`，向 shell rc（~/.zshrc 等）注入带边界标记的包裹块，把交互 shell 包进 `learn run` 自动录制；默认关，`uninstall` 仅移除注入片段、不动其余配置。托盘新增安装入口。
