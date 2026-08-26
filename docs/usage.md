@@ -75,7 +75,7 @@ Agent 会拉出到期的条目逐条问你，你确认记住了它就标记完�
 
 命令和参数见 [CLI 与 MCP 接入](cli-and-mcp.md)。
 
-## 八个工具在做什么
+## 九个工具在做什么
 
 平时不用直接调，但看到 agent 的工具调用卡片时能对上：
 
@@ -87,6 +87,7 @@ Agent 会拉出到期的条目逐条问你，你确认记住了它就标记完�
 | `search_corpus` | 搜你存过的材料 |
 | `get_review_items` | 取到期的复习条目 |
 | `mark_mastered` | 把一条复习项标记为已掌握 |
+| `snooze_review` | 把一条复习项延后，默认明天再看 |
 | `generate_practice` | 用一条或最近几条材料生成练习提示，由 Agent 带你练 |
 | `get_user_patterns` | 汇总近期高频表达、纠错、词汇和下一步练习建议 |
 
