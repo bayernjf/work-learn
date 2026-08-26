@@ -296,6 +296,34 @@ export const updateReuseNudgeSettingsSchema = z.object({
   dailyLimit: z.number().int().min(0).max(20).optional()
 });
 
+export const listExpressionsInputSchema = z.object({
+  intentId: z.string().min(1).nullable().optional(),
+  includeUnclustered: z.boolean().optional(),
+  limit: z.number().int().min(1).max(500).default(200)
+});
+
+export const clusterIntentsInputSchema = z.object({
+  groups: z.array(z.object({
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).nullable().optional(),
+    expressionIds: z.array(z.string().min(1)).min(1)
+  })).min(1).max(50)
+});
+
+export const mergeIntentsInputSchema = z.object({
+  sourceIntentId: z.string().min(1),
+  targetIntentId: z.string().min(1)
+});
+
+export const splitIntentInputSchema = z.object({
+  intentId: z.string().min(1),
+  groups: z.array(z.object({
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).nullable().optional(),
+    expressionIds: z.array(z.string().min(1)).min(1)
+  })).min(2).max(50)
+});
+
 export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review", "intent", "expression", "reuse_event"]);
 
 export const syncTombstoneSchema = z.object({
@@ -466,6 +494,10 @@ export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
 export type SuggestReuseInput = z.infer<typeof suggestReuseInputSchema>;
 export type ReuseNudgeSettings = z.infer<typeof reuseNudgeSettingsSchema>;
 export type UpdateReuseNudgeSettings = z.infer<typeof updateReuseNudgeSettingsSchema>;
+export type ListExpressionsInput = z.infer<typeof listExpressionsInputSchema>;
+export type ClusterIntentsInput = z.infer<typeof clusterIntentsInputSchema>;
+export type MergeIntentsInput = z.infer<typeof mergeIntentsInputSchema>;
+export type SplitIntentInput = z.infer<typeof splitIntentInputSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
 
