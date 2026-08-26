@@ -15,6 +15,7 @@ import {
   saveQuestionTranslationInputSchema,
   recordReuseInputSchema,
   redactSecrets,
+  summarizeReuse,
   syncBatchInputSchema,
   type PracticeMaterial,
   type PracticeQuestion,
@@ -571,6 +572,16 @@ export class LocalStore {
     return { recordedAt, recorded: matches.length, matches };
   }
 
+  getReuseSummary() {
+    const expressions = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
+      .all() as SavedExpressionRow[]).map(toSavedExpression);
+    const events = (this.db
+      .prepare("SELECT * FROM reuse_events ORDER BY created_at DESC")
+      .all() as ReuseEventRow[]).map(toReuseEvent);
+    return summarizeReuse(expressions, events);
+  }
+
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
@@ -1031,7 +1042,8 @@ export const createLocalContext = (store: LocalStore) => ({
   snoozeReview: (reviewId: string, days?: number) => store.snoozeReview(reviewId, days),
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
-  recordReuse: (input: unknown) => store.recordReuse(input)
+  recordReuse: (input: unknown) => store.recordReuse(input),
+  getReuseSummary: () => store.getReuseSummary()
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;
