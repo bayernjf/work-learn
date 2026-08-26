@@ -65,6 +65,7 @@ export const en = {
   },
 
   errors: {
+    importCorpus: "Could not import this JSON file",
     loadCorpus: "Could not load your corpus",
     completeReview: "Could not complete this review",
     config: "Could not load Work Learn configuration",
@@ -136,6 +137,7 @@ export const en = {
 
   export: {
     button: "Export markdown",
+    jsonButton: "Export JSON",
     generatedAt: "Generated at",
     source: "Source",
     created: "Created",
@@ -144,6 +146,14 @@ export const en = {
     materials: "materials",
     question: "question",
     questions: "questions",
+  },
+
+  import: {
+    button: "Import JSON",
+    importing: "Importing…",
+    invalidVersion: "This file is not a supported Work Learn JSON export.",
+    imported: (materials: number, questions: number) => `Imported or updated ${materials} materials and ${questions} questions.`,
+    error: "Could not import this file",
   },
 
   practice: {
@@ -401,6 +411,7 @@ export const zh: Strings = {
   },
 
   errors: {
+    importCorpus: "导入 JSON 文件失败",
     loadCorpus: "语料加载失败",
     completeReview: "标记复习完成失败",
     config: "读取 Work Learn 配置失败",
@@ -472,6 +483,7 @@ export const zh: Strings = {
 
   export: {
     button: "导出 Markdown",
+    jsonButton: "导出 JSON",
     generatedAt: "生成时间",
     source: "来源",
     created: "保存时间",
@@ -480,6 +492,14 @@ export const zh: Strings = {
     materials: "条材料",
     question: "条提问",
     questions: "条提问",
+  },
+
+  import: {
+    button: "导入 JSON",
+    importing: "导入中…",
+    invalidVersion: "这个文件不是受支持的 Work Learn JSON 导出。",
+    imported: (materials: number, questions: number) => `已导入或更新 ${materials} 条材料和 ${questions} 条提问。`,
+    error: "导入文件失败",
   },
 
   practice: {
