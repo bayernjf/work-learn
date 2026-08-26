@@ -80,6 +80,35 @@ test("material save feeds the review queue and can be marked mastered", () => {
   });
 });
 
+test("saved material creates trackable expressions and records later reuse", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "deploy" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "deploy",
+      originalText: "Please roll out a migration carefully.",
+      usefulExpressions: ["roll out a migration", "cut a release"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["deploy"]
+    });
+    assert.equal(store.unsynced().expressions.length, 2);
+
+    const result = store.recordReuse({
+      text: "We can roll out a migration after the tests pass.",
+      sessionId: session.id,
+      source: "codex"
+    });
+    assert.equal(result.recorded, 1);
+    const expression = store.unsynced().expressions.find((item) => item.text === "roll out a migration");
+    assert.equal(expression?.reuseCount, 1);
+    assert.ok(expression?.lastReusedAt);
+    assert.equal(store.unsynced().reuseEvents.length, 1);
+  });
+});
+
 test("generatePractice turns recent materials into exercise prompts", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "api design" });
