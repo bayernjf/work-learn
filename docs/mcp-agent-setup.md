@@ -22,7 +22,7 @@ Authorization: Bearer <your-access-token>
 
 远程端点与本地 MCP 提供完全相同的 17 个工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`。
 
-把 Work Learn MCP 服务器接入本地 Agent，让 Agent 能调用上面这 9 个工具。
+把 Work Learn MCP 服务器接入本地 Agent，让 Agent 能调用上面这 17 个工具。
 
 ## 前置条件
 
