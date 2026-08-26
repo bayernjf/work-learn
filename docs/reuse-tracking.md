@@ -52,6 +52,8 @@ The first implementation uses no model. It normalizes text by lowercasing, norma
 
 The current user message or document is treated as a haystack. A saved expression counts as reused when its normalized form appears as a phrase in that haystack. This avoids semantic false positives and keeps the feature explainable.
 
+**Inflectional variant matching (added 2026-08-27):** When exact normalized matching misses, both haystack and needle are lemmatized (tense, number, comparison only — no synonym expansion) and re-tested. Hits are recorded as `match_kind: "variant"` with `confidence: 0.85`, distinct from `exact` matches. Irregular verbs use an explicit lookup table; doubled-consonant and -e-drop forms are handled conservatively with whitelists to avoid false reductions (e.g. `rolling` → `roll`, not `rol`).
+
 ### Phase 2: Model-assisted matching
 
 A later version can let the host agent identify the user's intent and detect same-intent variants. Low-confidence matches should not be recorded automatically; they can become suggestions instead.

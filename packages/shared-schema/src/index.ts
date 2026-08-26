@@ -1,10 +1,12 @@
 import { z } from "zod";
 import { knownAgents } from "./agents.js";
 import { redactSecrets } from "./redaction.js";
+import { lemmatizeText, lemmatizeWord } from "./inflection.js";
 
 export { knownAgents };
 export { redactSecrets } from "./redaction.js";
 export type { RedactionResult } from "./redaction.js";
+export { lemmatizeText, lemmatizeWord } from "./inflection.js";
 
 // Personal access token scopes. `read` covers searching and listing the user's
 // corpus; `write` covers saving material, syncing, and completing reviews.
@@ -44,17 +46,28 @@ export type ReuseMatch = {
   expressionId: string;
   text: string;
   matchedText: string;
-  matchKind: "exact";
+  matchKind: "exact" | "variant";
   confidence: number;
 };
 
-/** Find saved expressions that occur as exact normalized phrases in text. */
+/**
+ * Find saved expressions that occur in text.
+ *
+ * Two tiers, both conservative:
+ * 1. `exact`: normalized phrase (case/punctuation stripped) appears as substring.
+ * 2. `variant`: lemmatized phrase appears in lemmatized text. Only fires when
+ *    exact did not match, and only for inflectional differences (tense, number,
+ *    comparison). Never merges synonyms or semantically similar phrases.
+ *
+ * Expressions ≤3 chars after normalization are skipped to avoid noise.
+ */
 export const findReuseMatches = (
   text: string,
   expressions: ReadonlyArray<{ id: string; text: string }>
 ): ReuseMatch[] => {
   const haystack = normalizeReuseText(text);
   if (!haystack) return [];
+  const lemmatizedHaystack = lemmatizeText(haystack);
   const matches: ReuseMatch[] = [];
   for (const expression of expressions) {
     const needle = normalizeReuseText(expression.text);
@@ -66,6 +79,20 @@ export const findReuseMatches = (
         matchedText: expression.text,
         matchKind: "exact",
         confidence: 1
+      });
+      continue;
+    }
+    // Variant: lemmatized match (inflection only). Fires when exact did not
+    // match but the lemmatized forms align — handles tense/number/comparison
+    // differences on either side (saved "build a service", user wrote "built").
+    const lemmatizedNeedle = lemmatizeText(needle);
+    if (lemmatizedHaystack.includes(lemmatizedNeedle)) {
+      matches.push({
+        expressionId: expression.id,
+        text: expression.text,
+        matchedText: expression.text,
+        matchKind: "variant",
+        confidence: 0.85
       });
     }
   }

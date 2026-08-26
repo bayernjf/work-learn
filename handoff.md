@@ -223,7 +223,28 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
 - 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
 - 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法；
-- 下一步功能：更保守的同义变体识别策略。
+- [x] 更保守的同义变体识别策略（第一层：屈折归一化，见下「屈折归一化 Variant 匹配」）。
+
+## 屈折归一化 Variant 匹配（2026-08-27）
+
+在 `packages/shared-schema/src/inflection.ts` 新增轻量英语词形还原，`findReuseMatches` 在 exact 匹配未命中时，对 haystack 和 needle 分别做屈折归一化后再做子串匹配，命中则标记 `matchKind: "variant"`、`confidence: 0.85`。
+
+**覆盖范围（仅屈折，不做语义/同义词）**：
+- 动词时态：`rolling/rolled/rolls` → `roll`，不规则动词查表（~120 个常用词）
+- 名词复数：`migrations` → `migration`，`boxes` → `box`，`queries` → `query`
+- 比较级/最高级：`faster/fastest` → `fast`
+- 双写辅音还原：`running` → `run`（白名单排除 `roll/call/pass` 等本身以双辅音结尾的词）
+- -e 脱落还原：`making` → `make`，`built` → `build`
+
+**保守设计**：
+- 不做同义词替换（`deploy` ≠ `roll out` 仍不匹配，语义归意图层）
+- 不做功能词弹性匹配（冠词/介词差异留待第二层）
+- `variant` 与 `exact` 分开统计，confidence 低于 exact
+- 数据库 `reuse_events.match_kind` CHECK 约束已包含 `variant`，无需迁移
+
+**测试**：`shared-schema` 29 个测试全过（新增 10 个），全仓库 typecheck 通过。
+
+**后续**：第二层功能词弹性匹配（允许最多 1 个冠词/介词差异）和第三层候选提示（用户确认才记录）可按需迭代。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 
