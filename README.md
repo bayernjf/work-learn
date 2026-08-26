@@ -44,7 +44,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 已经可用的部分：
 
-- 六个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`；
+- 十二个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`；
 - 本地优先：CLI 与 stdio MCP 默认读写本地 SQLite（`~/.work-learn/work-learn.db`），不需要 token 也不需要起 API；只有配置了 token 才转而调用线上 API；
 - 两种 MCP 形态共用同一套工具实现：本地 stdio（`packages/mcp-server`）与远程 HTTP（`POST /api/mcp`，无状态 Streamable HTTP）；
 - 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销，可设只读 / 可读可写 scope）、MCP OAuth 2.1（动态注册、PKCE、access token 为 opaque 随机串按哈希查库、refresh token 轮换、Web consent 页）；
@@ -57,7 +57,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 - 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）。
 
-测试：`pnpm test` 全绿（`apps/api`：PAT/OAuth/鉴权与 scope 解析 22 例；`packages/mcp-server`：工具与 scope 守卫 15 例；`packages/shared-schema` 11 例；`packages/setup` 5 例；`packages/local-store` 5 例）。
+测试：相关包检查全绿（`packages/shared-schema` 17 例；`packages/local-store` 19 例；`packages/mcp-server` 23 例；`apps/api` 鉴权相关测试保持独立运行）。
 
 ## 设计原则
 
