@@ -133,19 +133,25 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
   async searchCorpus(query, filters) {
     requireScope(scopes, "read");
     const trimmed = query?.trim();
-    const result = trimmed
-      ? await supabase
+    let rows: Record<string, unknown>[];
+    if (trimmed) {
+      const result = await supabase
         .rpc("search_learning_materials", { p_user: userId, p_query: trimmed })
-        .select(materialColumns)
-      : await supabase
-        .from("learning_materials")
-        .select(materialColumns)
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false });
-    let rows = ((ok(result) as Record<string, unknown>[]) ?? []) as Record<string, unknown>[];
-    if (filters?.source) rows = rows.filter((row) => String(row.source) === filters.source);
-    if (filters?.tag) rows = rows.filter((row) => Array.isArray(row.tags) && row.tags.includes(filters.tag as string));
-    return rows;
+        .select(materialColumns);
+      rows = ((ok(result) as Record<string, unknown>[]) ?? []) as Record<string, unknown>[];
+      if (filters?.source) rows = rows.filter((row) => String(row.source) === filters.source);
+      if (filters?.tag) rows = rows.filter((row) => Array.isArray(row.tags) && row.tags.includes(filters.tag as string));
+      return rows;
+    }
+
+    let materialQuery = supabase
+      .from("learning_materials")
+      .select(materialColumns)
+      .eq("user_id", userId);
+    if (filters?.source) materialQuery = materialQuery.eq("source", filters.source);
+    if (filters?.tag) materialQuery = materialQuery.contains("tags", [filters.tag]);
+    const result = await materialQuery.order("created_at", { ascending: false });
+    return ((ok(result) as Record<string, unknown>[]) ?? []) as Record<string, unknown>[];
   },
 
   async getReviewItems() {
