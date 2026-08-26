@@ -186,7 +186,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入；
 - 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达；
-- 用户执行 `016_user_reuse_nudge_settings.sql`；
+- [x] 用户执行 `016_user_reuse_nudge_settings.sql`；
 - 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
 - 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
 - 下一步功能：P1-d 意图聚类、拆分/合并，以及模型辅助的同义变体识别。
