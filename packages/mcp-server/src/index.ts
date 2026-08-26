@@ -11,6 +11,7 @@ export type McpToolName =
   | "snooze_review"
   | "generate_practice"
   | "get_user_patterns"
+  | "get_reuse_summary"
   | "record_reuse";
 
 type McpConfig = {
@@ -31,7 +32,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "record_reuse"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {

@@ -97,6 +97,11 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getUserPatterns(getUserPatternsInputSchema.parse(input))) }] }));
 
+  server.registerTool("get_reuse_summary", {
+    description: "Get the user's reuse summary: active vocabulary, sleeping expressions, cross-context reuse, and recent reuse events.",
+    inputSchema: {}
+  }, async () => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getReuseSummary()) }] }));
+
   server.registerTool("record_reuse", {
     description: "Check the current English text against saved Work Learn expressions and record exact phrase reuse events. Use after the user writes substantive English in a later work conversation.",
     inputSchema: {
