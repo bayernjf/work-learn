@@ -157,7 +157,7 @@ Agent 中调用 Skill
 - [x] 用户执行 `015_reuse_tracking.sql`；
 - [x] P1-b：Web 复用页展示主动词汇量、表达广度和沉睡表达；
 - [x] P1-c：新增确定性 `suggest_reuse`，同一意图扩充、每轮最多一个建议；
-- [ ] P1-c 后续：给 nudge 增加频控和用户级开关；
+- [x] P1-c 后续：nudge 频控、用户级开关，以及 `configure_reuse_nudges` / Web / CLI 设置入口；
 - [ ] P1-d：模型辅助的意图聚类、同义变体识别，以及用户可拆分/合并意图。
 
 ### P2：备份、恢复与迁移
@@ -186,8 +186,10 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入；
 - 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达；
+- 用户执行 `016_user_reuse_nudge_settings.sql`；
 - 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
-- 下一步功能：P1-c 后续的 nudge 频控、用户级开关，以及 P1-d 意图聚类/拆分/合并。
+- 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
+- 下一步功能：P1-d 意图聚类、拆分/合并，以及模型辅助的同义变体识别。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 
