@@ -72,7 +72,7 @@ Skill 不负责直接实现数据库、账号、同步和复习算法，而是�
 
 ### 3.2 Learning MCP Server / API
 
-统一提供以下能力（已实现的十七个工具）：
+统一提供以下能力（已实现的二十个工具）：
 
 - `create_session`：为当前对话建立会话；
 - `save_material`：保存学习材料；
@@ -91,6 +91,9 @@ Skill 不负责直接实现数据库、账号、同步和复习算法，而是�
 - `cluster_intents`：宿主模型按交际目标把表达分组并持久化为意图。
 - `merge_intents`：把两个描述同一目标的意图合并。
 - `split_intent`：把一个意图拆成两个或多个更细的意图。
+- `record_practice`：记录一次练习结果（练过与否、对错、反馈、错题，C1）。
+- `get_practice_history`：拉取练习记录与错题本（C1）。
+- `generate_adaptive_practice`：基于近期错题自适应出题，由 `WORK_LEARN_LLM_*` 接入 LLM，未配置则回退规则生成（C2）。
 
 Skill 只需要知道这些能力，不需要耦合具体数据库或前端实现。
 

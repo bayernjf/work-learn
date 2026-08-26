@@ -43,7 +43,7 @@
 ### 2.1 本地 SQLite
 
 - 路径：`~/.work-learn/work-learn.db`
-- 本地表：`sessions`、`learning_materials`、`question_translations`、`review_items`，schema 与云端一致（去掉 `user_id`，改用 `sync_status`）
+- 本地表：`sessions`、`learning_materials`、`question_translations`、`review_items`、`practice_records`，schema 与云端一致（去掉 `user_id`，改用 `sync_status`）
 - 每张业务表都有 `updated_at`，同步按它做增量游标和 last-write-wins
 - 本地待推送表加：
   - `sync_status`：`local_only` / `synced`

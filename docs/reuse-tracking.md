@@ -77,5 +77,5 @@ The useful progress signals are:
 5. Add deterministic `suggest_reuse` (same-intent expansion, at most one nudge per turn). ✅
 6. Add rate limiting, a user-facing off switch, and `configure_reuse_nudges` for MCP/CLI/Web. ✅
 7. Add model-assisted intent clustering via `list_expressions` + `cluster_intents`, with `merge_intents` and `split_intent` for correction. ✅
-8. Add a Web UI for browsing and editing intent clusters (currently MCP/CLI only).
+8. Add a Web UI for browsing and editing intent clusters (currently MCP/CLI only). ✅ P1-d 已交付 Web 端意图浏览 UI（`IntentDashboard`，见 handoff.md）。
 

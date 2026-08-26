@@ -98,7 +98,7 @@ apps/api/src/
 
 ## 7. 工具清单
 
-与 stdio 版本一致：
+与 stdio 版本一致（共 20 个）：
 
 - `create_session`
 - `save_material`
@@ -117,11 +117,9 @@ apps/api/src/
 - `cluster_intents`
 - `merge_intents`
 - `split_intent`
-- `configure_reuse_nudges`
-- `list_expressions`
-- `cluster_intents`
-- `merge_intents`
-- `split_intent`
+- `record_practice`
+- `get_practice_history`
+- `generate_adaptive_practice`
 
 工具入参继续由 `@work-learn/shared-schema` 的 Zod schema 校验。
 
