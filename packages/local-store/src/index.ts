@@ -13,6 +13,7 @@ import {
   getUserPatternsInputSchema,
   clusterIntentsInputSchema,
   listExpressionsInputSchema,
+  listIntentsInputSchema,
   mergeIntentsInputSchema,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
@@ -28,6 +29,7 @@ import {
   syncBatchInputSchema,
   type ClusterIntentsInput,
   type ListExpressionsInput,
+  type ListIntentsInput,
   type MergeIntentsInput,
   type PracticeMaterial,
   type PracticeQuestion,
@@ -727,6 +729,33 @@ export class LocalStore {
     return { splitAt: now, sourceIntentId: parsed.intentId, intents: created, sourceDeleted: !this.db.prepare("SELECT id FROM intents WHERE id = ?").get(parsed.intentId) };
   }
 
+  listIntents(input: unknown = {}) {
+    const parsed = listIntentsInputSchema.parse(input) as ListIntentsInput;
+    const intentRows = this.db
+      .prepare("SELECT id, label, description, created_at, updated_at FROM intents ORDER BY updated_at DESC LIMIT ?")
+      .all(parsed.limit) as IntentRow[];
+    const exprRows = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC LIMIT ?")
+      .all(parsed.expressionLimit) as SavedExpressionRow[])
+      .map(toSavedExpression);
+    const byIntent = new Map<string, ReturnType<typeof toSavedExpression>[]>();
+    const unclustered: ReturnType<typeof toSavedExpression>[] = [];
+    for (const expr of exprRows) {
+      if (expr.intentId) {
+        const arr = byIntent.get(expr.intentId);
+        if (arr) arr.push(expr);
+        else byIntent.set(expr.intentId, [expr]);
+      } else {
+        unclustered.push(expr);
+      }
+    }
+    const intents = intentRows.map((row) => ({
+      intent: { id: row.id, label: row.label, description: row.description, createdAt: row.created_at, updatedAt: row.updated_at },
+      expressions: byIntent.get(row.id) ?? []
+    }));
+    return { intents, unclustered };
+  }
+
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
@@ -1195,7 +1224,8 @@ export const createLocalContext = (store: LocalStore) => ({
   listExpressions: (input: unknown) => store.listExpressions(input),
   clusterIntents: (input: unknown) => store.clusterIntents(input),
   mergeIntents: (input: unknown) => store.mergeIntents(input),
-  splitIntent: (input: unknown) => store.splitIntent(input)
+  splitIntent: (input: unknown) => store.splitIntent(input),
+  listIntents: (input: unknown) => store.listIntents(input)
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;

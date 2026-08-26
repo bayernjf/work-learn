@@ -82,6 +82,10 @@ export const en = {
     patterns: "Could not load your patterns",
     reuseSummary: "Could not load reuse summary",
     reuseSettings: "Could not update reuse nudge settings.",
+    intentsLoad: "Could not load intents",
+    intentCluster: "Could not create intent",
+    intentMerge: "Could not merge intents",
+    intentSplit: "Could not split intent",
   },
 
   empty: {
@@ -373,6 +377,32 @@ The skill it installs is the same one published at ${skillUrl}.`,
     authorizing: "Authorizing…",
     errComplete: "Could not complete authorization",
   },
+
+  intents: {
+    title: "Intent management",
+    subtitle: "Group scattered useful expressions by what you meant to say, so they are easy to reuse in the right scene.",
+    unclustered: "Unclustered expressions",
+    createIntent: "Group into new intent",
+    mergeInto: "Merge into",
+    merge: "Merge",
+    split: "Split selected",
+    selectAll: "Select all",
+    clearSelection: "Clear selection",
+    label: "Intent name",
+    labelPlaceholder: "e.g. Business email openings",
+    description: "Description (optional)",
+    descriptionPlaceholder: "When is this intent usually used",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    refresh: "Refresh",
+    loading: "Loading intents…",
+    empty: "No intents or expressions yet. Save some useful expressions from a conversation first.",
+    memberCount: (n: number) => `${n} expressions`,
+    selectedCount: (n: number) => `${n} selected`,
+    createHint: "Select a few expressions, then click “Group into new intent” to create an intent for them.",
+    splitHint: "Select some expressions inside an intent to split them into a separate new intent (the rest stay in the original).",
+    mergeHint: "Merge a whole intent into another; its members move with it and the original is removed."
+  },
 };
 
 export type Strings = typeof en;
@@ -455,6 +485,10 @@ export const zh: Strings = {
     patterns: "加载学习模式失败",
     reuseSummary: "加载复用统计失败",
     reuseSettings: "更新复用提示设置失败",
+    intentsLoad: "加载意图失败",
+    intentCluster: "创建意图失败",
+    intentMerge: "合并意图失败",
+    intentSplit: "拆分意图失败"
   },
 
   empty: {
@@ -745,6 +779,32 @@ export const zh: Strings = {
     returning: "正在返回…",
     authorizing: "授权中…",
     errComplete: "授权失败",
+  },
+
+  intents: {
+    title: "意图管理",
+    subtitle: "把零散的地道表达按「你想表达什么」归组，方便在对应场景复用。",
+    unclustered: "未归组表达",
+    createIntent: "归入新意图",
+    mergeInto: "合并到",
+    merge: "合并",
+    split: "拆分选中",
+    selectAll: "全选",
+    clearSelection: "清除选择",
+    label: "意图名称",
+    labelPlaceholder: "例如：商务邮件开场",
+    description: "说明（可选）",
+    descriptionPlaceholder: "这个意图通常用在什么场景",
+    confirm: "确定",
+    cancel: "取消",
+    refresh: "刷新",
+    loading: "正在加载意图…",
+    empty: "还没有任何意图或表达。先在对话里存下一些有用的表达吧。",
+    memberCount: (n: number) => `${n} 条表达`,
+    selectedCount: (n: number) => `已选 ${n} 条`,
+    createHint: "勾选若干表达后，点击「归入新意图」为它们建立一个意图分组。",
+    splitHint: "勾选某个意图里的部分表达，把它们拆成一个独立的新意图（其余保留在原意图）。",
+    mergeHint: "把整个意图合并进另一个意图，成员一起迁移，原意图被移除。"
   },
 };
 

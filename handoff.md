@@ -159,7 +159,7 @@ Agent 中调用 Skill
 - [x] P1-c：新增确定性 `suggest_reuse`，同一意图扩充、每轮最多一个建议；
 - [x] P1-c 后续：nudge 频控、用户级开关，以及 `configure_reuse_nudges` / Web / CLI 设置入口；
 - [x] P1-d：模型辅助意图聚类（`list_expressions` + `cluster_intents`，宿主模型分组），并提供 `merge_intents` / `split_intent` 纠偏；同义变体识别复用现有确定性匹配。
-- [ ] P1-d 后续：Web 端意图浏览与编辑 UI。
+- [x] P1-d 后续：Web 端意图浏览与编辑 UI（`GET /api/intents` + `IntentDashboard`：勾选表达聚类成意图、合并意图、拆分意图）。
 
 ### P2：备份、恢复与迁移
 
@@ -191,7 +191,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
 - 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
 - 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法；
-- 下一步功能：P1-d 后续的 Web 意图浏览/编辑 UI，以及更保守的同义变体识别策略。
+- 下一步功能：更保守的同义变体识别策略。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 

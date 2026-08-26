@@ -215,6 +215,33 @@ test("intents can be clustered, merged, and split", () => {
   });
 });
 
+test("listIntents groups expressions under their intents and separates unclustered", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "deploy" });
+    store.saveMaterial({
+      sessionId: session.id, source: "codex", topic: "deploy", originalText: "deployment wording",
+      usefulExpressions: ["roll out a migration", "deploy the migration", "cut a release"],
+      corrections: [], vocabulary: [], practicePrompts: [], tags: ["deploy"]
+    });
+    const unclusteredBefore = store.listIntents();
+    assert.equal(unclusteredBefore.intents.length, 0);
+    assert.equal(unclusteredBefore.unclustered.length, 3);
+
+    const exp = (text: string) => store.listExpressions({ includeUnclustered: true }).find((e) => e.text === text)!.id;
+    store.clusterIntents({ groups: [
+      { label: "deploy a database change", expressionIds: [exp("roll out a migration"), exp("deploy the migration")] },
+      { label: "ship a release", expressionIds: [exp("cut a release")] }
+    ]});
+
+    const result = store.listIntents();
+    assert.equal(result.intents.length, 2);
+    assert.equal(result.unclustered.length, 0);
+    const deploy = result.intents.find((g) => g.intent.label === "deploy a database change")!;
+    assert.equal(deploy.expressions.length, 2);
+    assert.equal(deploy.expressions.every((e) => typeof e.text === "string"), true);
+  });
+});
+
 test("generatePractice turns recent materials into exercise prompts", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "api design" });

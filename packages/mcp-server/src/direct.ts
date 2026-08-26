@@ -15,6 +15,7 @@ import {
   redactSecrets,
   defaultReuseNudgeSettings,
   listExpressionsInputSchema,
+  listIntentsInputSchema,
   mergeIntentsInputSchema,
   saveMaterialInputSchema,
   splitIntentInputSchema,
@@ -377,6 +378,42 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       sourceDeleted = true;
     }
     return { splitAt: now, sourceIntentId: parsed.intentId, intents: created, sourceDeleted };
+  },
+
+  async listIntents(input) {
+    requireScope(scopes, "read");
+    const parsed = listIntentsInputSchema.parse(input ?? {});
+    const [intentsResult, expressionsResult] = await Promise.all([
+      supabase
+        .from("intents")
+        .select(syncIntentColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(parsed.limit),
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(parsed.expressionLimit)
+    ]);
+    if (intentsResult.error) throw new Error(intentsResult.error.message);
+    if (expressionsResult.error) throw new Error(expressionsResult.error.message);
+    const intents = (intentsResult.data as Record<string, unknown>[]).map(normalizeIntent);
+    const expressions = (expressionsResult.data as Record<string, unknown>[]).map(normalizeSavedExpression);
+    const byIntent = new Map<string, ReturnType<typeof normalizeSavedExpression>[]>();
+    const unclustered: ReturnType<typeof normalizeSavedExpression>[] = [];
+    for (const expr of expressions) {
+      if (expr.intentId) {
+        const arr = byIntent.get(expr.intentId);
+        if (arr) arr.push(expr);
+        else byIntent.set(expr.intentId, [expr]);
+      } else {
+        unclustered.push(expr);
+      }
+    }
+    const grouped = intents.map((intent) => ({ intent, expressions: byIntent.get(intent.id) ?? [] }));
+    return { intents: grouped, unclustered };
   },
 
   async saveQuestionTranslation(input) {

@@ -302,6 +302,13 @@ export const listExpressionsInputSchema = z.object({
   limit: z.number().int().min(1).max(500).default(200)
 });
 
+export const listIntentsInputSchema = z.object({
+  limit: z.number().int().min(1).max(200).default(100),
+  expressionLimit: z.number().int().min(1).max(1000).default(500)
+});
+
+export type ListIntentsInput = z.infer<typeof listIntentsInputSchema>;
+
 export const clusterIntentsInputSchema = z.object({
   groups: z.array(z.object({
     label: z.string().min(1).max(200),

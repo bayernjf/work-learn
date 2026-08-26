@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, suggestReuseInputSchema, saveQuestionTranslationInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, suggestReuseInputSchema, saveQuestionTranslationInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listIntentsInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
 import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
@@ -388,6 +388,21 @@ app.post("/intents/split", async (c) => {
     return c.json({ data: await ctx.splitIntent(parsed.data) }, 201);
   } catch (error) {
     return c.json(errorResponse("Could not split intent", error));
+  }
+});
+
+app.get("/intents", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const parsed = listIntentsInputSchema.safeParse({
+    limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined,
+    expressionLimit: c.req.query("expressionLimit") ? Number(c.req.query("expressionLimit")) : undefined
+  });
+  if (!parsed.success) return c.json({ error: "Invalid intents request", issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ data: await ctx.listIntents(parsed.data) });
+  } catch (error) {
+    return c.json(errorResponse("Could not list intents", error));
   }
 });
 

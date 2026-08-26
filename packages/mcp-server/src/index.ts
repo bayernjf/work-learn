@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -125,6 +125,14 @@ export const splitIntent = (config: McpConfig, input: unknown) => {
   return json(config, "/intents/split", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const listIntents = (config: McpConfig, input: unknown) => {
+  const parsed = listIntentsInputSchema.parse(input);
+  const params = new URLSearchParams();
+  params.set("limit", String(parsed.limit));
+  params.set("expressionLimit", String(parsed.expressionLimit));
+  return json(config, `/intents?${params.toString()}`);
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -156,5 +164,6 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   listExpressions: (input) => listExpressions(config, input),
   clusterIntents: (input) => clusterIntents(config, input),
   mergeIntents: (input) => mergeIntents(config, input),
-  splitIntent: (input) => splitIntent(config, input)
+  splitIntent: (input) => splitIntent(config, input),
+  listIntents: (input) => listIntents(config, input)
 });

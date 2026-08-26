@@ -360,3 +360,81 @@ export const importCorpus = async (session: Session, payload: PortableCorpus) =>
   }
   return (await response.json()) as { data: ImportResult };
 };
+
+export type Intent = {
+  id: string;
+  label: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedExpression = {
+  id: string;
+  materialId: string | null;
+  intentId: string | null;
+  text: string;
+  textNorm: string;
+  register: "formal" | "neutral" | "casual" | null;
+  scene: string | null;
+  note: string | null;
+  reuseCount: number;
+  firstReusedAt: string | null;
+  lastReusedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IntentWithMembers = {
+  intent: Intent;
+  expressions: SavedExpression[];
+};
+
+export type IntentListResult = {
+  intents: IntentWithMembers[];
+  unclustered: SavedExpression[];
+};
+
+export type IntentClusterGroup = {
+  label: string;
+  description?: string | null;
+  expressionIds: string[];
+};
+
+export const fetchIntents = async (session: Session) => {
+  const response = await fetch("/api/intents", {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentsLoad);
+  return (await response.json()) as { data: IntentListResult };
+};
+
+export const clusterIntents = async (session: Session, groups: IntentClusterGroup[]) => {
+  const response = await fetch("/api/intents/cluster", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ groups })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentCluster);
+  return (await response.json()) as { data: unknown };
+};
+
+export const mergeIntents = async (session: Session, sourceIntentId: string, targetIntentId: string) => {
+  const response = await fetch("/api/intents/merge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ sourceIntentId, targetIntentId })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentMerge);
+  return (await response.json()) as { data: unknown };
+};
+
+export const splitIntent = async (session: Session, intentId: string, groups: IntentClusterGroup[]) => {
+  const response = await fetch("/api/intents/split", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ intentId, groups })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentSplit);
+  return (await response.json()) as { data: unknown };
+};

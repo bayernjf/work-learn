@@ -29,6 +29,7 @@ export interface WorkLearnContext {
   clusterIntents(input: unknown): Promise<unknown> | unknown;
   mergeIntents(input: unknown): Promise<unknown> | unknown;
   splitIntent(input: unknown): Promise<unknown> | unknown;
+  listIntents(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
