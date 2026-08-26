@@ -112,6 +112,8 @@ apps/api/src/
 - `get_reuse_summary`
 - `record_reuse`
 - `suggest_reuse`
+- `configure_reuse_nudges`
+- `configure_reuse_nudges`
 
 工具入参继续由 `@work-learn/shared-schema` 的 Zod schema 校验。
 
