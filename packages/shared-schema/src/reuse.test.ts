@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findReuseMatches, normalizeReuseText, summarizeReuse, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
+import { findReuseMatches, normalizeReuseText, suggestReuse, summarizeReuse, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
 
 test("normalizeReuseText collapses punctuation and case", () => {
   assert.equal(normalizeReuseText("  Roll-Out  a MIGRATION!\n"), "roll out a migration");
@@ -52,4 +52,48 @@ test("summarizeReuse counts active, sleeping, and cross-context reuse", () => {
   assert.equal(summary.activeExpressions[0]?.id, "exp-1");
   assert.equal(summary.sleepingExpressions[0]?.id, "exp-3");
   assert.equal(summary.recentEvents[0]?.text, "roll out a migration");
+});
+
+test("suggestReuse returns a same-intent alternative after a saved phrase appears", () => {
+  const now = "2026-08-26T09:00:00.000Z";
+  const expressions: SyncSavedExpression[] = [
+    {
+      id: "exp-1", materialId: null, intentId: "intent-deploy", text: "roll out a migration", textNorm: "roll out a migration",
+      register: "neutral", scene: "codex", note: null, reuseCount: 2, firstReusedAt: now, lastReusedAt: now,
+      createdAt: now, updatedAt: now
+    },
+    {
+      id: "exp-2", materialId: null, intentId: "intent-deploy", text: "deploy the migration", textNorm: "deploy the migration",
+      register: "formal", scene: "claude", note: "Use for a change window.", reuseCount: 0, firstReusedAt: null, lastReusedAt: null,
+      createdAt: now, updatedAt: now
+    },
+    {
+      id: "exp-3", materialId: null, intentId: null, text: "cut a release", textNorm: "cut a release",
+      register: null, scene: null, note: null, reuseCount: 0, firstReusedAt: null, lastReusedAt: null,
+      createdAt: now, updatedAt: now
+    }
+  ];
+
+  const result = suggestReuse("We should roll out a migration after CI passes.", expressions, { source: "codex" });
+
+  assert.deepEqual(result.matchedExpressionIds, ["exp-1"]);
+  assert.equal(result.suggestions.length, 1);
+  assert.equal(result.suggestions[0]?.expressionId, "exp-2");
+  assert.equal(result.suggestions[0]?.reason, "same_intent");
+});
+
+test("suggestReuse stays quiet without a matched saved phrase", () => {
+  const now = "2026-08-26T09:00:00.000Z";
+  const expressions: SyncSavedExpression[] = [
+    {
+      id: "exp-1", materialId: null, intentId: "intent-deploy", text: "deploy the migration", textNorm: "deploy the migration",
+      register: "formal", scene: null, note: null, reuseCount: 0, firstReusedAt: null, lastReusedAt: null,
+      createdAt: now, updatedAt: now
+    }
+  ];
+
+  const result = suggestReuse("Let me look at the logs first.", expressions);
+
+  assert.deepEqual(result.matchedExpressionIds, []);
+  assert.deepEqual(result.suggestions, []);
 });
