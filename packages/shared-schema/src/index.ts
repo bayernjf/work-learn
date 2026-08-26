@@ -28,6 +28,9 @@ export const hasScope = (scopes: string[] | undefined, scope: PatScope): boolean
 // Source is an open label, not a closed enum, so new agents work without a
 // schema change or redeploy. Use `knownAgents` for the curated list in UIs/CLI.
 export const sourceSchema = z.string().trim().min(1).max(50);
+
+/** Collapse a question to a comparable form for exact-dedupe. */
+export const normalizeQuestion = (q: string): string => q.trim().toLowerCase().replace(/\s+/g, " ");
 export const roleSchema = z.enum(["user", "assistant", "tool"]);
 
 export const createSessionInputSchema = z.object({
@@ -79,6 +82,16 @@ export const saveMaterialInputSchema = learningMaterialSchema
     practicePrompts: input.practicePrompts.map((value) => redactSecrets(value).text)
   }));
 
+export const updateMaterialSchema = z.object({
+  topic: z.string().trim().min(1).max(200).optional(),
+  explanation: z.string().max(2000).optional(),
+  usefulExpressions: z.array(z.string().trim().min(1).max(500)).optional(),
+  corrections: z.array(z.string().trim().min(1).max(500)).optional(),
+  vocabulary: z.array(z.string().trim().min(1).max(100)).optional(),
+  practicePrompts: z.array(z.string().trim().min(1).max(500)).optional(),
+  tags: z.array(z.string().trim().min(1).max(50)).optional()
+});
+
 // A question/translation pair: the user's original question (often in Chinese)
 // together with the idiomatic English rendering an agent produced. Kept as a
 // separate material type from learning_materials; it is NOT wired into the
@@ -107,7 +120,7 @@ export const saveQuestionTranslationInputSchema = questionTranslationSchema
 // The columns the API returns for a question translation. Explicit rather than
 // "*", so the payload stays stable if search columns are added later.
 export const questionTranslationColumns =
-  "id,session_id,source,question,translation,topic,created_at,updated_at";
+  "id,session_id,source,question,question_norm,translation,topic,created_at,updated_at";
 
 export const generatePracticeInputSchema = z.object({
   materialId: z.string().min(1).optional(),
@@ -123,6 +136,10 @@ export type GeneratePracticeInput = z.input<typeof generatePracticeInputSchema>;
 export type GetUserPatternsInput = z.input<typeof getUserPatternsInputSchema>;
 export type PracticeMaterial = Pick<LearningMaterial, "id" | "source" | "topic" | "originalText" | "explanation" | "usefulExpressions" | "corrections" | "vocabulary" | "practicePrompts" | "tags" | "createdAt">;
 export type PracticeQuestion = Pick<QuestionTranslation, "id" | "source" | "question" | "translation" | "topic" | "createdAt">;
+export type PracticeExercise =
+  | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }
+  | { type: "question"; questionId: string; focus: string; prompt: string; answer: string };
+export type CorpusFilters = { source?: string; tag?: string };
 
 // A single session being synced from a local store. The id is preserved so the
 // cloud insert stays idempotent.
@@ -224,21 +241,25 @@ const topItems = (items: Array<string | undefined>, limit: number) => {
     .map(([value, count]) => ({ value, count }));
 };
 
-export const generatePracticeFromMaterials = (materials: PracticeMaterial[], input: GeneratePracticeInput = {}) => {
-  const selected = input.materialId
+export const generatePracticeFromMaterials = (materials: PracticeMaterial[], input: GeneratePracticeInput = {}) =>
+  generatePracticeFromItems(materials, [], input);
+
+export const generatePracticeFromItems = (materials: PracticeMaterial[], questions: PracticeQuestion[], input: GeneratePracticeInput = {}) => {
+  const selectedMaterials = input.materialId
     ? materials.filter((material) => material.id === input.materialId).slice(0, 1)
     : materials.slice(0, input.limit ?? 3);
-  const exercises = selected.flatMap((material) => {
+  const selectedQuestions = input.materialId ? [] : questions.slice(0, input.limit ?? 3);
+  const exercises: PracticeExercise[] = selectedMaterials.flatMap((material) => {
     const focus = material.usefulExpressions[0] ?? material.vocabulary[0] ?? material.corrections[0] ?? material.originalText;
-    const output: Array<{ type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }> = [
+    const output: PracticeExercise[] = [
       {
-        type: "reuse" as const,
+        type: "reuse",
         materialId: material.id,
         focus,
         prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`
       },
       {
-        type: "recall" as const,
+        type: "recall",
         materialId: material.id,
         focus,
         prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`
@@ -246,7 +267,7 @@ export const generatePracticeFromMaterials = (materials: PracticeMaterial[], inp
     ];
     if (material.corrections[0]) {
       output.push({
-        type: "correction" as const,
+        type: "correction",
         materialId: material.id,
         focus,
         prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`
@@ -254,7 +275,7 @@ export const generatePracticeFromMaterials = (materials: PracticeMaterial[], inp
     }
     if (material.practicePrompts[0]) {
       output.push({
-        type: "apply" as const,
+        type: "apply",
         materialId: material.id,
         focus,
         prompt: material.practicePrompts[0]
@@ -262,7 +283,18 @@ export const generatePracticeFromMaterials = (materials: PracticeMaterial[], inp
     }
     return output;
   });
-  return { generatedAt: new Date().toISOString(), materials: selected, exercises };
+
+  for (const question of selectedQuestions) {
+    exercises.push({
+      type: "question",
+      questionId: question.id,
+      focus: question.topic ?? question.source,
+      prompt: `Ask this naturally in English, then compare your wording with the saved version:\n"${question.question}"`,
+      answer: question.translation
+    });
+  }
+
+  return { generatedAt: new Date().toISOString(), materials: selectedMaterials, questions: selectedQuestions, exercises };
 };
 
 export const getUserPatternsFromItems = (materials: PracticeMaterial[], questions: PracticeQuestion[], input: GetUserPatternsInput = {}) => {
