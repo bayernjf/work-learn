@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -394,5 +394,45 @@ test("searchCorpus can filter by source and tag", () => {
     const byTag = store.searchCorpus("", { tag: "review" });
     assert.equal(byTag.materials.length, 1);
     assert.equal(byTag.materials[0]?.source, "claude");
+  });
+});
+
+test("backupTo creates a restorable SQLite copy", () => {
+  withStore((store, dir) => {
+    const session = store.createSession({ source: "codex", topic: "backup" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "backup",
+      originalText: "keep this local corpus",
+      usefulExpressions: ["keep this local corpus"],
+      corrections: [],
+      vocabulary: ["corpus"],
+      practicePrompts: [],
+      tags: ["backup"]
+    });
+    const backupPath = join(dir, "backup.db");
+    const backup = store.backupTo(backupPath);
+    assert.equal(backup.backupPath, backupPath);
+    assert.equal(backup.stats.counts.materials, 1);
+    assert.ok(existsSync(backupPath));
+
+    const restoredPath = join(dir, "restored.db");
+    const restore = LocalStore.restoreBackup(backupPath, restoredPath);
+    assert.equal(restore.dbPath, restoredPath);
+    const restored = new LocalStore({ dbPath: restoredPath });
+    try {
+      assert.equal(restored.stats().counts.materials, 1);
+    } finally {
+      restored.close();
+    }
+  });
+});
+
+test("restoreBackup rejects a file without Work Learn tables", () => {
+  withStore((_store, dir) => {
+    const invalidPath = join(dir, "invalid.db");
+    writeFileSync(invalidPath, "not a sqlite database");
+    assert.throws(() => LocalStore.restoreBackup(invalidPath, join(dir, "target.db")), /sqlite_master|SQLite|database/i);
   });
 });
