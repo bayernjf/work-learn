@@ -150,9 +150,14 @@ Agent 中调用 Skill
 
 ### P1：复用追踪
 
-- 记录用户在后续对话中是否复用了已保存表达；
-- 汇总重复错误下降趋势和高频复用表达；
-- 让 Skill/MCP 在合适时机提示“你最近保存过类似表达”。
+方案见 [docs/reuse-tracking.md](docs/reuse-tracking.md)。核心原则是追踪真实工作流里的主动复用，不把多重表达折叠成唯一标准答案；同一个意图下保留多种说法，按语域和场景扩充而不是纠正。
+
+- [ ] P1-a：新增 saved expressions / reuse events 存储，保存语料时自动升格 useful expressions；
+- [ ] P1-a：MCP/API/本地库提供 `record_reuse`，先用确定性短语匹配记录复用事件；
+- [x] 用户执行 `015_reuse_tracking.sql`；
+- [ ] P1-b：Web 复用页展示主动词汇量、表达广度和沉睡表达；
+- [ ] P1-c：新增 `suggest_reuse`，带频控、扩充式语气和全局开关；
+- [ ] P1-d：模型辅助的意图聚类、同义变体识别，以及用户可拆分/合并意图。
 
 ### P2：备份、恢复与迁移
 

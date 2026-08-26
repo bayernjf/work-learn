@@ -145,6 +145,7 @@ MCP 当前提供：
 - `mark_mastered`
 - `generate_practice`
 - `get_user_patterns`
+- `record_reuse`
 
 ### import API
 
