@@ -284,7 +284,7 @@ export class LocalStore {
   private db: Database.Database;
 
   constructor(options: LocalStoreOptions = {}) {
-    const dbPath = options.dbPath ?? DEFAULT_DB_PATH;
+    const dbPath = options.dbPath ?? process.env.WORK_LEARN_DB_PATH ?? DEFAULT_DB_PATH;
     mkdirSync(dirname(dbPath), { recursive: true });
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
