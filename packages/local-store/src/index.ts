@@ -15,6 +15,8 @@ import {
   saveQuestionTranslationInputSchema,
   recordReuseInputSchema,
   redactSecrets,
+  suggestReuse,
+  suggestReuseInputSchema,
   summarizeReuse,
   syncBatchInputSchema,
   type PracticeMaterial,
@@ -22,6 +24,7 @@ import {
   type QuestionTranslation,
   type RecordReuseInput,
   type SaveMaterialInput,
+  type SuggestReuseInput,
   type SaveQuestionTranslationInput
 } from "@work-learn/shared-schema";
 
@@ -582,6 +585,15 @@ export class LocalStore {
     return summarizeReuse(expressions, events);
   }
 
+  suggestReuse(input: unknown) {
+    const parsed = suggestReuseInputSchema.parse(input) as SuggestReuseInput;
+    const safeText = redactSecrets(parsed.text).text;
+    const expressions = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
+      .all() as SavedExpressionRow[]).map(toSavedExpression);
+    return suggestReuse(safeText, expressions, { source: parsed.source, limit: parsed.limit });
+  }
+
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
@@ -1043,7 +1055,8 @@ export const createLocalContext = (store: LocalStore) => ({
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
   recordReuse: (input: unknown) => store.recordReuse(input),
-  getReuseSummary: () => store.getReuseSummary()
+  getReuseSummary: () => store.getReuseSummary(),
+  suggestReuse: (input: unknown) => store.suggestReuse(input)
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;
