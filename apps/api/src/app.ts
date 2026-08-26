@@ -289,6 +289,17 @@ app.post("/reuse", async (c) => {
   }
 });
 
+app.get("/reuse", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    return c.json({ data: await ctx.getReuseSummary() });
+  } catch (error) {
+    return c.json(errorResponse("Could not load reuse summary", error));
+  }
+});
+
 app.notFound((c) => c.json({ error: "Not found" }, 404));
 
 export type AppType = typeof app;
