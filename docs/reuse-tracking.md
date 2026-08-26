@@ -76,5 +76,6 @@ The useful progress signals are:
 4. Add a Web reuse dashboard and expression metadata editing. ✅ P1-b dashboard shipped for active vocabulary, cross-context reuse, sleeping expressions, and recent events; expression metadata editing remains future work.
 5. Add deterministic `suggest_reuse` (same-intent expansion, at most one nudge per turn). ✅
 6. Add rate limiting, a user-facing off switch, and `configure_reuse_nudges` for MCP/CLI/Web. ✅
-7. Add conservative model-assisted intent clustering after enough data exists.
+7. Add model-assisted intent clustering via `list_expressions` + `cluster_intents`, with `merge_intents` and `split_intent` for correction. ✅
+8. Add a Web UI for browsing and editing intent clusters (currently MCP/CLI only).
 

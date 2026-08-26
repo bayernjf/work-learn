@@ -113,7 +113,15 @@ apps/api/src/
 - `record_reuse`
 - `suggest_reuse`
 - `configure_reuse_nudges`
+- `list_expressions`
+- `cluster_intents`
+- `merge_intents`
+- `split_intent`
 - `configure_reuse_nudges`
+- `list_expressions`
+- `cluster_intents`
+- `merge_intents`
+- `split_intent`
 
 工具入参继续由 `@work-learn/shared-schema` 的 Zod schema 校验。
 

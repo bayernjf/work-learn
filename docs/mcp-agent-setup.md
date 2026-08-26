@@ -20,7 +20,7 @@ Authorization: Bearer <your-access-token>
 
 其中 `<your-access-token>` 是登录 Web 端后在 “Connect an agent” 面板里创建的 **Personal Access Token**。创建时可以选有效期（默认 90 天，也可以选永久）；在过期或吊销之前不需要做任何续期。建议每个 agent 单独发一个，这样吊销时只影响那一个。支持 OAuth 的 MCP agent 也可以直接连接 Remote MCP URL，由 agent 触发浏览器授权。
 
-远程端点与本地 MCP 提供完全相同的 13 个工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`。
+远程端点与本地 MCP 提供完全相同的 17 个工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`。
 
 把 Work Learn MCP 服务器接入本地 Agent，让 Agent 能调用上面这 9 个工具。
 
