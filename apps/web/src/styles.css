@@ -1404,6 +1404,76 @@ code {
 }
 .patterns-error { color: var(--danger); }
 
+.reuse-panel {
+  margin: 22px 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  background: rgba(255,255,255,.72);
+}
+.reuse-head { margin-bottom: 16px; }
+.reuse-head h2 { margin: 4px 0 6px; }
+.reuse-subheading, .reuse-meta, .reuse-empty {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.reuse-error { color: var(--danger); }
+.reuse-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.reuse-metrics span {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--paper);
+  color: var(--ink-2);
+  font-size: 12px;
+}
+.reuse-metrics b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 24px;
+}
+.reuse-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+.reuse-col {
+  min-width: 0;
+  padding: 16px;
+  border-radius: 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+}
+.reuse-label {
+  margin: 0 0 10px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--ink-2);
+}
+.reuse-col ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+}
+.reuse-col li { display: grid; gap: 3px; }
+.reuse-col strong { font-size: 14px; overflow-wrap: anywhere; }
+.reuse-col span { color: var(--ink-2); font-size: 12px; overflow-wrap: anywhere; }
+@media (max-width: 860px) {
+  .reuse-metrics { grid-template-columns: repeat(2, 1fr); }
+  .reuse-grid { grid-template-columns: 1fr; }
+}
+
 /* Per-card practice */
 .practice-block { margin-top: 12px; }
 .practice-toggle { padding: 0; font-size: 12px; }

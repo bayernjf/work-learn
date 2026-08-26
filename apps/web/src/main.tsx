@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSummary, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -61,6 +61,9 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [patterns, setPatterns] = useState<UserPatterns | null>(null);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [patternsError, setPatternsError] = useState("");
+  const [reuseSummary, setReuseSummary] = useState<ReuseSummary | null>(null);
+  const [reuseLoading, setReuseLoading] = useState(false);
+  const [reuseError, setReuseError] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -78,10 +81,16 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     if (!session) return;
     setLoadingMaterials(true);
     setLoadError("");
+    setReuseLoading(true);
+    setReuseError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session), fetchQuestionTranslations(session)])
       .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); setResults(null); setQuestionResults(null); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
+    void fetchReuseSummary(session)
+      .then((result) => setReuseSummary(result.data))
+      .catch((error: unknown) => setReuseError(error instanceof Error ? error.message : t.errors.reuseSummary))
+      .finally(() => setReuseLoading(false));
     void refreshSyncStatus(session);
     void loadPatterns(session);
   }, [session, reloadKey]);
@@ -410,6 +419,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
         </>}
       </section>
       <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
+      <ReuseDashboard summary={reuseSummary} loading={reuseLoading} error={reuseError} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
         <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
@@ -1072,6 +1082,74 @@ function ReviewList({ session, reviews, onComplete, onSnooze }: { session: Sessi
           {reviews.map((review, index) => <ReviewCard key={review.id} session={session} review={review} index={index} onComplete={onComplete} onSnooze={onSnooze} />)}
         </div>
       )}
+    </section>
+  );
+}
+
+function ReuseDashboard({ summary, loading, error }: { summary: ReuseSummary | null; loading: boolean; error: string }) {
+  const { t, formatDate } = useI18n();
+  return (
+    <section className="reuse-panel" aria-live="polite">
+      <div className="reuse-head">
+        <div>
+          <p className="eyebrow">{t.reuse.eyebrow}</p>
+          <h2>{t.reuse.heading}</h2>
+          <p className="reuse-subheading">{t.reuse.subheading}</p>
+        </div>
+      </div>
+      {loading ? <p className="reuse-meta">{t.reuse.loading}</p> : null}
+      {error ? <p className="reuse-meta reuse-error">{error}</p> : null}
+      {summary ? (
+        <>
+          <div className="reuse-metrics">
+            <span><b>{summary.counts.activeVocabulary}</b>{t.reuse.activeVocabulary}</span>
+            <span><b>{summary.counts.sleepingExpressions}</b>{t.reuse.sleeping}</span>
+            <span><b>{summary.counts.crossContextReuse}</b>{t.reuse.crossContext}</span>
+            <span><b>{summary.counts.reuseEvents}</b>{t.reuse.events}</span>
+          </div>
+          <div className="reuse-grid">
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.activeTitle}</p>
+              {summary.activeExpressions.length ? (
+                <ul>
+                  {summary.activeExpressions.map((expression) => (
+                    <li key={expression.id}>
+                      <strong>{expression.text}</strong>
+                      <span>{t.reuse.reused(expression.reuseCount, expression.lastReusedAt ? relativeTime(expression.lastReusedAt, t) : "—")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.activeEmpty}</p>}
+            </div>
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.sleepingTitle}</p>
+              {summary.sleepingExpressions.length ? (
+                <ul>
+                  {summary.sleepingExpressions.map((expression) => (
+                    <li key={expression.id}>
+                      <strong>{expression.text}</strong>
+                      <span>{expression.scene ? t.reuse.savedIn(expression.scene, formatDate(expression.createdAt)) : formatDate(expression.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.sleepingEmpty}</p>}
+            </div>
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.recentTitle}</p>
+              {summary.recentEvents.length ? (
+                <ul>
+                  {summary.recentEvents.map((event) => (
+                    <li key={event.id}>
+                      <strong>{event.text}</strong>
+                      <span>{event.source ? t.reuse.event(event.source, relativeTime(event.createdAt, t)) : relativeTime(event.createdAt, t)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.recentEmpty}</p>}
+            </div>
+          </div>
+        </>
+      ) : null}
     </section>
   );
 }
