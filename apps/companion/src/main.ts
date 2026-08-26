@@ -298,6 +298,13 @@ app.whenReady().then(() => {
       { label: "打开面板", click: () => showWindow() },
       { label: "采集选中文本", click: () => void captureSelection() },
       { label: "打开录制终端", click: () => void openRecordedTerminal() },
+      {
+        label: "安装终端录制 hook（rc）",
+        click: async () => {
+          const res = await runLearn(["hook", "install"]);
+          notify("Work Learn", res.ok ? "已写入 rc hook（重新打开终端生效）" : "安装失败：" + res.output);
+        }
+      },
       { label: "打开 Web 语料库", click: () => shell.openExternal(WEB_URL) },
       { type: "separator" },
       {

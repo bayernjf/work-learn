@@ -1,5 +1,5 @@
 import { execFile, spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -24,7 +24,8 @@ const commands = {
   nudges: "Show or change local reuse nudge settings (on/off/status).",
   run: "Run an agent in a PTY and record the terminal session to the local store.",
   stats: "Show local store statistics (pass --json for machine-readable output).",
-  expressions: "List saved expressions (pass --json, --limit N)."
+  expressions: "List saved expressions (pass --json, --limit N).",
+  hook: "Install/uninstall/status the shell rc recorder hook (default off)."
 } as const;
 
 if (command === "capture") {
@@ -55,6 +56,8 @@ if (command === "capture") {
   await stats(args);
 } else if (command === "expressions") {
   await listExpressionsCmd(args);
+} else if (command === "hook") {
+  await hook(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -488,6 +491,78 @@ async function run(args: string[]) {
       if (existsSync(typescriptPath)) unlinkSync(typescriptPath);
     } catch {
       /* best effort cleanup */
+    }
+  }
+}
+
+// C4: install a guarded hook into the user's shell rc so every new interactive
+// shell is wrapped by `learn run` and recorded. Default off — nothing is written
+// until `learn hook install`. The block is fenced with markers so `learn hook
+// uninstall` removes exactly those lines and leaves the rest of the rc untouched.
+const HOOK_MARKER_START = "# >>> work-learn recorder >>>";
+const HOOK_MARKER_END = "# <<< work-learn recorder <<<";
+
+function rcPaths(): string[] {
+  const home = homedir();
+  if (process.platform === "darwin") return [join(home, ".zshrc")];
+  return [join(home, ".bashrc"), join(home, ".zshrc")];
+}
+
+function hookBlock(): string {
+  const learn = process.env.WORK_LEARN_CLI_PATH ? `node ${JSON.stringify(process.env.WORK_LEARN_CLI_PATH)}` : "learn";
+  return [
+    HOOK_MARKER_START,
+    'if [ -z "$WORK_LEARN_RECORDING" ]; then',
+    '  export WORK_LEARN_RECORDING=1',
+    `  exec ${learn} run -- "$SHELL"`,
+    "fi",
+    HOOK_MARKER_END
+  ].join("\n");
+}
+
+function removeHookBlock(text: string): string {
+  const start = text.indexOf(HOOK_MARKER_START);
+  const end = text.indexOf(HOOK_MARKER_END);
+  if (start === -1 || end === -1) return text;
+  const after = text.slice(end + HOOK_MARKER_END.length);
+  let next = text.slice(0, start).replace(/\s+$/, "");
+  let result = next.length ? next + "\n\n" : "";
+  const trimmedAfter = after.replace(/^\s+/, "");
+  if (trimmedAfter.length) result += trimmedAfter.startsWith("\n") ? trimmedAfter : "\n" + trimmedAfter;
+  return result;
+}
+
+async function hook(args: string[]) {
+  const sub = args[0] ?? "status";
+  const paths = rcPaths();
+  if (sub === "install") {
+    const block = hookBlock();
+    for (const p of paths) {
+      const existing = existsSync(p) ? readFileSync(p, "utf8") : "";
+      if (existing.includes(HOOK_MARKER_START)) {
+        console.log(`已安装：${p}`);
+        continue;
+      }
+      const base = existing === "" || existing.endsWith("\n") ? existing : existing + "\n";
+      writeFileSync(p, base + block + "\n");
+      console.log(`已写入 hook：${p}`);
+    }
+    console.log("\n重新打开终端即可自动录制。运行 'learn hook uninstall' 可干净卸载（仅移除 Work Learn 注入的片段）。");
+  } else if (sub === "uninstall") {
+    for (const p of paths) {
+      if (!existsSync(p)) continue;
+      const text = readFileSync(p, "utf8");
+      if (!text.includes(HOOK_MARKER_START)) {
+        console.log(`未安装：${p}`);
+        continue;
+      }
+      writeFileSync(p, removeHookBlock(text));
+      console.log(`已移除 hook：${p}`);
+    }
+  } else {
+    for (const p of paths) {
+      const installed = existsSync(p) && readFileSync(p, "utf8").includes(HOOK_MARKER_START);
+      console.log(`${installed ? "●" : "○"} ${p}`);
     }
   }
 }
