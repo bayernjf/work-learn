@@ -12,6 +12,7 @@ learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN
 learn doctor   # 检查本地库、token 配置和 API 健康状态
 learn delete   # 删除本地材料或提问，并记录 tombstone
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
+learn practice # 从最近的材料和提问翻译生成本地练习
 ```
 
 ### capture
