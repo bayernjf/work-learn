@@ -227,24 +227,34 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 ## 屈折归一化 Variant 匹配（2026-08-27）
 
-在 `packages/shared-schema/src/inflection.ts` 新增轻量英语词形还原，`findReuseMatches` 在 exact 匹配未命中时，对 haystack 和 needle 分别做屈折归一化后再做子串匹配，命中则标记 `matchKind: "variant"`、`confidence: 0.85`。
+在 `packages/shared-schema/src/inflection.ts` 新增轻量英语词形还原，`findReuseMatches` 实现三层递进匹配：
 
-**覆盖范围（仅屈折，不做语义/同义词）**：
+| 层级 | 匹配方式 | matchKind | confidence |
+|------|----------|-----------|------------|
+| 1 | normalized 子串精确匹配 | `exact` | 1.0 |
+| 2 | lemmatized 子串匹配（时态/数/比较级） | `variant` | 0.85 |
+| 3 | 弹性匹配（允许 1 个功能词差异） | `variant` | 0.7 |
+
+**覆盖范围（仅屈折 + 功能词，不做语义/同义词）**：
 - 动词时态：`rolling/rolled/rolls` → `roll`，不规则动词查表（~120 个常用词）
 - 名词复数：`migrations` → `migration`，`boxes` → `box`，`queries` → `query`
 - 比较级/最高级：`faster/fastest` → `fast`
 - 双写辅音还原：`running` → `run`（白名单排除 `roll/call/pass` 等本身以双辅音结尾的词）
 - -e 脱落还原：`making` → `make`，`built` → `build`
+- 功能词弹性：允许冠词/介词/代词/助动词等 1 个差异（`a`→`the`、省略 `a`），**短语动词成分（out/in/up/down）视为实词，不弹性**
 
 **保守设计**：
 - 不做同义词替换（`deploy` ≠ `roll out` 仍不匹配，语义归意图层）
-- 不做功能词弹性匹配（冠词/介词差异留待第二层）
-- `variant` 与 `exact` 分开统计，confidence 低于 exact
+- 功能词集合严格排除短语动词介词（in/on/out/off/up/down/over/under），避免 "roll out" vs "roll in" 误匹配
+- `variant` 与 `exact` 分开统计，confidence 逐级降低
 - 数据库 `reuse_events.match_kind` CHECK 约束已包含 `variant`，无需迁移
 
-**测试**：`shared-schema` 29 个测试全过（新增 10 个），全仓库 typecheck 通过。
+**第三层：候选提示（`findReuseCandidates`）**：
+- 对未命中的 expression，计算实词 Jaccard 相似度，≥0.6 返回为候选
+- 不自动记录 `reuse_event`，需上层（Web/Companion/Skill）展示给用户确认
+- 已导出 `findReuseCandidates` 和 `ReuseCandidate` 类型，MCP/API 接入待后续迭代
 
-**后续**：第二层功能词弹性匹配（允许最多 1 个冠词/介词差异）和第三层候选提示（用户确认才记录）可按需迭代。
+**测试**：`shared-schema` 39 个测试全过（新增 20 个），全仓库 typecheck 通过。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 

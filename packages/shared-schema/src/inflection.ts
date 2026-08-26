@@ -317,3 +317,137 @@ export const lemmatizeText = (text: string): string =>
     .filter(Boolean)
     .map(lemmatizeWord)
     .join(" ");
+
+// --- Layer 2: function-word elastic matching ---
+
+// Words that may be inserted, omitted, or replaced without changing the
+// content of an expression. Preposition/adverbs that can be part of phrasal
+// verbs (in, on, out, off, up, down, over, under) are deliberately excluded —
+// "roll out" and "roll in" are different expressions.
+const FUNCTION_WORDS: Set<string> = new Set([
+  // articles
+  "a", "an", "the",
+  // pure prepositions (not phrasal-verb particles)
+  "of", "to", "for", "with", "at", "by", "from", "as", "about", "between",
+  "through", "during", "before", "after", "above", "below", "into", "onto",
+  "upon", "against", "among", "around", "behind", "beside", "beyond",
+  // conjunctions
+  "and", "or", "but", "if", "because", "since", "while", "although",
+  // pronouns
+  "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us",
+  "them", "my", "your", "his", "its", "our", "their", "this", "that",
+  "these", "those", "what", "which", "who", "whom", "whose",
+  // auxiliaries / copula
+  "is", "are", "was", "were", "be", "been", "being", "have", "has", "had",
+  "do", "does", "did", "will", "would", "can", "could", "shall", "should",
+  "may", "might", "must",
+  // negation / emphasis / adverbs of time and place
+  "not", "no", "yes", "also", "just", "only", "even", "still", "already",
+  "yet", "ever", "never", "now", "then", "here", "there", "today",
+  "tomorrow", "yesterday", "soon", "later", "always", "often", "sometimes",
+  "usually", "really", "very", "too", "so", "thus", "therefore",
+]);
+
+const isContentWord = (word: string): boolean => !FUNCTION_WORDS.has(word);
+
+const tokenize = (text: string): string[] => text.split(/\s+/).filter(Boolean);
+
+/** Normalize for matching: lowercase, strip punctuation, collapse whitespace. */
+const normalizeForMatch = (text: string): string =>
+  text
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/**
+ * Elastic match: allow at most one function-word difference (insertion,
+ * omission, or replacement) between the lemmatized needle and a window in
+ * the lemmatized haystack. All content words must appear in order.
+ *
+ * Returns true if an elastic match exists. This is more permissive than
+ * exact lemmatized match but still conservative — content words are strict.
+ */
+export const hasElasticMatch = (needle: string, haystack: string): boolean => {
+  const nTokens = tokenize(needle);
+  const hTokens = tokenize(haystack);
+  if (nTokens.length === 0 || hTokens.length < nTokens.length - 1) return false;
+
+  const nContent = nTokens.filter(isContentWord);
+  if (nContent.length === 0) return false; // all-function-word needle: skip
+
+  // Window spans from len(needle)-1 to len(needle)+1 tokens.
+  // At most one function word may differ, so window size is bounded.
+  const maxWindow = nTokens.length + 1;
+
+  for (let start = 0; start <= hTokens.length - Math.max(1, nTokens.length - 1); start++) {
+    const end = Math.min(start + maxWindow, hTokens.length);
+    const window = hTokens.slice(start, end);
+    if (window.length < nTokens.length - 1) continue;
+
+    // All needle content words must appear in window in order.
+    let ni = 0;
+    for (let wi = 0; wi < window.length && ni < nContent.length; wi++) {
+      if (window[wi] === nContent[ni]) ni++;
+    }
+    if (ni < nContent.length) continue;
+
+    // Window must not contain content words outside the needle's content set.
+    const extraContent = window.filter(
+      (w) => isContentWord(w) && !nContent.includes(w)
+    );
+    if (extraContent.length > 0) continue;
+
+    return true;
+  }
+  return false;
+};
+
+// --- Layer 3: candidate suggestions (user-confirmed, not auto-recorded) ---
+
+export type ReuseCandidate = {
+  expressionId: string;
+  text: string;
+  overlap: number; // 0..1 Jaccard on content words
+  reason: "high_overlap";
+};
+
+/**
+ * Find saved expressions that are similar to the text but did not match
+ * via exact or elastic matching. Uses Jaccard similarity on content-word
+ * sets. Returns candidates above the threshold — these should be shown to
+ * the user for confirmation, never recorded automatically.
+ */
+export const findReuseCandidates = (
+  text: string,
+  expressions: ReadonlyArray<{ id: string; text: string }>,
+  threshold = 0.6
+): ReuseCandidate[] => {
+  const hContent = new Set(
+    tokenize(lemmatizeText(normalizeForMatch(text))).filter(isContentWord)
+  );
+  if (hContent.size === 0) return [];
+
+  const candidates: ReuseCandidate[] = [];
+  for (const expression of expressions) {
+    const nContent = new Set(
+      tokenize(lemmatizeText(normalizeForMatch(expression.text))).filter(isContentWord)
+    );
+    if (nContent.size === 0) continue;
+
+    const intersection = [...nContent].filter((w) => hContent.has(w)).length;
+    const union = new Set([...nContent, ...hContent]).size;
+    const overlap = union === 0 ? 0 : intersection / union;
+
+    if (overlap >= threshold && overlap < 1) {
+      candidates.push({
+        expressionId: expression.id,
+        text: expression.text,
+        overlap,
+        reason: "high_overlap"
+      });
+    }
+  }
+  return candidates.sort((a, b) => b.overlap - a.overlap);
+};

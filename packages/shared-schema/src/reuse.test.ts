@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateReuseNudgePolicy, findReuseMatches, lemmatizeWord, lemmatizeText, normalizeReuseText, suggestReuse, summarizeReuse, defaultReuseNudgeSettings, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
+import { evaluateReuseNudgePolicy, findReuseCandidates, findReuseMatches, hasElasticMatch, lemmatizeWord, lemmatizeText, normalizeReuseText, suggestReuse, summarizeReuse, defaultReuseNudgeSettings, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
 
 test("normalizeReuseText collapses punctuation and case", () => {
   assert.equal(normalizeReuseText("  Roll-Out  a MIGRATION!\n"), "roll out a migration");
@@ -208,4 +208,77 @@ test("findReuseMatches variant handles plural noun and tense together", () => {
 test("lemmatizeText lemmatizes each token", () => {
   assert.equal(lemmatizeText("rolling out migrations"), "roll out migration");
   assert.equal(lemmatizeText("went through logs"), "go through log");
+});
+
+// --- Layer 2: function-word elastic matching ---
+
+test("elastic match allows one function word omission", () => {
+  // "roll out a migration" vs "rolling out migrations" — "a" omitted
+  assert.equal(hasElasticMatch("roll out a migration", "we be roll out migration tomorrow"), true);
+});
+
+test("elastic match allows one function word replacement", () => {
+  // "a" → "the"
+  assert.equal(hasElasticMatch("roll out a migration", "roll out the migration"), true);
+});
+
+test("elastic match rejects content word differences", () => {
+  // "deploy" vs "roll out" — content word differs
+  assert.equal(hasElasticMatch("roll out a migration", "deploy the migration"), false);
+});
+
+test("elastic match rejects extra content word", () => {
+  // "big" is an extra content word
+  assert.equal(hasElasticMatch("roll out a migration", "roll out a big migration"), false);
+});
+
+test("elastic match rejects phrasal verb particle differences", () => {
+  // "out" and "in" are content words (phrasal verb particles), not function words
+  assert.equal(hasElasticMatch("roll out a migration", "roll in a migration"), false);
+});
+
+test("findReuseMatches elastic tier matches article omission", () => {
+  const matches = findReuseMatches("We are rolling out migrations tomorrow.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+  assert.equal(matches[0]?.confidence, 0.7);
+});
+
+test("findReuseMatches elastic tier matches article replacement", () => {
+  const matches = findReuseMatches("Roll out the migration today.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+  assert.equal(matches[0]?.confidence, 0.7);
+});
+
+// --- Layer 3: candidate suggestions ---
+
+test("findReuseCandidates returns high-overlap expressions", () => {
+  // "roll out a big migration" shares roll/out/migration but has extra
+  // content word "big", so elastic match rejects it — candidate instead.
+  const candidates = findReuseCandidates("Roll out a big migration.", [
+    { id: "exp-1", text: "roll out a migration" },
+    { id: "exp-2", text: "cut a release" }
+  ]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.expressionId, "exp-1");
+  assert.ok(candidates[0]!.overlap >= 0.6);
+});
+
+test("findReuseCandidates excludes exact matches", () => {
+  const candidates = findReuseCandidates("Roll out a migration.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(candidates.length, 0);
+});
+
+test("findReuseCandidates excludes low-overlap expressions", () => {
+  const candidates = findReuseCandidates("Deploy the migration today.", [
+    { id: "exp-1", text: "cut a release" }
+  ]);
+  assert.equal(candidates.length, 0);
 });
