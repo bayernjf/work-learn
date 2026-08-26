@@ -13,3 +13,4 @@ coverage/
 .claude/
 .env*
 packages/mcp-server/.session-token.json
+.codegraph/
