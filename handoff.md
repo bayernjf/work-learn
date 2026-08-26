@@ -147,7 +147,7 @@ Agent 中调用 Skill
 ## 已经由实现回答的问题
 
 - 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 做 pull → push → pull 双向同步，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
-- 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法（按当前决策先不推进 SRS）；
+- 复习已升级为间隔重复（SRS，SM-2 风格，按评级重排 `due_at`/`interval_days`，见下「间隔重复算法」），不再是一致性标完成；
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。
 
@@ -155,9 +155,9 @@ Agent 中调用 Skill
 
 ### P1：练习闭环
 
-- 练习记录：保存用户是否练过、练习结果、Agent 反馈和错题；
-- Web 练习模式：先自己写，再展开参考说法，再标记“记住了 / 再练一次”；
-- 模型驱动的自适应练习：决定使用本地模型还是云端模型，基于近期错误和保存语料动态出题。
+- [x] 练习记录：保存用户是否练过、练习结果、Agent 反馈和错题（`practice_records` 表 + `017` 迁移，云端已推，C1）；
+- [x] Web 练习模式：先自己写，再展开参考说法，再标记“记住了 / 再练一次”（C1）；
+- [x] 模型驱动自适应练习：由 `WORK_LEARN_LLM_*` env 开关接入任意 OpenAI 兼容模型（本地或云端均可），基于近期错题动态出题，未配置回退规则生成（C2）。
 
 ### P1：复用追踪
 
