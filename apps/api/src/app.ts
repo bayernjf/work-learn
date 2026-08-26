@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, suggestReuseInputSchema, saveQuestionTranslationInputSchema, updateReuseNudgeSettingsSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, suggestReuseInputSchema, saveQuestionTranslationInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
 import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
@@ -336,6 +336,58 @@ app.patch("/reuse/settings", async (c) => {
     return c.json({ data: await ctx.updateReuseNudgeSettings(parsed.data) });
   } catch (error) {
     return c.json(errorResponse("Could not update reuse nudge settings", error));
+  }
+});
+
+app.get("/expressions", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const parsed = listExpressionsInputSchema.safeParse({
+    includeUnclustered: c.req.query("includeUnclustered") === "true" ? true : undefined,
+    intentId: c.req.query("intentId") === "null" ? null : c.req.query("intentId"),
+    limit: c.req.query("limit") ? Number(c.req.query("limit")) : undefined
+  });
+  if (!parsed.success) return c.json({ error: "Invalid expressions request", issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ data: await ctx.listExpressions(parsed.data) });
+  } catch (error) {
+    return c.json(errorResponse("Could not list expressions", error));
+  }
+});
+
+app.post("/intents/cluster", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const parsed = clusterIntentsInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid cluster request", issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ data: await ctx.clusterIntents(parsed.data) }, 201);
+  } catch (error) {
+    return c.json(errorResponse("Could not cluster intents", error));
+  }
+});
+
+app.post("/intents/merge", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const parsed = mergeIntentsInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid merge request", issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ data: await ctx.mergeIntents(parsed.data) });
+  } catch (error) {
+    return c.json(errorResponse("Could not merge intents", error));
+  }
+});
+
+app.post("/intents/split", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const parsed = splitIntentInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid split request", issues: parsed.error.issues }, 400);
+  try {
+    return c.json({ data: await ctx.splitIntent(parsed.data) }, 201);
+  } catch (error) {
+    return c.json(errorResponse("Could not split intent", error));
   }
 });
 
