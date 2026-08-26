@@ -15,16 +15,21 @@ import {
   saveQuestionTranslationInputSchema,
   recordReuseInputSchema,
   redactSecrets,
+  defaultReuseNudgeSettings,
   suggestReuse,
   suggestReuseInputSchema,
   summarizeReuse,
+  reuseNudgeSettingsSchema,
+  updateReuseNudgeSettingsSchema,
   syncBatchInputSchema,
   type PracticeMaterial,
   type PracticeQuestion,
   type QuestionTranslation,
   type RecordReuseInput,
+  type ReuseNudgeSettings,
   type SaveMaterialInput,
   type SuggestReuseInput,
+  type UpdateReuseNudgeSettings,
   type SaveQuestionTranslationInput
 } from "@work-learn/shared-schema";
 
@@ -585,13 +590,47 @@ export class LocalStore {
     return summarizeReuse(expressions, events);
   }
 
+  getReuseNudgeSettings(): ReuseNudgeSettings {
+    const row = this.db.prepare("SELECT value FROM sync_meta WHERE key = ?").get("reuse_nudge_settings") as { value: string } | undefined;
+    if (!row) return defaultReuseNudgeSettings();
+    return reuseNudgeSettingsSchema.parse({ ...defaultReuseNudgeSettings(), ...JSON.parse(row.value) });
+  }
+
+  updateReuseNudgeSettings(input: unknown): ReuseNudgeSettings {
+    const parsed = updateReuseNudgeSettingsSchema.parse(input) as UpdateReuseNudgeSettings;
+    const current = this.getReuseNudgeSettings();
+    const next: ReuseNudgeSettings = {
+      ...current,
+      ...parsed,
+      updatedAt: new Date().toISOString()
+    };
+    this.db.prepare("INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run("reuse_nudge_settings", JSON.stringify(next));
+    return next;
+  }
+
   suggestReuse(input: unknown) {
     const parsed = suggestReuseInputSchema.parse(input) as SuggestReuseInput;
     const safeText = redactSecrets(parsed.text).text;
+    const now = new Date().toISOString();
+    const settings = this.getReuseNudgeSettings();
     const expressions = (this.db
       .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
       .all() as SavedExpressionRow[]).map(toSavedExpression);
-    return suggestReuse(safeText, expressions, { source: parsed.source, limit: parsed.limit });
+    const events = (this.db
+      .prepare("SELECT expression_id, match_kind, created_at FROM reuse_events ORDER BY created_at DESC")
+      .all() as Array<{ expression_id: string; match_kind: "exact" | "variant" | "nudge"; created_at: string }>)
+      .map((row) => ({ expressionId: row.expression_id, matchKind: row.match_kind, createdAt: row.created_at }));
+    const result = suggestReuse(safeText, expressions, { source: parsed.source, limit: parsed.limit }, { settings, events, now });
+    const suggestion = result.suggestions[0];
+    if (suggestion) {
+      this.db.prepare(
+        `INSERT INTO reuse_events
+         (id, expression_id, session_id, source, matched_text, context_snippet, match_kind, confidence, created_at, sync_status)
+         VALUES (?, ?, NULL, ?, ?, NULL, 'nudge', 0.5, ?, 'local_only')`
+      ).run(crypto.randomUUID(), suggestion.expressionId, parsed.source ?? null, suggestion.text, now);
+    }
+    return result;
   }
 
   markMastered(reviewId: string) {
@@ -1056,7 +1095,9 @@ export const createLocalContext = (store: LocalStore) => ({
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
   recordReuse: (input: unknown) => store.recordReuse(input),
   getReuseSummary: () => store.getReuseSummary(),
-  suggestReuse: (input: unknown) => store.suggestReuse(input)
+  suggestReuse: (input: unknown) => store.suggestReuse(input),
+  getReuseNudgeSettings: () => store.getReuseNudgeSettings(),
+  updateReuseNudgeSettings: (input: unknown) => store.updateReuseNudgeSettings(input)
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;
