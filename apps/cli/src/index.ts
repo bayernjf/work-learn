@@ -19,7 +19,8 @@ const commands = {
   doctor: "Check local DB, token config, and API health.",
   backup: "Back up the local SQLite database.",
   restore: "Restore the local SQLite database from a backup.",
-  export: "Export local data to markdown notes."
+  export: "Export local data to markdown notes.",
+  nudges: "Show or change local reuse nudge settings (on/off/status)."
 } as const;
 
 if (command === "capture") {
@@ -42,6 +43,8 @@ if (command === "capture") {
   await restore(args);
 } else if (command === "export") {
   await exportNotes(args);
+} else if (command === "nudges") {
+  await nudges(args);
 } else if (!command || !(command in commands)) {
   console.log("Work Learn CLI\n");
   for (const [name, description] of Object.entries(commands)) console.log(`  learn ${name.padEnd(8)} ${description}`);
@@ -55,6 +58,28 @@ function option(args: string[], name: string) {
 
 function openStore(): LocalStore {
   return new LocalStore();
+}
+
+async function nudges(args: string[]) {
+  const store = openStore();
+  try {
+    const action = args.find((arg) => !arg.startsWith("--"));
+    if (action === "on" || action === "off") {
+      const cooldownHours = Number(option(args, "--cooldown-hours") ?? NaN);
+      const dailyLimit = Number(option(args, "--daily-limit") ?? NaN);
+      const updated = store.updateReuseNudgeSettings({
+        enabled: action === "on",
+        ...(Number.isFinite(cooldownHours) ? { cooldownHours } : {}),
+        ...(Number.isFinite(dailyLimit) ? { dailyLimit } : {})
+      });
+      console.log(JSON.stringify({ updated: true, ...updated }, null, 2));
+      return;
+    }
+    if (action && action !== "status") throw new Error(`Unknown nudge action: ${action}`);
+    console.log(JSON.stringify(store.getReuseNudgeSettings(), null, 2));
+  } finally {
+    store.close();
+  }
 }
 
 async function capture(args: string[]) {
