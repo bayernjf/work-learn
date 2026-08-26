@@ -488,7 +488,9 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
     const copy = [...arr];
     for (let i = copy.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
-      [copy[i], copy[j]] = [copy[j], copy[i]];
+      const tmp = copy[j]!;
+      copy[j] = copy[i]!;
+      copy[i] = tmp;
     }
     return copy.slice(0, n);
   };
@@ -504,22 +506,25 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
     const expressions = material.usefulExpressions.filter(Boolean);
     if (vocab.length >= 1) {
       const word = vocab[0];
-      const blanked = blankInText(material.originalText, word) ?? blankInText(material.explanation, word);
-      if (blanked) {
-        exercises.push({
-          type: "fill",
-          materialId: material.id,
-          focus: word,
-          prompt: "根据语境填空（填一个词）",
-          sentence: blanked,
-          answer: word
-        });
+      if (word) {
+        const blanked = blankInText(material.originalText, word) ?? blankInText(material.explanation, word);
+        if (blanked) {
+          exercises.push({
+            type: "fill",
+            materialId: material.id,
+            focus: word,
+            prompt: "根据语境填空（填一个词）",
+            sentence: blanked,
+            answer: word
+          });
+        }
       }
     }
     if (expressions.length >= 3) {
       const answer = expressions[0];
-      const distractors = expressions.slice(1);
-      const options = shuffleArr([answer, ...pickSample(distractors, Math.min(3, distractors.length))]);
+      if (answer) {
+        const distractors = expressions.slice(1);
+        const options = shuffleArr([answer, ...pickSample(distractors, Math.min(3, distractors.length))]);
       const clue = material.explanation
         ? `场景：「${material.topic}」。对应释义：${material.explanation}`
         : `场景：「${material.topic}」`;
@@ -542,6 +547,7 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
           options,
           answer
         });
+      }
       }
     }
   }
