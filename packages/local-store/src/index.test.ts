@@ -114,6 +114,38 @@ test("saved material creates trackable expressions and records later reuse", () 
   });
 });
 
+test("suggestReuse expands a matched phrase to another expression with the same intent", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "deploy" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "deploy",
+      originalText: "We can deploy the database change carefully.",
+      usefulExpressions: ["roll out a migration", "deploy the migration"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["deploy"]
+    });
+
+    const db = (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): void } } }).db;
+    db.prepare("INSERT INTO intents (id, label, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?)")
+      .run("intent-deploy", "deploy a database change", null, "2026-08-26T09:00:00.000Z", "2026-08-26T09:00:00.000Z");
+    db.prepare("UPDATE saved_expressions SET intent_id = ? WHERE text_norm IN (?, ?)")
+      .run("intent-deploy", "roll out a migration", "deploy the migration");
+
+    const result = store.suggestReuse({
+      text: "Let's roll out a migration after the tests pass.",
+      source: "codex"
+    });
+
+    assert.deepEqual(result.matchedExpressionIds.length, 1);
+    assert.equal(result.suggestions.length, 1);
+    assert.equal(result.suggestions[0]?.text, "deploy the migration");
+  });
+});
+
 test("generatePractice turns recent materials into exercise prompts", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "api design" });
