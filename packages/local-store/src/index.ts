@@ -1,6 +1,6 @@
-import { mkdirSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import Database from "better-sqlite3";
 import {
   createSessionInputSchema,
@@ -85,7 +85,10 @@ type ReviewRow = {
 };
 
 export const DEFAULT_DB_PATH = join(homedir(), ".work-learn", "work-learn.db");
+export const DEFAULT_BACKUP_DIR = join(homedir(), ".work-learn", "backups");
 export const DEFAULT_NOTES_DIR = join(homedir(), ".work-learn", "notes");
+
+const REQUIRED_TABLES = ["sessions", "learning_materials", "question_translations", "review_items", "sync_meta", "sync_tombstones"];
 
 const schema = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -214,6 +217,40 @@ export class LocalStore {
   close(): void {
     this.db.close();
   }
+
+
+  static validateDatabase(dbPath: string) {
+    if (!existsSync(dbPath)) throw new Error(`Database file not found: ${dbPath}`);
+    let db: Database.Database | undefined;
+    try {
+      db = new Database(dbPath, { readonly: true, fileMustExist: true });
+      const tables = new Set(
+        (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as Array<{ name: string }>).map((row) => row.name)
+      );
+      for (const table of REQUIRED_TABLES) {
+        if (!tables.has(table)) throw new Error(`Backup is missing the ${table} table`);
+      }
+      const integrity = db.prepare("PRAGMA integrity_check").get() as { integrity_check: string };
+      if (integrity.integrity_check !== "ok") throw new Error(`Backup failed SQLite integrity check: ${integrity.integrity_check}`);
+      return { dbPath, tables: REQUIRED_TABLES.filter((table) => tables.has(table)) };
+    } finally {
+      db?.close();
+    }
+  }
+
+  static restoreBackup(backupPath: string, dbPath: string = DEFAULT_DB_PATH) {
+    LocalStore.validateDatabase(backupPath);
+    mkdirSync(dirname(dbPath), { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const previousDatabaseBackup = existsSync(dbPath) ? `${dbPath}.before-restore-${timestamp}` : undefined;
+    if (previousDatabaseBackup) copyFileSync(dbPath, previousDatabaseBackup);
+    copyFileSync(backupPath, dbPath);
+    for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+      if (existsSync(sidecar)) rmSync(sidecar, { force: true });
+    }
+    return { restoredFrom: backupPath, dbPath, previousDatabaseBackup };
+  }
+
 
   createSession(input: unknown) {
     const parsed = createSessionInputSchema.parse(input);
@@ -441,6 +478,16 @@ export class LocalStore {
       reviews: reviews.map(toReview),
       tombstones
     };
+  }
+
+
+  backupTo(destinationPath: string) {
+    mkdirSync(dirname(destinationPath), { recursive: true });
+    if (resolve(destinationPath) === resolve(this.db.name)) throw new Error("Backup destination must be different from the current database");
+    this.db.pragma("wal_checkpoint(TRUNCATE)");
+    copyFileSync(this.db.name, destinationPath);
+    LocalStore.validateDatabase(destinationPath);
+    return { backupPath: destinationPath, dbPath: this.db.name, stats: this.stats() };
   }
 
   getMeta(key: string): string | undefined {
