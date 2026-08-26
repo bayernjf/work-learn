@@ -67,6 +67,13 @@ export type SyncStatus = {
   latestMaterialUpdatedAt: string | null;
 };
 
+export type ReuseNudgeSettings = {
+  enabled: boolean;
+  cooldownHours: number;
+  dailyLimit: number;
+  updatedAt: string;
+};
+
 export type ReuseSummary = {
   generatedAt: string;
   counts: {
@@ -115,6 +122,24 @@ export const fetchReuseSummary = async (session: Session) => {
   });
   if (!response.ok) throw new Error(activeStrings().errors.reuseSummary);
   return (await response.json()) as { data: ReuseSummary };
+};
+
+export const fetchReuseNudgeSettings = async (session: Session) => {
+  const response = await fetch(`/api/reuse/settings`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSettings);
+  return (await response.json()) as { data: ReuseNudgeSettings };
+};
+
+export const updateReuseNudgeSettings = async (session: Session, settings: Partial<ReuseNudgeSettings>) => {
+  const response = await fetch(`/api/reuse/settings`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(settings)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSettings);
+  return (await response.json()) as { data: ReuseNudgeSettings };
 };
 
 export const fetchReviews = async (session: Session) => {

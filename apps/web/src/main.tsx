@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSummary, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -62,8 +62,11 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [patternsError, setPatternsError] = useState("");
   const [reuseSummary, setReuseSummary] = useState<ReuseSummary | null>(null);
+  const [reuseSettings, setReuseSettings] = useState<ReuseNudgeSettings | null>(null);
   const [reuseLoading, setReuseLoading] = useState(false);
   const [reuseError, setReuseError] = useState("");
+  const [reuseSettingsError, setReuseSettingsError] = useState("");
+  const [reuseSettingsSaving, setReuseSettingsSaving] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -83,12 +86,16 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     setLoadError("");
     setReuseLoading(true);
     setReuseError("");
+    setReuseSettingsError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session), fetchQuestionTranslations(session)])
       .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); setResults(null); setQuestionResults(null); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
-    void fetchReuseSummary(session)
-      .then((result) => setReuseSummary(result.data))
+    void Promise.all([fetchReuseSummary(session), fetchReuseNudgeSettings(session)])
+      .then(([summaryResult, settingsResult]) => {
+        setReuseSummary(summaryResult.data);
+        setReuseSettings(settingsResult.data);
+      })
       .catch((error: unknown) => setReuseError(error instanceof Error ? error.message : t.errors.reuseSummary))
       .finally(() => setReuseLoading(false));
     void refreshSyncStatus(session);
@@ -252,6 +259,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       setPatternsError(error instanceof Error ? error.message : t.errors.patterns);
     } finally {
       setPatternsLoading(false);
+    }
+  };
+
+  const handleToggleReuseNudges = async (enabled: boolean) => {
+    if (!session || !reuseSettings) return;
+    setReuseSettingsSaving(true);
+    setReuseSettingsError("");
+    try {
+      const result = await updateReuseNudgeSettings(session, { enabled });
+      setReuseSettings(result.data);
+    } catch (error) {
+      setReuseSettingsError(error instanceof Error ? error.message : t.errors.reuseSettings);
+    } finally {
+      setReuseSettingsSaving(false);
     }
   };
 
@@ -419,7 +440,7 @@ function App({ supabase }: { supabase: SupabaseClient }) {
         </>}
       </section>
       <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
-      <ReuseDashboard summary={reuseSummary} loading={reuseLoading} error={reuseError} />
+      <ReuseDashboard summary={reuseSummary} settings={reuseSettings} loading={reuseLoading} error={reuseError} settingsError={reuseSettingsError} saving={reuseSettingsSaving} onToggleNudges={handleToggleReuseNudges} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
         <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
@@ -1086,7 +1107,15 @@ function ReviewList({ session, reviews, onComplete, onSnooze }: { session: Sessi
   );
 }
 
-function ReuseDashboard({ summary, loading, error }: { summary: ReuseSummary | null; loading: boolean; error: string }) {
+function ReuseDashboard({ summary, settings, loading, error, settingsError, saving, onToggleNudges }: {
+  summary: ReuseSummary | null;
+  settings: ReuseNudgeSettings | null;
+  loading: boolean;
+  error: string;
+  settingsError: string;
+  saving: boolean;
+  onToggleNudges: (enabled: boolean) => void;
+}) {
   const { t, formatDate } = useI18n();
   return (
     <section className="reuse-panel" aria-live="polite">
@@ -1096,7 +1125,21 @@ function ReuseDashboard({ summary, loading, error }: { summary: ReuseSummary | n
           <h2>{t.reuse.heading}</h2>
           <p className="reuse-subheading">{t.reuse.subheading}</p>
         </div>
+        {settings ? (
+          <label className="switch-row">
+            <span>{t.reuse.nudgeTitle}</span>
+            <button
+              type="button"
+              className={settings.enabled ? "switch on" : "switch"}
+              aria-pressed={settings.enabled}
+              disabled={saving}
+              onClick={() => onToggleNudges(!settings.enabled)}
+            >{settings.enabled ? t.reuse.nudgeOn : t.reuse.nudgeOff}</button>
+          </label>
+        ) : null}
       </div>
+      <p className="reuse-subheading">{t.reuse.nudgeDescription}</p>
+      {settingsError ? <p className="reuse-meta reuse-error">{settingsError}</p> : null}
       {loading ? <p className="reuse-meta">{t.reuse.loading}</p> : null}
       {error ? <p className="reuse-meta reuse-error">{error}</p> : null}
       {summary ? (

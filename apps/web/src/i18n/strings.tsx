@@ -81,6 +81,7 @@ export const en = {
     practice: "Could not generate practice",
     patterns: "Could not load your patterns",
     reuseSummary: "Could not load reuse summary",
+    reuseSettings: "Could not update reuse nudge settings.",
   },
 
   empty: {
@@ -191,6 +192,11 @@ export const en = {
     reused: (count: number, when: string) => `${count}× · ${when}`,
     savedIn: (scene: string, date: string) => `${scene} · ${date}`,
     event: (source: string, when: string) => `${source} · ${when}`,
+    nudgeTitle: "Gentle reuse nudges",
+    nudgeOn: "On",
+    nudgeOff: "Off",
+    nudgeDescription: "When an agent sees a saved phrase in your English, it can offer one same-intent alternative at most every few hours.",
+    nudgeUpdated: "Nudge setting saved.",
   },
 
   connect: {
@@ -448,6 +454,7 @@ export const zh: Strings = {
     practice: "生成练习失败",
     patterns: "加载学习模式失败",
     reuseSummary: "加载复用统计失败",
+    reuseSettings: "更新复用提示设置失败",
   },
 
   empty: {
@@ -558,6 +565,11 @@ export const zh: Strings = {
     reused: (count: number, when: string) => `${count} 次 · ${when}`,
     savedIn: (scene: string, date: string) => `${scene} · ${date}`,
     event: (source: string, when: string) => `${source} · ${when}`,
+    nudgeTitle: "温和复用提示",
+    nudgeOn: "开启",
+    nudgeOff: "关闭",
+    nudgeDescription: "当 Agent 在你的英文里看到已保存表达时，可以每几小时最多提供一个同一意图下的其他说法。",
+    nudgeUpdated: "复用提示设置已保存。",
   },
 
   connect: {

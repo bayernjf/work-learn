@@ -1419,6 +1419,34 @@ code {
   font-size: 13px;
   line-height: 1.6;
 }
+.reuse-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+.switch-row {
+  display: inline-grid;
+  gap: 6px;
+  color: var(--ink-2);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.switch {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-2);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.switch.on {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  color: var(--accent);
+}
+.switch:disabled { opacity: 0.6; cursor: wait; }
 .reuse-error { color: var(--danger); }
 .reuse-metrics {
   display: grid;
