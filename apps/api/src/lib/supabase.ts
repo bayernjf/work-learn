@@ -16,7 +16,11 @@ export const createSupabaseUserClient = (accessToken: string) => {
 
   return createClient(url, anonKey, {
     global: { headers: { Authorization: `Bearer ${accessToken}` } },
-    auth: { autoRefreshToken: false, persistSession: false }
+    auth: { autoRefreshToken: false, persistSession: false },
+    // The API never uses realtime subscriptions, so disable the RealtimeClient.
+    // realtime-js v2 dropped its `ws` fallback and requires the native
+    // `globalThis.WebSocket` (Node 22+); disabling avoids forcing Node 22 locally.
+    realtime: false
   });
 };
 
@@ -31,7 +35,8 @@ export const createSupabaseServiceClient = () => {
     throw new Error("SUPABASE_SERVICE_ROLE_KEY is required");
   }
   return createClient(url, serviceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false }
+    auth: { autoRefreshToken: false, persistSession: false },
+    realtime: false
   });
 };
 
