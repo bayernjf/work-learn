@@ -12,6 +12,7 @@ const [command, ...args] = process.argv.slice(2);
 const commands = {
   capture: "Capture and save text (stdin or clipboard) to the local store.",
   review: "Show the next review items from the local store.",
+  practice: "Generate local practice prompts from recent materials and saved questions.",
   search: "Search the local corpus.",
   sync: "Pull cloud changes, push local changes, and sync review state.",
   delete: "Delete a local material or question and record a tombstone.",
@@ -23,6 +24,8 @@ if (command === "capture") {
   await capture(args);
 } else if (command === "review") {
   await review();
+} else if (command === "practice") {
+  await practice(args);
 } else if (command === "search") {
   await search(args);
 } else if (command === "sync") {
@@ -88,9 +91,25 @@ async function review() {
 
 async function search(args: string[]) {
   const query = option(args, "--q") ?? option(args, "--query") ?? args.find((a) => !a.startsWith("-")) ?? "";
+  const source = option(args, "--source");
+  const tag = option(args, "--tag");
   const store = openStore();
   try {
-    console.log(JSON.stringify(store.searchCorpus(query), null, 2));
+    console.log(JSON.stringify(store.searchCorpus(query, { source, tag }), null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function practice(args: string[]) {
+  const limit = Number(option(args, "--limit") ?? "3");
+  const materialId = option(args, "--material");
+  const store = openStore();
+  try {
+    console.log(JSON.stringify(store.generatePractice({
+      ...(Number.isFinite(limit) ? { limit } : {}),
+      ...(materialId ? { materialId } : {})
+    }), null, 2));
   } finally {
     store.close();
   }
