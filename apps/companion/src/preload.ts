@@ -8,6 +8,7 @@ interface LearnResult {
 contextBridge.exposeInMainWorld("workLearn", {
   getStats: (): Promise<unknown> => ipcRenderer.invoke("get-stats"),
   capture: (): Promise<LearnResult> => ipcRenderer.invoke("capture"),
+  captureSelection: (): Promise<LearnResult> => ipcRenderer.invoke("capture-selection"),
   sync: (): Promise<LearnResult> => ipcRenderer.invoke("sync"),
   openWeb: (): Promise<LearnResult> => ipcRenderer.invoke("open-web"),
   onRefresh: (callback: () => void) => ipcRenderer.on("refresh", () => callback())

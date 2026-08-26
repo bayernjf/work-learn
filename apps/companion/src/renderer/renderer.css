@@ -128,3 +128,11 @@ button:hover {
 .status.error {
   color: var(--error);
 }
+
+.hint {
+  margin: 0;
+  padding: 0 12px 12px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+}

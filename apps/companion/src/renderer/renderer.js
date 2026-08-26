@@ -38,6 +38,13 @@ document.getElementById("capture").addEventListener("click", async () => {
   refresh();
 });
 
+document.getElementById("captureSelection").addEventListener("click", async () => {
+  setStatus("采集选中文本中…");
+  const res = await wl.captureSelection();
+  setStatus(res.ok ? "已通过快捷键采集选中文本" : "采集失败：" + res.output, res.ok ? "ok" : "error");
+  refresh();
+});
+
 document.getElementById("sync").addEventListener("click", async () => {
   setStatus("同步中…");
   const res = await wl.sync();
