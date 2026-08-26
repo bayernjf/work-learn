@@ -40,6 +40,9 @@ export const en = {
     searchLabel: "Search your corpus",
     loadingLabel: "Loading your corpus",
     all: "All",
+    allSources: "All sources",
+    allTags: "All tags",
+    allTopics: "All topics",
     newest: "Newest",
     oldest: "Oldest",
     noMatchQuery: (query: string) => `Nothing matches “${query}” yet.`,
@@ -131,7 +134,20 @@ export const en = {
     refresh: "Refresh",
   },
 
+  export: {
+    button: "Export markdown",
+    generatedAt: "Generated at",
+    source: "Source",
+    created: "Created",
+    tags: "Tags",
+    material: "material",
+    materials: "materials",
+    question: "question",
+    questions: "questions",
+  },
+
   practice: {
+    answer: "Reference:",
     practice: "Practice",
     practicing: "Preparing…",
     hide: "Hide",
@@ -141,7 +157,8 @@ export const en = {
       reuse: "Reuse",
       recall: "Recall",
       correction: "Correction",
-      apply: "Apply"
+      apply: "Apply",
+      question: "Question"
     }
   },
 
@@ -272,6 +289,7 @@ The skill it installs is the same one published at ${skillUrl}.`,
     due: (count: number) => `${count} due`,
     empty: "No reviews due. Keep working, then save the next useful expression.",
     mark: "Mark mastered",
+    snooze: "Tomorrow",
     showAnswer: "Show answer",
     hideAnswer: "Hide",
     recallHint: "Recall the better version, then check yourself.",
@@ -285,6 +303,13 @@ The skill it installs is the same one published at ${skillUrl}.`,
     reuse: "Reuse",
     vocabulary: "Vocabulary",
     deleteConfirm: "Delete this learning material? It will be removed from your other devices too.",
+    edit: "Edit",
+    save: "Save",
+    cancel: "Cancel",
+    editTopic: "Topic",
+    editTags: "Tags (comma separated)",
+    editExplanation: "Why",
+    editError: "Could not save changes",
   },
 
   footer: {
@@ -351,6 +376,9 @@ export const zh: Strings = {
     searchLabel: "搜索你的语料",
     loadingLabel: "正在加载语料",
     all: "全部",
+    allSources: "全部来源",
+    allTags: "全部标签",
+    allTopics: "全部话题",
     newest: "最新",
     oldest: "最早",
     noMatchQuery: (query: string) => `没有匹配「${query}」的内容。`,
@@ -442,7 +470,20 @@ export const zh: Strings = {
     refresh: "刷新",
   },
 
+  export: {
+    button: "导出 Markdown",
+    generatedAt: "生成时间",
+    source: "来源",
+    created: "保存时间",
+    tags: "标签",
+    material: "条材料",
+    materials: "条材料",
+    question: "条提问",
+    questions: "条提问",
+  },
+
   practice: {
+    answer: "参考说法：",
     practice: "练习",
     practicing: "准备中…",
     hide: "收起",
@@ -452,7 +493,8 @@ export const zh: Strings = {
       reuse: "复用",
       recall: "回忆",
       correction: "纠错",
-      apply: "应用"
+      apply: "应用",
+      question: "提问"
     }
   },
 
@@ -583,6 +625,7 @@ export const zh: Strings = {
     due: (count: number) => `${count} 条待复习`,
     empty: "没有待复习的。继续工作，下次遇到有用的表达再存。",
     mark: "标为已掌握",
+    snooze: "明天再说",
     showAnswer: "显示答案",
     hideAnswer: "收起",
     recallHint: "先回忆更自然的说法，再展开对照。",
@@ -596,6 +639,13 @@ export const zh: Strings = {
     reuse: "造句练习",
     vocabulary: "词汇",
     deleteConfirm: "删除这条学习材料？删除也会同步到你的其他设备。",
+    edit: "编辑",
+    save: "保存",
+    cancel: "取消",
+    editTopic: "话题",
+    editTags: "标签（逗号分隔）",
+    editExplanation: "为什么",
+    editError: "保存修改失败",
   },
 
   footer: {
