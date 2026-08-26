@@ -223,7 +223,8 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
 - 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
 - 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法；
-- [x] 更保守的同义变体识别策略（第一层：屈折归一化，见下「屈折归一化 Variant 匹配」）。
+- [x] 更保守的同义变体识别策略（三层全部完成：屈折归一化 + 功能词弹性匹配 + 候选提示，见下「屈折归一化 Variant 匹配」）；
+- `findReuseCandidates` 接入 MCP 工具 / API / Web UI（核心算法已完成并导出，待上层集成；当前不做）。
 
 ## 屈折归一化 Variant 匹配（2026-08-27）
 
