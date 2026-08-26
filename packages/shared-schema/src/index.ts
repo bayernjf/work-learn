@@ -58,7 +58,7 @@ export const findReuseMatches = (
   const matches: ReuseMatch[] = [];
   for (const expression of expressions) {
     const needle = normalizeReuseText(expression.text);
-    if (!needle || needle.length < 3) continue;
+    if (!needle || needle.length <= 3) continue;
     if (haystack.includes(needle)) {
       matches.push({
         expressionId: expression.id,
@@ -277,6 +277,60 @@ export const recordReuseInputSchema = z.object({
   contextSnippet: z.string().max(500).optional()
 });
 
+export const suggestReuseInputSchema = z.object({
+  text: z.string().min(1).max(10_000),
+  source: sourceSchema.optional(),
+  limit: z.number().int().min(1).max(1).default(1)
+});
+
+export const reuseNudgeSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  cooldownHours: z.number().int().min(0).max(168).default(6),
+  dailyLimit: z.number().int().min(0).max(20).default(3),
+  updatedAt: z.string().datetime()
+});
+
+export const updateReuseNudgeSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  cooldownHours: z.number().int().min(0).max(168).optional(),
+  dailyLimit: z.number().int().min(0).max(20).optional()
+});
+
+export const listExpressionsInputSchema = z.object({
+  intentId: z.string().min(1).nullable().optional(),
+  includeUnclustered: z.boolean().optional(),
+  limit: z.number().int().min(1).max(500).default(200)
+});
+
+export const listIntentsInputSchema = z.object({
+  limit: z.number().int().min(1).max(200).default(100),
+  expressionLimit: z.number().int().min(1).max(1000).default(500)
+});
+
+export type ListIntentsInput = z.infer<typeof listIntentsInputSchema>;
+
+export const clusterIntentsInputSchema = z.object({
+  groups: z.array(z.object({
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).nullable().optional(),
+    expressionIds: z.array(z.string().min(1)).min(1)
+  })).min(1).max(50)
+});
+
+export const mergeIntentsInputSchema = z.object({
+  sourceIntentId: z.string().min(1),
+  targetIntentId: z.string().min(1)
+});
+
+export const splitIntentInputSchema = z.object({
+  intentId: z.string().min(1),
+  groups: z.array(z.object({
+    label: z.string().min(1).max(200),
+    description: z.string().max(1000).nullable().optional(),
+    expressionIds: z.array(z.string().min(1)).min(1)
+  })).min(2).max(50)
+});
+
 export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review", "intent", "expression", "reuse_event"]);
 
 export const syncTombstoneSchema = z.object({
@@ -444,5 +498,184 @@ export type SyncIntent = z.infer<typeof syncIntentSchema>;
 export type SyncSavedExpression = z.infer<typeof syncSavedExpressionSchema>;
 export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
 export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
+export type SuggestReuseInput = z.infer<typeof suggestReuseInputSchema>;
+export type ReuseNudgeSettings = z.infer<typeof reuseNudgeSettingsSchema>;
+export type UpdateReuseNudgeSettings = z.infer<typeof updateReuseNudgeSettingsSchema>;
+export type ListExpressionsInput = z.infer<typeof listExpressionsInputSchema>;
+export type ClusterIntentsInput = z.infer<typeof clusterIntentsInputSchema>;
+export type MergeIntentsInput = z.infer<typeof mergeIntentsInputSchema>;
+export type SplitIntentInput = z.infer<typeof splitIntentInputSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
+
+export type ReuseSummary = {
+  generatedAt: string;
+  counts: {
+    expressions: number;
+    activeVocabulary: number;
+    sleepingExpressions: number;
+    reuseEvents: number;
+    expressionBreadth: number;
+    crossContextReuse: number;
+  };
+  activeExpressions: SyncSavedExpression[];
+  sleepingExpressions: SyncSavedExpression[];
+  recentEvents: Array<SyncReuseEvent & { text: string }>;
+};
+
+export type ReuseSuggestion = {
+  expressionId: string;
+  text: string;
+  register: "formal" | "neutral" | "casual" | null;
+  scene: string | null;
+  note: string | null;
+  reason: "same_intent" | "scene" | "recent";
+};
+
+export type ReuseSuggestions = {
+  generatedAt: string;
+  enabled: boolean;
+  matchedExpressionIds: string[];
+  suggestions: ReuseSuggestion[];
+  suppressedReason: "disabled" | "cooldown" | "daily_limit" | null;
+};
+
+const candidateScore = (candidate: SyncSavedExpression, matchedIntentIds: Set<string | null>, source?: string) => {
+  let score = 0;
+  if (candidate.intentId && matchedIntentIds.has(candidate.intentId)) score += 100;
+  if (source && candidate.scene === source) score += 10;
+  score += Math.min(candidate.reuseCount, 10);
+  if (candidate.lastReusedAt) score += 5;
+  return score;
+};
+
+export const defaultReuseNudgeSettings = (now = new Date().toISOString()): ReuseNudgeSettings => ({
+  enabled: true,
+  cooldownHours: 6,
+  dailyLimit: 3,
+  updatedAt: now
+});
+
+export const evaluateReuseNudgePolicy = (
+  settings: ReuseNudgeSettings,
+  events: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>,
+  nowIso: string
+): { allow: boolean; suppressedReason: ReuseSuggestions["suppressedReason"] } => {
+  if (!settings.enabled) return { allow: false, suppressedReason: "disabled" };
+  const now = new Date(nowIso);
+  const nudges = events.filter((event) => event.matchKind === "nudge");
+  const startOfDay = new Date(now);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  if (nudges.filter((event) => new Date(event.createdAt) >= startOfDay).length >= settings.dailyLimit) {
+    return { allow: false, suppressedReason: "daily_limit" };
+  }
+  const latest = nudges.map((event) => new Date(event.createdAt)).sort((a, b) => b.getTime() - a.getTime())[0];
+  if (latest && now.getTime() - latest.getTime() < settings.cooldownHours * 60 * 60 * 1000) {
+    return { allow: false, suppressedReason: "cooldown" };
+  }
+  return { allow: true, suppressedReason: null };
+};
+
+const isIgnoredNudgeCandidate = (
+  candidate: SyncSavedExpression,
+  events: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>
+): boolean => events.some((event) => {
+  if (event.expressionId !== candidate.id || event.matchKind !== "nudge") return false;
+  const nudgeAt = new Date(event.createdAt);
+  const reusedAt = candidate.lastReusedAt ? new Date(candidate.lastReusedAt) : null;
+  return !reusedAt || nudgeAt > reusedAt;
+});
+
+export const suggestReuse = (
+  text: string,
+  expressions: ReadonlyArray<SyncSavedExpression>,
+  input: Omit<Partial<SuggestReuseInput>, "text"> = {},
+  policy?: {
+    settings?: ReuseNudgeSettings;
+    events?: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>;
+    now?: string;
+  }
+): ReuseSuggestions => {
+  const generatedAt = policy?.now ?? new Date().toISOString();
+  const matches = findReuseMatches(text, expressions);
+  const matchedIds = new Set(matches.map((match) => match.expressionId));
+  const matchedExpressions = expressions.filter((expression) => matchedIds.has(expression.id));
+  const matchedIntentIds = new Set(matchedExpressions.map((expression) => expression.intentId));
+  const limit = input.limit ?? 1;
+  const settings = policy?.settings ?? defaultReuseNudgeSettings(generatedAt);
+  const events = policy?.events ?? [];
+  const decision = evaluateReuseNudgePolicy(settings, events, generatedAt);
+
+  const sameIntent = decision.allow
+    ? expressions
+      .filter((expression) => expression.intentId && matchedIntentIds.has(expression.intentId) && !matchedIds.has(expression.id) && !isIgnoredNudgeCandidate(expression, events))
+      .sort((a, b) => candidateScore(b, matchedIntentIds, input.source) - candidateScore(a, matchedIntentIds, input.source) || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+    : [];
+
+  return {
+    generatedAt,
+    enabled: settings.enabled,
+    matchedExpressionIds: matches.map((match) => match.expressionId),
+    suggestions: sameIntent.map((expression) => ({
+      expressionId: expression.id,
+      text: expression.text,
+      register: expression.register,
+      scene: expression.scene,
+      note: expression.note,
+      reason: "same_intent" as const
+    })),
+    suppressedReason: decision.suppressedReason
+  };
+};
+
+export const summarizeReuse = (
+  expressions: ReadonlyArray<SyncSavedExpression>,
+  events: ReadonlyArray<SyncReuseEvent>,
+  limit = 6
+): ReuseSummary => {
+  const byId = new Map(expressions.map((expression) => [expression.id, expression]));
+  const contextsByExpression = new Map<string, Set<string>>();
+  for (const event of events) {
+    const context = event.sessionId ?? event.source ?? "unknown";
+    const contexts = contextsByExpression.get(event.expressionId) ?? new Set<string>();
+    contexts.add(context);
+    contextsByExpression.set(event.expressionId, contexts);
+  }
+  const reused = expressions.filter((expression) => expression.reuseCount > 0 || expression.lastReusedAt);
+  const intentsWithMultipleReusedExpressions = new Set(
+    reused.filter((expression) => expression.intentId).map((expression) => expression.intentId)
+  );
+  // Counts are conservative: an intent only contributes to breadth when at least
+  // two distinct saved expressions under it have actually been reused.
+  for (const intentId of [...intentsWithMultipleReusedExpressions]) {
+    const count = reused.filter((expression) => expression.intentId === intentId).length;
+    if (count < 2) intentsWithMultipleReusedExpressions.delete(intentId);
+  }
+  const recentEvents = events
+    .map((event) => ({ event, expression: byId.get(event.expressionId) }))
+    .filter((entry): entry is { event: SyncReuseEvent; expression: SyncSavedExpression } => Boolean(entry.expression))
+    .slice(0, limit)
+    .map(({ event, expression }) => ({ ...event, text: expression.text }));
+  return {
+    generatedAt: new Date().toISOString(),
+    counts: {
+      expressions: expressions.length,
+      activeVocabulary: reused.length,
+      sleepingExpressions: expressions.length - reused.length,
+      reuseEvents: events.length,
+      expressionBreadth: intentsWithMultipleReusedExpressions.size,
+      crossContextReuse: [...contextsByExpression.values()].filter((contexts) => contexts.size >= 2).length
+    },
+    activeExpressions: reused
+      .slice()
+      .sort((a, b) => (b.lastReusedAt ?? "").localeCompare(a.lastReusedAt ?? ""))
+      .slice(0, limit),
+    sleepingExpressions: expressions
+      .filter((expression) => expression.reuseCount === 0 && !expression.lastReusedAt)
+      .slice()
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit),
+    recentEvents
+  };
+};

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  clusterIntentsInputSchema,
   createSessionInputSchema,
   generatePracticeFromItems,
   generatePracticeInputSchema,
@@ -12,17 +13,27 @@ import {
   questionTranslationColumns,
   recordReuseInputSchema,
   redactSecrets,
+  defaultReuseNudgeSettings,
+  listExpressionsInputSchema,
+  listIntentsInputSchema,
+  mergeIntentsInputSchema,
   saveMaterialInputSchema,
+  splitIntentInputSchema,
   saveQuestionTranslationInputSchema,
   findReuseMatches,
+  suggestReuse,
+  suggestReuseInputSchema,
   syncIntentColumns,
   syncReuseEventColumns,
   syncSavedExpressionColumns,
+  summarizeReuse,
   updateMaterialSchema,
   portableImportSchema,
   syncBatchInputSchema,
   syncReviewColumns,
   syncTombstoneColumns,
+  reuseNudgeSettingsSchema,
+  updateReuseNudgeSettingsSchema,
   type PatScope
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
@@ -142,6 +153,267 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       if (incremented.error) throw new Error(incremented.error.message);
     }
     return { recordedAt, recorded: matches.length, matches };
+  },
+
+  async getReuseSummary() {
+    requireScope(scopes, "read");
+    const [expressionRows, eventRows] = await Promise.all([
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("reuse_events")
+        .select(syncReuseEventColumns)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+    ]);
+    return summarizeReuse(
+      (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression),
+      (ok(eventRows) as Record<string, unknown>[]).map(normalizeReuseEvent)
+    );
+  },
+
+  async suggestReuse(input) {
+    requireScope(scopes, "read");
+    const parsed = suggestReuseInputSchema.parse(input);
+    const safeText = redactSecrets(parsed.text).text;
+    const now = new Date().toISOString();
+    const [expressionRows, eventRows, settingRows] = await Promise.all([
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId),
+      supabase
+        .from("reuse_events")
+        .select("expression_id,match_kind,created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(500),
+      supabase
+        .from("user_settings")
+        .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+        .eq("user_id", userId)
+        .maybeSingle()
+    ]);
+    const settingRow = ok(settingRows) as Record<string, unknown> | null;
+    const settings = reuseNudgeSettingsSchema.parse(settingRow ? {
+      enabled: settingRow.reuse_nudge_enabled,
+      cooldownHours: settingRow.reuse_nudge_cooldown_hours,
+      dailyLimit: settingRow.reuse_nudge_daily_limit,
+      updatedAt: settingRow.updated_at
+    } : defaultReuseNudgeSettings(now));
+    const result = suggestReuse(safeText, (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression), {
+      source: parsed.source,
+      limit: parsed.limit
+    }, {
+      settings,
+      events: (ok(eventRows) as Record<string, unknown>[]).map((row) => ({
+        expressionId: String(row.expression_id),
+        matchKind: row.match_kind as "exact" | "variant" | "nudge",
+        createdAt: String(row.created_at)
+      })),
+      now
+    });
+    const suggestion = result.suggestions[0];
+    if (suggestion) {
+      const inserted = await supabase
+        .from("reuse_events")
+        .insert({
+          user_id: userId,
+          expression_id: suggestion.expressionId,
+          source: parsed.source ?? null,
+          matched_text: suggestion.text,
+          match_kind: "nudge",
+          confidence: 0.5,
+          created_at: now
+        })
+        .select("id")
+        .single();
+      if (inserted.error) throw new Error(inserted.error.message);
+    }
+    return result;
+  },
+
+  async getReuseNudgeSettings() {
+    requireScope(scopes, "read");
+    const result = await supabase
+      .from("user_settings")
+      .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+      .eq("user_id", userId)
+      .maybeSingle();
+    const row = ok(result) as Record<string, unknown> | null;
+    return row ? reuseNudgeSettingsSchema.parse({
+      enabled: row.reuse_nudge_enabled,
+      cooldownHours: row.reuse_nudge_cooldown_hours,
+      dailyLimit: row.reuse_nudge_daily_limit,
+      updatedAt: row.updated_at
+    }) : defaultReuseNudgeSettings();
+  },
+
+  async updateReuseNudgeSettings(input) {
+    requireScope(scopes, "write");
+    const parsed = updateReuseNudgeSettingsSchema.parse(input);
+    const now = new Date().toISOString();
+    const current = reuseNudgeSettingsSchema.parse(await this.getReuseNudgeSettings());
+    const next = { ...current, ...parsed, updatedAt: now };
+    const result = await supabase
+      .from("user_settings")
+      .upsert({
+        user_id: userId,
+        reuse_nudge_enabled: next.enabled,
+        reuse_nudge_cooldown_hours: next.cooldownHours,
+        reuse_nudge_daily_limit: next.dailyLimit,
+        updated_at: now
+      }, { onConflict: "user_id" })
+      .select("reuse_nudge_enabled,reuse_nudge_cooldown_hours,reuse_nudge_daily_limit,updated_at")
+      .single();
+    const row = ok(result) as Record<string, unknown>;
+    return reuseNudgeSettingsSchema.parse({
+      enabled: row.reuse_nudge_enabled,
+      cooldownHours: row.reuse_nudge_cooldown_hours,
+      dailyLimit: row.reuse_nudge_daily_limit,
+      updatedAt: row.updated_at
+    });
+  },
+
+  async listExpressions(input) {
+    requireScope(scopes, "read");
+    const parsed = listExpressionsInputSchema.parse(input);
+    let query = supabase
+      .from("saved_expressions")
+      .select(syncSavedExpressionColumns)
+      .eq("user_id", userId);
+    if (parsed.includeUnclustered || parsed.intentId === null) query = query.is("intent_id", null);
+    else if (parsed.intentId) query = query.eq("intent_id", parsed.intentId);
+    const result = await query.order("updated_at", { ascending: false }).limit(parsed.limit);
+    return (ok(result) as Record<string, unknown>[]).map(normalizeSavedExpression);
+  },
+
+  async clusterIntents(input) {
+    requireScope(scopes, "write");
+    const parsed = clusterIntentsInputSchema.parse(input);
+    const now = new Date().toISOString();
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    for (const group of parsed.groups) {
+      const intent = await supabase
+        .from("intents")
+        .insert({ user_id: userId, label: group.label, description: group.description ?? null, created_at: now, updated_at: now })
+        .select("id")
+        .single();
+      if (intent.error) throw new Error(intent.error.message);
+      const intentId = String((intent.data as { id: string }).id);
+      const assigned = await supabase
+        .from("saved_expressions")
+        .update({ intent_id: intentId, updated_at: now })
+        .eq("user_id", userId)
+        .in("id", group.expressionIds);
+      if (assigned.error) throw new Error(assigned.error.message);
+      created.push({ id: intentId, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+    }
+    return { clusteredAt: now, intents: created };
+  },
+
+  async mergeIntents(input) {
+    requireScope(scopes, "write");
+    const parsed = mergeIntentsInputSchema.parse(input);
+    if (parsed.sourceIntentId === parsed.targetIntentId) throw new Error("Source and target intents must differ");
+    const now = new Date().toISOString();
+    const [source, target] = await Promise.all([
+      supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.sourceIntentId).maybeSingle(),
+      supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.targetIntentId).maybeSingle()
+    ]);
+    if (source.error) throw new Error(source.error.message);
+    if (target.error) throw new Error(target.error.message);
+    if (!source.data) throw new Error("Source intent not found");
+    if (!target.data) throw new Error("Target intent not found");
+    const moved = await supabase
+      .from("saved_expressions")
+      .update({ intent_id: parsed.targetIntentId, updated_at: now })
+      .eq("user_id", userId)
+      .eq("intent_id", parsed.sourceIntentId)
+      .select("id");
+    if (moved.error) throw new Error(moved.error.message);
+    const touched = await supabase.from("intents").update({ updated_at: now }).eq("user_id", userId).eq("id", parsed.targetIntentId);
+    if (touched.error) throw new Error(touched.error.message);
+    await applyCloudTombstones(supabase, userId, [{ id: parsed.sourceIntentId, entity: "intent", deletedAt: now }]);
+    return { mergedAt: now, sourceIntentId: parsed.sourceIntentId, targetIntentId: parsed.targetIntentId, movedExpressionIds: ((moved.data ?? []) as Array<{ id: string }>).map((row) => row.id) };
+  },
+
+  async splitIntent(input) {
+    requireScope(scopes, "write");
+    const parsed = splitIntentInputSchema.parse(input);
+    const source = await supabase.from("intents").select("id").eq("user_id", userId).eq("id", parsed.intentId).maybeSingle();
+    if (source.error) throw new Error(source.error.message);
+    if (!source.data) throw new Error("Intent not found");
+    const allIds = parsed.groups.flatMap((group) => group.expressionIds);
+    if (new Set(allIds).size !== allIds.length) throw new Error("An expression cannot be assigned to more than one split group");
+    const now = new Date().toISOString();
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    for (const group of parsed.groups) {
+      const intent = await supabase
+        .from("intents")
+        .insert({ user_id: userId, label: group.label, description: group.description ?? null, created_at: now, updated_at: now })
+        .select("id")
+        .single();
+      if (intent.error) throw new Error(intent.error.message);
+      const intentId = String((intent.data as { id: string }).id);
+      const assigned = await supabase
+        .from("saved_expressions")
+        .update({ intent_id: intentId, updated_at: now })
+        .eq("user_id", userId)
+        .eq("intent_id", parsed.intentId)
+        .in("id", group.expressionIds)
+        .select("id");
+      if (assigned.error) throw new Error(assigned.error.message);
+      if ((assigned.data ?? []).length !== group.expressionIds.length) throw new Error("One or more expressions do not belong to the intent being split");
+      created.push({ id: intentId, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+    }
+    const remaining = await supabase.from("saved_expressions").select("id", { count: "exact", head: true }).eq("user_id", userId).eq("intent_id", parsed.intentId);
+    if (remaining.error) throw new Error(remaining.error.message);
+    let sourceDeleted = false;
+    if ((remaining.count ?? 0) === 0) {
+      await applyCloudTombstones(supabase, userId, [{ id: parsed.intentId, entity: "intent", deletedAt: now }]);
+      sourceDeleted = true;
+    }
+    return { splitAt: now, sourceIntentId: parsed.intentId, intents: created, sourceDeleted };
+  },
+
+  async listIntents(input) {
+    requireScope(scopes, "read");
+    const parsed = listIntentsInputSchema.parse(input ?? {});
+    const [intentsResult, expressionsResult] = await Promise.all([
+      supabase
+        .from("intents")
+        .select(syncIntentColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(parsed.limit),
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false })
+        .limit(parsed.expressionLimit)
+    ]);
+    if (intentsResult.error) throw new Error(intentsResult.error.message);
+    if (expressionsResult.error) throw new Error(expressionsResult.error.message);
+    const intents = (intentsResult.data as Record<string, unknown>[]).map(normalizeIntent);
+    const expressions = (expressionsResult.data as Record<string, unknown>[]).map(normalizeSavedExpression);
+    const byIntent = new Map<string, ReturnType<typeof normalizeSavedExpression>[]>();
+    const unclustered: ReturnType<typeof normalizeSavedExpression>[] = [];
+    for (const expr of expressions) {
+      if (expr.intentId) {
+        const arr = byIntent.get(expr.intentId);
+        if (arr) arr.push(expr);
+        else byIntent.set(expr.intentId, [expr]);
+      } else {
+        unclustered.push(expr);
+      }
+    }
+    const grouped = intents.map((intent) => ({ intent, expressions: byIntent.get(intent.id) ?? [] }));
+    return { intents: grouped, unclustered };
   },
 
   async saveQuestionTranslation(input) {
@@ -342,7 +614,7 @@ const normalizeSavedExpression = (row: Record<string, unknown>) => ({
   intentId: row.intent_id ? String(row.intent_id) : null,
   text: String(row.text),
   textNorm: String(row.text_norm),
-  register: row.register ? String(row.register) : null,
+  register: (row.register === "formal" || row.register === "neutral" || row.register === "casual" ? row.register : null) as "formal" | "neutral" | "casual" | null,
   scene: row.scene ? String(row.scene) : null,
   note: row.note ? String(row.note) : null,
   reuseCount: Number(row.reuse_count ?? 0),
@@ -359,7 +631,7 @@ const normalizeReuseEvent = (row: Record<string, unknown>) => ({
   source: row.source ? String(row.source) : null,
   matchedText: String(row.matched_text),
   contextSnippet: row.context_snippet ? String(row.context_snippet) : null,
-  matchKind: String(row.match_kind),
+  matchKind: (row.match_kind === "variant" || row.match_kind === "nudge" ? row.match_kind : "exact") as "exact" | "variant" | "nudge",
   confidence: Number(row.confidence ?? 1),
   createdAt: String(row.created_at)
 });
@@ -660,7 +932,7 @@ export const importPortableData = async (supabase: SupabaseClient, userId: strin
     reviews: { inserted: 0, updated: 0, skipped: 0 },
     intents: { inserted: 0, updated: 0, skipped: 0 },
     expressions: { inserted: 0, updated: 0, skipped: 0 },
-    reuseEvents: { inserted: 0, updated: 0, skipped: 0 }
+    reuseEvents: { inserted: 0, updated: 0, skipped: 0 },
   };
   for (const session of providedSessions.values()) {
     if (!existing.sessions.has(session.id)) counts.sessions.inserted += 1;

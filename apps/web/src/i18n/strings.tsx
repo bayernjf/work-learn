@@ -80,6 +80,12 @@ export const en = {
     syncStatus: "Could not load sync status",
     practice: "Could not generate practice",
     patterns: "Could not load your patterns",
+    reuseSummary: "Could not load reuse summary",
+    reuseSettings: "Could not update reuse nudge settings.",
+    intentsLoad: "Could not load intents",
+    intentCluster: "Could not create intent",
+    intentMerge: "Could not merge intents",
+    intentSplit: "Could not split intent",
   },
 
   empty: {
@@ -172,6 +178,31 @@ export const en = {
     }
   },
 
+  reuse: {
+    eyebrow: "Reuse",
+    heading: "English that is becoming yours",
+    subheading: "Saved expressions are only useful after you reuse them in real work conversations.",
+    loading: "Checking what you have reused…",
+    activeVocabulary: "active expressions",
+    sleeping: "waiting to be reused",
+    crossContext: "reused across contexts",
+    events: "reuse events",
+    activeTitle: "Recently active",
+    sleepingTitle: "Saved but not reused yet",
+    recentTitle: "Recent reuse",
+    activeEmpty: "Reuse a saved expression in a later conversation and it will show up here.",
+    sleepingEmpty: "Nothing is sleeping right now.",
+    recentEmpty: "No reuse events yet.",
+    reused: (count: number, when: string) => `${count}× · ${when}`,
+    savedIn: (scene: string, date: string) => `${scene} · ${date}`,
+    event: (source: string, when: string) => `${source} · ${when}`,
+    nudgeTitle: "Gentle reuse nudges",
+    nudgeOn: "On",
+    nudgeOff: "Off",
+    nudgeDescription: "When an agent sees a saved phrase in your English, it can offer one same-intent alternative at most every few hours.",
+    nudgeUpdated: "Nudge setting saved.",
+  },
+
   connect: {
     summary: "Connect an agent",
     intro: (landingUrl: string): ReactNode => <>New here? Read the <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn landing page<span className="external-icon" aria-hidden="true">↗</span></a> for the full product walkthrough.</>,
@@ -204,7 +235,7 @@ Do this:
 3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
-6. Tell me to restart the client, then confirm these ten tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, record_reuse.`,
+6. Tell me to restart the client, then confirm these eleven tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, get_reuse_summary, record_reuse.`,
     modesLabel: "Where the token goes",
     modeInline: "Token in the prompt",
     modeFile: "Token in a file",
@@ -220,7 +251,7 @@ Do this:
    If you run it from anywhere else, add --repo <path to the clone>.
 3. That installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor and OpenCode, backs up each config file before writing it, records the path instead of the token, and installs the Work Learn skill. Do not hand-edit the config files yourself.
 4. If it fails, show me its output and stop. Do not fall back to putting a token in a config file.
-5. Tell me to restart the client, then confirm these ten tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, record_reuse.
+5. Tell me to restart the client, then confirm these eleven tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, get_reuse_summary, record_reuse.
 
 The skill it installs is the same one published at ${skillUrl}.`,
     tokenStep: "Create a personal access token. Every route below needs one.",
@@ -346,6 +377,32 @@ The skill it installs is the same one published at ${skillUrl}.`,
     authorizing: "Authorizing…",
     errComplete: "Could not complete authorization",
   },
+
+  intents: {
+    title: "Intent management",
+    subtitle: "Group scattered useful expressions by what you meant to say, so they are easy to reuse in the right scene.",
+    unclustered: "Unclustered expressions",
+    createIntent: "Group into new intent",
+    mergeInto: "Merge into",
+    merge: "Merge",
+    split: "Split selected",
+    selectAll: "Select all",
+    clearSelection: "Clear selection",
+    label: "Intent name",
+    labelPlaceholder: "e.g. Business email openings",
+    description: "Description (optional)",
+    descriptionPlaceholder: "When is this intent usually used",
+    confirm: "Confirm",
+    cancel: "Cancel",
+    refresh: "Refresh",
+    loading: "Loading intents…",
+    empty: "No intents or expressions yet. Save some useful expressions from a conversation first.",
+    memberCount: (n: number) => `${n} expressions`,
+    selectedCount: (n: number) => `${n} selected`,
+    createHint: "Select a few expressions, then click “Group into new intent” to create an intent for them.",
+    splitHint: "Select some expressions inside an intent to split them into a separate new intent (the rest stay in the original).",
+    mergeHint: "Merge a whole intent into another; its members move with it and the original is removed."
+  },
 };
 
 export type Strings = typeof en;
@@ -426,6 +483,12 @@ export const zh: Strings = {
     syncStatus: "加载同步状态失败",
     practice: "生成练习失败",
     patterns: "加载学习模式失败",
+    reuseSummary: "加载复用统计失败",
+    reuseSettings: "更新复用提示设置失败",
+    intentsLoad: "加载意图失败",
+    intentCluster: "创建意图失败",
+    intentMerge: "合并意图失败",
+    intentSplit: "拆分意图失败"
   },
 
   empty: {
@@ -518,6 +581,31 @@ export const zh: Strings = {
     }
   },
 
+  reuse: {
+    eyebrow: "复用",
+    heading: "正在变成你自己的英语",
+    subheading: "表达真正有价值，不是在收藏夹里，而是在后续真实工作对话里被你自然用上。",
+    loading: "正在查看你的复用情况…",
+    activeVocabulary: "个主动表达",
+    sleeping: "个等待复用",
+    crossContext: "个跨场景复用",
+    events: "次复用事件",
+    activeTitle: "最近活跃",
+    sleepingTitle: "已保存但还没用上",
+    recentTitle: "最近复用",
+    activeEmpty: "在后续对话里自然用上某个保存表达后，它会出现在这里。",
+    sleepingEmpty: "现在没有沉睡表达。",
+    recentEmpty: "还没有复用事件。",
+    reused: (count: number, when: string) => `${count} 次 · ${when}`,
+    savedIn: (scene: string, date: string) => `${scene} · ${date}`,
+    event: (source: string, when: string) => `${source} · ${when}`,
+    nudgeTitle: "温和复用提示",
+    nudgeOn: "开启",
+    nudgeOff: "关闭",
+    nudgeDescription: "当 Agent 在你的英文里看到已保存表达时，可以每几小时最多提供一个同一意图下的其他说法。",
+    nudgeUpdated: "复用提示设置已保存。",
+  },
+
   connect: {
     summary: "接入 agent",
     intro: (landingUrl: string): ReactNode => <>第一次用？先看 <a className="inline-link" href={landingUrl} target="_blank" rel="noopener noreferrer">Work Learn 介绍页<span className="external-icon" aria-hidden="true">↗</span></a>，那里有完整的产品说明。</>,
@@ -550,7 +638,7 @@ export const zh: Strings = {
 3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
-6. 告诉我需要重启客户端，然后确认这 10 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、record_reuse。`,
+6. 告诉我需要重启客户端，然后确认这 11 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、get_reuse_summary、record_reuse。`,
     modesLabel: "token 放在哪",
     modeInline: "token 写进提示词",
     modeFile: "token 存在文件里",
@@ -566,7 +654,7 @@ export const zh: Strings = {
    如果你在别的目录执行，就加上 --repo <clone 的路径>。
 3. 这个安装器会自己检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，写入前先备份各自的配置文件，配置里记的是这个路径而不是 token，并且会顺带装上 Work Learn 的 skill。不要自己手改这些配置文件。
 4. 如果它失败了，把它的输出给我看然后停下。不要退而把 token 写进配置文件。
-5. 告诉我需要重启客户端，然后确认这 10 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、record_reuse。
+5. 告诉我需要重启客户端，然后确认这 11 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、get_reuse_summary、record_reuse。
 
 它装的 skill 就是 ${skillUrl} 这一份。`,
     tokenStep: "创建一个 personal access token，下面三种方式都需要它。",
@@ -691,6 +779,32 @@ export const zh: Strings = {
     returning: "正在返回…",
     authorizing: "授权中…",
     errComplete: "授权失败",
+  },
+
+  intents: {
+    title: "意图管理",
+    subtitle: "把零散的地道表达按「你想表达什么」归组，方便在对应场景复用。",
+    unclustered: "未归组表达",
+    createIntent: "归入新意图",
+    mergeInto: "合并到",
+    merge: "合并",
+    split: "拆分选中",
+    selectAll: "全选",
+    clearSelection: "清除选择",
+    label: "意图名称",
+    labelPlaceholder: "例如：商务邮件开场",
+    description: "说明（可选）",
+    descriptionPlaceholder: "这个意图通常用在什么场景",
+    confirm: "确定",
+    cancel: "取消",
+    refresh: "刷新",
+    loading: "正在加载意图…",
+    empty: "还没有任何意图或表达。先在对话里存下一些有用的表达吧。",
+    memberCount: (n: number) => `${n} 条表达`,
+    selectedCount: (n: number) => `已选 ${n} 条`,
+    createHint: "勾选若干表达后，点击「归入新意图」为它们建立一个意图分组。",
+    splitHint: "勾选某个意图里的部分表达，把它们拆成一个独立的新意图（其余保留在原意图）。",
+    mergeHint: "把整个意图合并进另一个意图，成员一起迁移，原意图被移除。"
   },
 };
 

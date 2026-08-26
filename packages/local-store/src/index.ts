@@ -11,16 +11,35 @@ import {
   generatePracticeInputSchema,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
+  clusterIntentsInputSchema,
+  listExpressionsInputSchema,
+  listIntentsInputSchema,
+  mergeIntentsInputSchema,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
+  splitIntentInputSchema,
   recordReuseInputSchema,
   redactSecrets,
+  defaultReuseNudgeSettings,
+  suggestReuse,
+  suggestReuseInputSchema,
+  summarizeReuse,
+  reuseNudgeSettingsSchema,
+  updateReuseNudgeSettingsSchema,
   syncBatchInputSchema,
+  type ClusterIntentsInput,
+  type ListExpressionsInput,
+  type ListIntentsInput,
+  type MergeIntentsInput,
   type PracticeMaterial,
   type PracticeQuestion,
   type QuestionTranslation,
   type RecordReuseInput,
+  type ReuseNudgeSettings,
   type SaveMaterialInput,
+  type SplitIntentInput,
+  type SuggestReuseInput,
+  type UpdateReuseNudgeSettings,
   type SaveQuestionTranslationInput
 } from "@work-learn/shared-schema";
 
@@ -571,6 +590,172 @@ export class LocalStore {
     return { recordedAt, recorded: matches.length, matches };
   }
 
+  getReuseSummary() {
+    const expressions = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
+      .all() as SavedExpressionRow[]).map(toSavedExpression);
+    const events = (this.db
+      .prepare("SELECT * FROM reuse_events ORDER BY created_at DESC")
+      .all() as ReuseEventRow[]).map(toReuseEvent);
+    return summarizeReuse(expressions, events);
+  }
+
+  getReuseNudgeSettings(): ReuseNudgeSettings {
+    const row = this.db.prepare("SELECT value FROM sync_meta WHERE key = ?").get("reuse_nudge_settings") as { value: string } | undefined;
+    if (!row) return defaultReuseNudgeSettings();
+    return reuseNudgeSettingsSchema.parse({ ...defaultReuseNudgeSettings(), ...JSON.parse(row.value) });
+  }
+
+  updateReuseNudgeSettings(input: unknown): ReuseNudgeSettings {
+    const parsed = updateReuseNudgeSettingsSchema.parse(input) as UpdateReuseNudgeSettings;
+    const current = this.getReuseNudgeSettings();
+    const next: ReuseNudgeSettings = {
+      ...current,
+      ...parsed,
+      updatedAt: new Date().toISOString()
+    };
+    this.db.prepare("INSERT INTO sync_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run("reuse_nudge_settings", JSON.stringify(next));
+    return next;
+  }
+
+  suggestReuse(input: unknown) {
+    const parsed = suggestReuseInputSchema.parse(input) as SuggestReuseInput;
+    const safeText = redactSecrets(parsed.text).text;
+    const now = new Date().toISOString();
+    const settings = this.getReuseNudgeSettings();
+    const expressions = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
+      .all() as SavedExpressionRow[]).map(toSavedExpression);
+    const events = (this.db
+      .prepare("SELECT expression_id, match_kind, created_at FROM reuse_events ORDER BY created_at DESC")
+      .all() as Array<{ expression_id: string; match_kind: "exact" | "variant" | "nudge"; created_at: string }>)
+      .map((row) => ({ expressionId: row.expression_id, matchKind: row.match_kind, createdAt: row.created_at }));
+    const result = suggestReuse(safeText, expressions, { source: parsed.source, limit: parsed.limit }, { settings, events, now });
+    const suggestion = result.suggestions[0];
+    if (suggestion) {
+      this.db.prepare(
+        `INSERT INTO reuse_events
+         (id, expression_id, session_id, source, matched_text, context_snippet, match_kind, confidence, created_at, sync_status)
+         VALUES (?, ?, NULL, ?, ?, NULL, 'nudge', 0.5, ?, 'local_only')`
+      ).run(crypto.randomUUID(), suggestion.expressionId, parsed.source ?? null, suggestion.text, now);
+    }
+    return result;
+  }
+
+  listExpressions(input: unknown = {}) {
+    const parsed = listExpressionsInputSchema.parse(input) as ListExpressionsInput;
+    let rows = (this.db.prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC").all() as SavedExpressionRow[]).map(toSavedExpression);
+    if (parsed.includeUnclustered) rows = rows.filter((row) => row.intentId === null);
+    if (parsed.intentId !== undefined) rows = rows.filter((row) => parsed.intentId === null ? row.intentId === null : row.intentId === parsed.intentId);
+    return rows.slice(0, parsed.limit);
+  }
+
+  clusterIntents(input: unknown) {
+    const parsed = clusterIntentsInputSchema.parse(input) as ClusterIntentsInput;
+    const now = new Date().toISOString();
+    const insertIntent = this.db.prepare(
+      `INSERT INTO intents (id, label, description, created_at, updated_at, sync_status)
+       VALUES (?, ?, ?, ?, ?, 'local_only')`
+    );
+    const assignExpression = this.db.prepare(
+      `UPDATE saved_expressions SET intent_id = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ?`
+    );
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    const tx = this.db.transaction(() => {
+      for (const group of parsed.groups) {
+        const id = crypto.randomUUID();
+        insertIntent.run(id, group.label, group.description ?? null, now, now);
+        for (const expressionId of group.expressionIds) assignExpression.run(id, now, expressionId);
+        created.push({ id, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+      }
+    });
+    tx();
+    return { clusteredAt: now, intents: created };
+  }
+
+  mergeIntents(input: unknown) {
+    const parsed = mergeIntentsInputSchema.parse(input) as MergeIntentsInput;
+    if (parsed.sourceIntentId === parsed.targetIntentId) throw new Error("Source and target intents must differ");
+    const source = this.db.prepare("SELECT id FROM intents WHERE id = ?").get(parsed.sourceIntentId) as { id: string } | undefined;
+    const target = this.db.prepare("SELECT id FROM intents WHERE id = ?").get(parsed.targetIntentId) as { id: string } | undefined;
+    if (!source) throw new Error("Source intent not found");
+    if (!target) throw new Error("Target intent not found");
+    const now = new Date().toISOString();
+    const moved = this.db.prepare("SELECT id FROM saved_expressions WHERE intent_id = ?").all(parsed.sourceIntentId) as Array<{ id: string }>;
+    const tx = this.db.transaction(() => {
+      this.db.prepare("UPDATE saved_expressions SET intent_id = ?, updated_at = ?, sync_status = 'local_only' WHERE intent_id = ?")
+        .run(parsed.targetIntentId, now, parsed.sourceIntentId);
+      this.db.prepare("UPDATE intents SET updated_at = ?, sync_status = 'local_only' WHERE id = ?").run(now, parsed.targetIntentId);
+      this.recordTombstone("intent", parsed.sourceIntentId, now);
+      this.db.prepare("DELETE FROM intents WHERE id = ?").run(parsed.sourceIntentId);
+    });
+    tx();
+    return { mergedAt: now, sourceIntentId: parsed.sourceIntentId, targetIntentId: parsed.targetIntentId, movedExpressionIds: moved.map((row) => row.id) };
+  }
+
+  splitIntent(input: unknown) {
+    const parsed = splitIntentInputSchema.parse(input) as SplitIntentInput;
+    const source = this.db.prepare("SELECT id FROM intents WHERE id = ?").get(parsed.intentId) as { id: string } | undefined;
+    if (!source) throw new Error("Intent not found");
+    const allIds = new Set(parsed.groups.flatMap((group) => group.expressionIds));
+    if (allIds.size !== parsed.groups.reduce((sum, group) => sum + group.expressionIds.length, 0)) throw new Error("An expression cannot be assigned to more than one split group");
+    const now = new Date().toISOString();
+    const insertIntent = this.db.prepare(
+      `INSERT INTO intents (id, label, description, created_at, updated_at, sync_status)
+       VALUES (?, ?, ?, ?, ?, 'local_only')`
+    );
+    const assignExpression = this.db.prepare(
+      `UPDATE saved_expressions SET intent_id = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND intent_id = ?`
+    );
+    const created: Array<{ id: string; label: string; description: string | null; expressionIds: string[] }> = [];
+    const tx = this.db.transaction(() => {
+      for (const group of parsed.groups) {
+        const id = crypto.randomUUID();
+        insertIntent.run(id, group.label, group.description ?? null, now, now);
+        for (const expressionId of group.expressionIds) {
+          const result = assignExpression.run(id, now, expressionId, parsed.intentId);
+          if (result.changes === 0) throw new Error(`Expression ${expressionId} does not belong to the intent being split`);
+        }
+        created.push({ id, label: group.label, description: group.description ?? null, expressionIds: group.expressionIds });
+      }
+      const remaining = this.db.prepare("SELECT count(*) AS count FROM saved_expressions WHERE intent_id = ?").get(parsed.intentId) as { count: number };
+      if (remaining.count === 0) {
+        this.recordTombstone("intent", parsed.intentId, now);
+        this.db.prepare("DELETE FROM intents WHERE id = ?").run(parsed.intentId);
+      }
+    });
+    tx();
+    return { splitAt: now, sourceIntentId: parsed.intentId, intents: created, sourceDeleted: !this.db.prepare("SELECT id FROM intents WHERE id = ?").get(parsed.intentId) };
+  }
+
+  listIntents(input: unknown = {}) {
+    const parsed = listIntentsInputSchema.parse(input) as ListIntentsInput;
+    const intentRows = this.db
+      .prepare("SELECT id, label, description, created_at, updated_at FROM intents ORDER BY updated_at DESC LIMIT ?")
+      .all(parsed.limit) as IntentRow[];
+    const exprRows = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC LIMIT ?")
+      .all(parsed.expressionLimit) as SavedExpressionRow[])
+      .map(toSavedExpression);
+    const byIntent = new Map<string, ReturnType<typeof toSavedExpression>[]>();
+    const unclustered: ReturnType<typeof toSavedExpression>[] = [];
+    for (const expr of exprRows) {
+      if (expr.intentId) {
+        const arr = byIntent.get(expr.intentId);
+        if (arr) arr.push(expr);
+        else byIntent.set(expr.intentId, [expr]);
+      } else {
+        unclustered.push(expr);
+      }
+    }
+    const intents = intentRows.map((row) => ({
+      intent: { id: row.id, label: row.label, description: row.description, createdAt: row.created_at, updatedAt: row.updated_at },
+      expressions: byIntent.get(row.id) ?? []
+    }));
+    return { intents, unclustered };
+  }
+
   markMastered(reviewId: string) {
     const result = this.db
       .prepare(
@@ -595,7 +780,7 @@ export class LocalStore {
   }
 
   /** Record a deletion so it can be pushed to other devices. */
-  private recordTombstone(entity: "session" | "material" | "question" | "review", id: string, deletedAt: string) {
+  private recordTombstone(entity: "session" | "material" | "question" | "review" | "intent" | "expression" | "reuse_event", id: string, deletedAt: string) {
     this.db
       .prepare(
         `INSERT INTO sync_tombstones (id, entity, deleted_at, sync_status)
@@ -1031,7 +1216,16 @@ export const createLocalContext = (store: LocalStore) => ({
   snoozeReview: (reviewId: string, days?: number) => store.snoozeReview(reviewId, days),
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
-  recordReuse: (input: unknown) => store.recordReuse(input)
+  recordReuse: (input: unknown) => store.recordReuse(input),
+  getReuseSummary: () => store.getReuseSummary(),
+  suggestReuse: (input: unknown) => store.suggestReuse(input),
+  getReuseNudgeSettings: () => store.getReuseNudgeSettings(),
+  updateReuseNudgeSettings: (input: unknown) => store.updateReuseNudgeSettings(input),
+  listExpressions: (input: unknown) => store.listExpressions(input),
+  clusterIntents: (input: unknown) => store.clusterIntents(input),
+  mergeIntents: (input: unknown) => store.mergeIntents(input),
+  splitIntent: (input: unknown) => store.splitIntent(input),
+  listIntents: (input: unknown) => store.listIntents(input)
 });
 
 export type LocalContext = ReturnType<typeof createLocalContext>;

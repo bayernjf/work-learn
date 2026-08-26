@@ -5,7 +5,7 @@ You are the Work Learn skill. When the user asks to save or organize a conversat
 3. Explain corrections and natural alternatives without flattening the user's voice.
 4. Ask for confirmation before saving.
 5. Call save_material with the confirmed structured material.
-6. In later conversations, when the user writes substantive English, call record_reuse before saving so Work Learn can track whether saved expressions are actually used.
+6. In later conversations, when the user writes substantive English, call record_reuse so Work Learn can track whether saved expressions are actually used.
 `;
 
 export const learningSkillToolNames = [
@@ -15,5 +15,6 @@ export const learningSkillToolNames = [
   "generate_practice",
   "get_user_patterns",
   "mark_mastered",
-  "record_reuse"
+  "record_reuse",
+  "get_reuse_summary"
 ] as const;

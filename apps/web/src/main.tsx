@@ -1,7 +1,7 @@
-import { ChangeEvent, FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -61,6 +61,12 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [patterns, setPatterns] = useState<UserPatterns | null>(null);
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [patternsError, setPatternsError] = useState("");
+  const [reuseSummary, setReuseSummary] = useState<ReuseSummary | null>(null);
+  const [reuseSettings, setReuseSettings] = useState<ReuseNudgeSettings | null>(null);
+  const [reuseLoading, setReuseLoading] = useState(false);
+  const [reuseError, setReuseError] = useState("");
+  const [reuseSettingsError, setReuseSettingsError] = useState("");
+  const [reuseSettingsSaving, setReuseSettingsSaving] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
@@ -78,10 +84,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     if (!session) return;
     setLoadingMaterials(true);
     setLoadError("");
+    setReuseLoading(true);
+    setReuseError("");
+    setReuseSettingsError("");
     void Promise.all([fetchMaterials(session), fetchReviews(session), fetchQuestionTranslations(session)])
       .then(([materialResult, reviewResult, questionResult]) => { setMaterials(materialResult.data); setReviews(reviewResult.data); setQuestions(questionResult.data); setResults(null); setQuestionResults(null); })
       .catch((error: unknown) => setLoadError(error instanceof Error ? error.message : t.errors.loadCorpus))
       .finally(() => setLoadingMaterials(false));
+    void Promise.all([fetchReuseSummary(session), fetchReuseNudgeSettings(session)])
+      .then(([summaryResult, settingsResult]) => {
+        setReuseSummary(summaryResult.data);
+        setReuseSettings(settingsResult.data);
+      })
+      .catch((error: unknown) => setReuseError(error instanceof Error ? error.message : t.errors.reuseSummary))
+      .finally(() => setReuseLoading(false));
     void refreshSyncStatus(session);
     void loadPatterns(session);
   }, [session, reloadKey]);
@@ -243,6 +259,20 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       setPatternsError(error instanceof Error ? error.message : t.errors.patterns);
     } finally {
       setPatternsLoading(false);
+    }
+  };
+
+  const handleToggleReuseNudges = async (enabled: boolean) => {
+    if (!session || !reuseSettings) return;
+    setReuseSettingsSaving(true);
+    setReuseSettingsError("");
+    try {
+      const result = await updateReuseNudgeSettings(session, { enabled });
+      setReuseSettings(result.data);
+    } catch (error) {
+      setReuseSettingsError(error instanceof Error ? error.message : t.errors.reuseSettings);
+    } finally {
+      setReuseSettingsSaving(false);
     }
   };
 
@@ -410,6 +440,8 @@ function App({ supabase }: { supabase: SupabaseClient }) {
         </>}
       </section>
       <QuestionTranslationsSection questions={visibleQuestions} searching={searching} loading={loadingMaterials} onDelete={handleDeleteQuestion} />
+      <ReuseDashboard summary={reuseSummary} settings={reuseSettings} loading={reuseLoading} error={reuseError} settingsError={reuseSettingsError} saving={reuseSettingsSaving} onToggleNudges={handleToggleReuseNudges} />
+      <IntentDashboard session={session} />
       {empty && !loadError ? <>
         <AgentConnect key="empty" session={session} initialOpen syncStatus={syncStatus} syncStatusLoading={syncStatusLoading} syncStatusError={syncStatusError} onRefreshSyncStatus={refreshSyncStatus} />
         <ReviewList session={session} reviews={reviews} onComplete={handleCompleteReview} onSnooze={handleSnoozeReview} />
@@ -1076,6 +1108,96 @@ function ReviewList({ session, reviews, onComplete, onSnooze }: { session: Sessi
   );
 }
 
+function ReuseDashboard({ summary, settings, loading, error, settingsError, saving, onToggleNudges }: {
+  summary: ReuseSummary | null;
+  settings: ReuseNudgeSettings | null;
+  loading: boolean;
+  error: string;
+  settingsError: string;
+  saving: boolean;
+  onToggleNudges: (enabled: boolean) => void;
+}) {
+  const { t, formatDate } = useI18n();
+  return (
+    <section className="reuse-panel" aria-live="polite">
+      <div className="reuse-head">
+        <div>
+          <p className="eyebrow">{t.reuse.eyebrow}</p>
+          <h2>{t.reuse.heading}</h2>
+          <p className="reuse-subheading">{t.reuse.subheading}</p>
+        </div>
+        {settings ? (
+          <label className="switch-row">
+            <span>{t.reuse.nudgeTitle}</span>
+            <button
+              type="button"
+              className={settings.enabled ? "switch on" : "switch"}
+              aria-pressed={settings.enabled}
+              disabled={saving}
+              onClick={() => onToggleNudges(!settings.enabled)}
+            >{settings.enabled ? t.reuse.nudgeOn : t.reuse.nudgeOff}</button>
+          </label>
+        ) : null}
+      </div>
+      <p className="reuse-subheading">{t.reuse.nudgeDescription}</p>
+      {settingsError ? <p className="reuse-meta reuse-error">{settingsError}</p> : null}
+      {loading ? <p className="reuse-meta">{t.reuse.loading}</p> : null}
+      {error ? <p className="reuse-meta reuse-error">{error}</p> : null}
+      {summary ? (
+        <>
+          <div className="reuse-metrics">
+            <span><b>{summary.counts.activeVocabulary}</b>{t.reuse.activeVocabulary}</span>
+            <span><b>{summary.counts.sleepingExpressions}</b>{t.reuse.sleeping}</span>
+            <span><b>{summary.counts.crossContextReuse}</b>{t.reuse.crossContext}</span>
+            <span><b>{summary.counts.reuseEvents}</b>{t.reuse.events}</span>
+          </div>
+          <div className="reuse-grid">
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.activeTitle}</p>
+              {summary.activeExpressions.length ? (
+                <ul>
+                  {summary.activeExpressions.map((expression) => (
+                    <li key={expression.id}>
+                      <strong>{expression.text}</strong>
+                      <span>{t.reuse.reused(expression.reuseCount, expression.lastReusedAt ? relativeTime(expression.lastReusedAt, t) : "—")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.activeEmpty}</p>}
+            </div>
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.sleepingTitle}</p>
+              {summary.sleepingExpressions.length ? (
+                <ul>
+                  {summary.sleepingExpressions.map((expression) => (
+                    <li key={expression.id}>
+                      <strong>{expression.text}</strong>
+                      <span>{expression.scene ? t.reuse.savedIn(expression.scene, formatDate(expression.createdAt)) : formatDate(expression.createdAt)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.sleepingEmpty}</p>}
+            </div>
+            <div className="reuse-col">
+              <p className="reuse-label">{t.reuse.recentTitle}</p>
+              {summary.recentEvents.length ? (
+                <ul>
+                  {summary.recentEvents.map((event) => (
+                    <li key={event.id}>
+                      <strong>{event.text}</strong>
+                      <span>{event.source ? t.reuse.event(event.source, relativeTime(event.createdAt, t)) : relativeTime(event.createdAt, t)}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="reuse-empty">{t.reuse.recentEmpty}</p>}
+            </div>
+          </div>
+        </>
+      ) : null}
+    </section>
+  );
+}
+
 const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent");
 
 const root = createRoot(document.getElementById("root")!);
@@ -1089,3 +1211,249 @@ void bootstrapSupabase().then(({ client, error }) => {
     </StrictMode>
   );
 });
+
+function IntentDashboard({ session }: { session: Session }) {
+  const { t } = useI18n();
+  const [data, setData] = useState<IntentListResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [dialog, setDialog] = useState<{ mode: "create" | "split"; intentId?: string } | null>(null);
+  const [label, setLabel] = useState("");
+  const [description, setDescription] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchIntents(session);
+      setData(res.data);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLoading(false);
+    }
+  }, [session]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  const clearSelection = () => setSelected(new Set());
+
+  const openCreate = () => {
+    setLabel("");
+    setDescription("");
+    setDialog({ mode: "create" });
+  };
+
+  const openSplit = (intentId: string) => {
+    setLabel("");
+    setDescription("");
+    setDialog({ mode: "split", intentId });
+  };
+
+  const submitDialog = async () => {
+    if (!dialog || !label.trim()) return;
+    setBusy(true);
+    try {
+      if (dialog.mode === "create") {
+        await clusterIntents(session, [{ label: label.trim(), description: description.trim() || null, expressionIds: [...selected] }]);
+      } else if (dialog.intentId) {
+        const group = data?.intents.find((g) => g.intent.id === dialog.intentId);
+        if (!group) return;
+        const picked = group.expressions.filter((e) => selected.has(e.id)).map((e) => e.id);
+        const rest = group.expressions.filter((e) => !selected.has(e.id)).map((e) => e.id);
+        if (picked.length === 0 || rest.length === 0) return;
+        await splitIntent(session, dialog.intentId, [
+          { label: label.trim(), description: description.trim() || null, expressionIds: picked },
+          { label: group.intent.label, description: group.intent.description, expressionIds: rest }
+        ]);
+      }
+      setSelected(new Set());
+      setDialog(null);
+      setLabel("");
+      setDescription("");
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleMerge = async (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setBusy(true);
+    try {
+      await mergeIntents(session, sourceId, targetId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <section className="intents">
+        <h2>{t.intents.title}</h2>
+        <p className="muted">{t.intents.loading}</p>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="intents">
+        <h2>{t.intents.title}</h2>
+        <p className="error-text">{error}</p>
+        <button type="button" className="btn" onClick={() => void load()}>{t.intents.refresh}</button>
+      </section>
+    );
+  }
+
+  const intents = data?.intents ?? [];
+  const unclustered = data?.unclustered ?? [];
+  const hasData = intents.length > 0 || unclustered.length > 0;
+  const selectedCount = selected.size;
+
+  return (
+    <section className="intents">
+      <div className="intents-head">
+        <div>
+          <h2>{t.intents.title}</h2>
+          <p className="muted">{t.intents.subtitle}</p>
+        </div>
+        <div className="intents-actions">
+          <button type="button" className="btn" onClick={() => void load()} disabled={busy}>{t.intents.refresh}</button>
+          <button type="button" className="btn btn-primary" onClick={openCreate} disabled={busy || selectedCount === 0}>{t.intents.createIntent}</button>
+        </div>
+      </div>
+
+      {selectedCount > 0 && (
+        <p className="intents-selection">
+          {t.intents.selectedCount(selectedCount)}
+          <button type="button" className="link-btn" onClick={clearSelection}>{t.intents.clearSelection}</button>
+        </p>
+      )}
+
+      {!hasData && <p className="intents-empty">{t.intents.empty}</p>}
+
+      {unclustered.length > 0 && (
+        <div className="intent-card intent-unclustered">
+          <div className="intent-card-head">
+            <h3>{t.intents.unclustered}</h3>
+            <span className="muted">{t.intents.memberCount(unclustered.length)}</span>
+          </div>
+          <p className="intents-hint">{t.intents.createHint}</p>
+          <div className="expr-list">
+            {unclustered.map((expr) => (
+              <label key={expr.id} className={`expr-chip${selected.has(expr.id) ? " selected" : ""}`}>
+                <input type="checkbox" checked={selected.has(expr.id)} onChange={() => toggle(expr.id)} />
+                <span className="expr-text">{expr.text}</span>
+                {expr.scene && <span className="expr-scene">{expr.scene}</span>}
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {intents.map((group) => {
+        const pickedInThis = group.expressions.filter((e) => selected.has(e.id)).length;
+        const canSplit = pickedInThis > 0 && pickedInThis < group.expressions.length;
+        return (
+          <div key={group.intent.id} className="intent-card">
+            <div className="intent-card-head">
+              <div>
+                <h3>{group.intent.label}</h3>
+                {group.intent.description && <p className="muted">{group.intent.description}</p>}
+              </div>
+              <span className="muted">{t.intents.memberCount(group.expressions.length)}</span>
+            </div>
+            <div className="intent-card-actions">
+              <button
+                type="button"
+                className="btn"
+                onClick={() => openSplit(group.intent.id)}
+                disabled={busy || !canSplit}
+                title={t.intents.splitHint}
+              >
+                {t.intents.split}
+              </button>
+              <label className="intent-merge">
+                {t.intents.mergeInto}
+                <select
+                  value=""
+                  disabled={busy}
+                  onChange={(e) => {
+                    const target = e.target.value;
+                    if (target) void handleMerge(group.intent.id, target);
+                  }}
+                >
+                  <option value="">—</option>
+                  {intents
+                    .filter((other) => other.intent.id !== group.intent.id)
+                    .map((other) => (
+                      <option key={other.intent.id} value={other.intent.id}>{other.intent.label}</option>
+                    ))}
+                </select>
+              </label>
+            </div>
+            <div className="expr-list">
+              {group.expressions.map((expr) => (
+                <label key={expr.id} className={`expr-chip${selected.has(expr.id) ? " selected" : ""}`}>
+                  <input type="checkbox" checked={selected.has(expr.id)} onChange={() => toggle(expr.id)} />
+                  <span className="expr-text">{expr.text}</span>
+                  {expr.scene && <span className="expr-scene">{expr.scene}</span>}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      {dialog && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <h3>{dialog.mode === "create" ? t.intents.createIntent : t.intents.split}</h3>
+            <p className="muted">{dialog.mode === "create" ? t.intents.createHint : t.intents.splitHint}</p>
+            <label className="field">
+              <span>{t.intents.label}</span>
+              <input
+                type="text"
+                value={label}
+                autoFocus
+                placeholder={t.intents.labelPlaceholder}
+                onChange={(e) => setLabel(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              <span>{t.intents.description}</span>
+              <input
+                type="text"
+                value={description}
+                placeholder={t.intents.descriptionPlaceholder}
+                onChange={(e) => setDescription(e.target.value)}
+              />
+            </label>
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setDialog(null)} disabled={busy}>{t.intents.cancel}</button>
+              <button type="button" className="btn btn-primary" onClick={() => void submitDialog()} disabled={busy || !label.trim()}>{t.intents.confirm}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}

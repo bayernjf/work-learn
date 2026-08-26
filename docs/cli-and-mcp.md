@@ -145,7 +145,16 @@ MCP 当前提供：
 - `mark_mastered`
 - `generate_practice`
 - `get_user_patterns`
+- `get_reuse_summary`
 - `record_reuse`
+- `suggest_reuse`
+- `configure_reuse_nudges`
+- `list_expressions`
+- `cluster_intents`
+- `merge_intents`
+- `split_intent`
+
+本地 CLI 可用 `learn nudges status` 查看设置，`learn nudges on` / `learn nudges off` 开关，或用 `--cooldown-hours`、`--daily-limit` 调整频控。
 
 ### import API
 

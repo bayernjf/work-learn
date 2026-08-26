@@ -63,8 +63,49 @@ export const fetchQuestionTranslations = async (session: Session, query = "", so
 };
 
 export type SyncStatus = {
-  counts: { sessions: number; materials: number; questions: number; reviews: number; tombstones: number };
+  counts: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; tombstones: number };
   latestMaterialUpdatedAt: string | null;
+};
+
+export type ReuseNudgeSettings = {
+  enabled: boolean;
+  cooldownHours: number;
+  dailyLimit: number;
+  updatedAt: string;
+};
+
+export type ReuseSummary = {
+  generatedAt: string;
+  counts: {
+    expressions: number;
+    activeVocabulary: number;
+    sleepingExpressions: number;
+    reuseEvents: number;
+    expressionBreadth: number;
+    crossContextReuse: number;
+  };
+  activeExpressions: Array<{
+    id: string;
+    text: string;
+    scene: string | null;
+    reuseCount: number;
+    firstReusedAt: string | null;
+    lastReusedAt: string | null;
+    createdAt: string;
+  }>;
+  sleepingExpressions: Array<{
+    id: string;
+    text: string;
+    scene: string | null;
+    createdAt: string;
+  }>;
+  recentEvents: Array<{
+    id: string;
+    text: string;
+    source: string | null;
+    matchedText: string;
+    createdAt: string;
+  }>;
 };
 
 export const fetchSyncStatus = async (session: Session) => {
@@ -73,6 +114,32 @@ export const fetchSyncStatus = async (session: Session) => {
   });
   if (!response.ok) throw new Error(activeStrings().errors.syncStatus);
   return (await response.json()) as { data: SyncStatus };
+};
+
+export const fetchReuseSummary = async (session: Session) => {
+  const response = await fetch(`/api/reuse`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSummary);
+  return (await response.json()) as { data: ReuseSummary };
+};
+
+export const fetchReuseNudgeSettings = async (session: Session) => {
+  const response = await fetch(`/api/reuse/settings`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSettings);
+  return (await response.json()) as { data: ReuseNudgeSettings };
+};
+
+export const updateReuseNudgeSettings = async (session: Session, settings: Partial<ReuseNudgeSettings>) => {
+  const response = await fetch(`/api/reuse/settings`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${session.access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(settings)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.reuseSettings);
+  return (await response.json()) as { data: ReuseNudgeSettings };
 };
 
 export const fetchReviews = async (session: Session) => {
@@ -292,4 +359,82 @@ export const importCorpus = async (session: Session, payload: PortableCorpus) =>
     throw new Error(body.details ?? body.error ?? activeStrings().errors.importCorpus);
   }
   return (await response.json()) as { data: ImportResult };
+};
+
+export type Intent = {
+  id: string;
+  label: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type SavedExpression = {
+  id: string;
+  materialId: string | null;
+  intentId: string | null;
+  text: string;
+  textNorm: string;
+  register: "formal" | "neutral" | "casual" | null;
+  scene: string | null;
+  note: string | null;
+  reuseCount: number;
+  firstReusedAt: string | null;
+  lastReusedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type IntentWithMembers = {
+  intent: Intent;
+  expressions: SavedExpression[];
+};
+
+export type IntentListResult = {
+  intents: IntentWithMembers[];
+  unclustered: SavedExpression[];
+};
+
+export type IntentClusterGroup = {
+  label: string;
+  description?: string | null;
+  expressionIds: string[];
+};
+
+export const fetchIntents = async (session: Session) => {
+  const response = await fetch("/api/intents", {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentsLoad);
+  return (await response.json()) as { data: IntentListResult };
+};
+
+export const clusterIntents = async (session: Session, groups: IntentClusterGroup[]) => {
+  const response = await fetch("/api/intents/cluster", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ groups })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentCluster);
+  return (await response.json()) as { data: unknown };
+};
+
+export const mergeIntents = async (session: Session, sourceIntentId: string, targetIntentId: string) => {
+  const response = await fetch("/api/intents/merge", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ sourceIntentId, targetIntentId })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentMerge);
+  return (await response.json()) as { data: unknown };
+};
+
+export const splitIntent = async (session: Session, intentId: string, groups: IntentClusterGroup[]) => {
+  const response = await fetch("/api/intents/split", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ intentId, groups })
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.intentSplit);
+  return (await response.json()) as { data: unknown };
 };

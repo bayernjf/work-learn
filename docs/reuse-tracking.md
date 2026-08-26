@@ -73,6 +73,9 @@ The useful progress signals are:
 1. Add the storage schema and sync support.
 2. Create saved expression entities when a material is saved.
 3. Add `record_reuse` to MCP/API/local store with deterministic phrase matching.
-4. Add a Web reuse dashboard and expression metadata editing.
-5. Add `suggest_reuse`, rate limiting, and a user-facing off switch.
-6. Add conservative model-assisted intent clustering after enough data exists.
+4. Add a Web reuse dashboard and expression metadata editing. ✅ P1-b dashboard shipped for active vocabulary, cross-context reuse, sleeping expressions, and recent events; expression metadata editing remains future work.
+5. Add deterministic `suggest_reuse` (same-intent expansion, at most one nudge per turn). ✅
+6. Add rate limiting, a user-facing off switch, and `configure_reuse_nudges` for MCP/CLI/Web. ✅
+7. Add model-assisted intent clustering via `list_expressions` + `cluster_intents`, with `merge_intents` and `split_intent` for correction. ✅
+8. Add a Web UI for browsing and editing intent clusters (currently MCP/CLI only).
+
