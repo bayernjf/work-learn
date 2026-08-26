@@ -17,8 +17,12 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `search_corpus` — search the user's saved materials. Optional `query`.
 - `get_review_items` — get items due for review.
 - `mark_mastered` — mark a review item completed by `reviewId`.
+- `snooze_review` — delay a review item by a chosen number of days.
 - `generate_practice` — generate structured practice prompts from one or recent saved materials. The tool returns prompts and source material; you run the practice conversation with the user.
 - `get_user_patterns` — summarize recent topics, reusable expressions, corrections, vocabulary, and suggested next practice.
+- `record_reuse` — record that a saved expression naturally appeared in later work text.
+- `get_reuse_summary` — summarize active vocabulary, sleeping expressions, cross-scene reuse, and recent reuse events.
+- `suggest_reuse` — given the user's current English text, find at most one other saved expression for the same intent. This is expansion, not correction.
 
 ## Saving a question and its translation
 
@@ -175,12 +179,27 @@ Tags:           <2-4 short labels>               -> tags
 One item per `save_material` call: pass one string per array, not a merged list.
 Never save a `Vocabulary` or `Tags` value the user has not seen.
 
-## Search, practice, and review
+## Search, practice, review, and reuse
 
 - When the user asks "have I seen this before?" or searches past material, call `search_corpus`.
 - When the user wants to practice, call `generate_practice`. Ask one exercise at a time, wait for the answer, give concise feedback, then continue.
 - When the user asks what they should focus on or what mistakes they repeat, call `get_user_patterns` and turn the result into a short study plan.
 - When the user wants to review due items, call `get_review_items`, present the items, and after the user confirms they remember one, call `mark_mastered`.
+- When the user asks what vocabulary is active or sleeping, call `get_reuse_summary` and explain it briefly.
+- When the user explicitly asks to log reuse, or the conversation is in a reuse-tracking mode they approved, call `record_reuse` with a short redacted snippet.
+- Call `suggest_reuse` only when the current text already contains one saved expression and there is a same-intent alternative worth offering.
+
+### Reuse nudge contract
+
+Treat multiple expressions for one intent as choices, not as a correctness ranking.
+
+- Offer **at most one** alternative per turn. The tool enforces this; do not work around it.
+- Frame it as expansion: "Another option for the same intent is..." instead of "You should say..." or "This is wrong".
+- Do not call `suggest_reuse` while the user is writing code, shell commands, logs, or pure Chinese.
+- Do not repeat an ignored alternative in the same conversation.
+- If the tool returns no suggestions, say nothing about reuse.
+- Prefer alternatives matching the current scene (`codex`, `claude`, `codebuddy`, etc.) when the result includes one.
+- Never expose internal IDs unless the user explicitly asks for technical details.
 
 ## Principles
 
