@@ -19,9 +19,13 @@ create policy "Users can view their own settings"
   on public.user_settings for select using (auth.uid() = user_id);
 
 drop policy if exists "Users can update their own settings"
+  on public.user_settings;
+create policy "Users can update their own settings"
   on public.user_settings for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 drop policy if exists "Users can insert their own settings"
+  on public.user_settings;
+create policy "Users can insert their own settings"
   on public.user_settings for insert with check (auth.uid() = user_id);
 
 grant select, insert, update on public.user_settings to authenticated;
