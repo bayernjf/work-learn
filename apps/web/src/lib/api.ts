@@ -222,7 +222,7 @@ export const snoozeReview = async (session: Session, reviewId: string, days = 1)
   if (!response.ok) throw new Error(activeStrings().errors.completeReview);
 };
 export type PracticeExercise =
-  | { type: "reuse" | "recall" | "correction" | "apply"; materialId?: string; focus: string; prompt: string }
+  | { type: "reuse" | "recall" | "correction" | "apply"; materialId?: string; focus: string; prompt: string; reference?: string }
   | { type: "question"; questionId?: string; focus: string; prompt: string; answer: string }
   | { type: "mcq"; materialId?: string; focus: string; prompt: string; question: string; options: string[]; answer: string }
   | { type: "fill"; materialId?: string; focus: string; prompt: string; sentence: string; answer: string }
@@ -243,6 +243,67 @@ export const generatePractice = async (session: Session, materialId?: string) =>
   });
   if (!response.ok) throw new Error(activeStrings().errors.practice);
   return (await response.json()) as { data: PracticeResult };
+};
+
+export type AdaptivePracticeInput = {
+  count?: number;
+  focusTypes?: string[];
+  materialId?: string;
+  context?: { kind: "mistake" | "expression" | "topic"; text: string }[];
+  promptHint?: string;
+};
+
+export const generateAdaptivePractice = async (session: Session, input: AdaptivePracticeInput = {}) => {
+  const response = await fetch("/api/practice/adaptive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.practice);
+  return (await response.json()) as { data: PracticeResult };
+};
+
+export type PracticeRecord = {
+  id: string;
+  materialId: string | null;
+  questionId: string | null;
+  exerciseType: PracticeExercise["type"];
+  focus: string;
+  prompt: string;
+  userAnswer: string;
+  isCorrect: boolean | null;
+  status: "pending" | "remembered" | "practice_again";
+  createdAt: string;
+};
+
+export type RecordPracticeInput = {
+  exerciseType: PracticeExercise["type"];
+  materialId?: string;
+  questionId?: string;
+  focus?: string;
+  prompt?: string;
+  userAnswer?: string;
+  isCorrect?: boolean | null;
+  status?: "remembered" | "practice_again" | "pending";
+};
+
+export const recordPractice = async (session: Session, input: RecordPracticeInput) => {
+  const response = await fetch("/api/practice/record", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.practice);
+  return (await response.json()) as { data: { id: string; recordedAt: string } };
+};
+
+export const getPracticeHistory = async (session: Session, onlyMistakes = false, limit = 100) => {
+  const query = new URLSearchParams({ onlyMistakes: String(onlyMistakes), limit: String(limit) });
+  const response = await fetch(`/api/practice/history?${query.toString()}`, {
+    headers: { Authorization: `Bearer ${session.access_token}` }
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.practice);
+  return (await response.json()) as { data: PracticeRecord[] };
 };
 
 export type UserPatterns = {

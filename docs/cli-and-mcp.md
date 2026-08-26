@@ -16,6 +16,8 @@ learn backup   # 备份本地 SQLite 数据库
 learn restore  # 从 SQLite 备份恢复本地数据库（需 --file 和 --yes）
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
 learn run     # 在 PTY 中运行 agent 并录制终端会话，脱敏后写入本地库
+learn expressions  # 列出已保存表达（供 Agent 浮层取数，C3）
+learn hook      # 安装/卸载/查看 shell rc 自动录制包裹块（install|uninstall|status，C4）
 ```
 
 可用 `WORK_LEARN_DB_PATH` 覆盖本地 SQLite 路径（例如隔离测试或同时维护多个库）。
@@ -168,6 +170,10 @@ MCP 当前提供：
 - `cluster_intents`
 - `merge_intents`
 - `split_intent`
+- `snooze_review`
+- `record_practice`
+- `get_practice_history`
+- `generate_adaptive_practice`
 
 本地 CLI 可用 `learn nudges status` 查看设置，`learn nudges on` / `learn nudges off` 开关，或用 `--cooldown-hours`、`--daily-limit` 调整频控。
 

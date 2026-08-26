@@ -1,5 +1,16 @@
 # Handoff
 
+## 2026-08-26 迭代（C1–C4：练习闭环 / 自适应出题 / Agent 浮层 / rc-hook）
+
+全部实现并提交到 `dev`（未 push）。CI 在 `a275748` 修复 `noUncheckedIndexedAccess` 后转绿，PR #40 已合并并部署生产。
+
+- **C1 练习闭环·状态保存**：新增 `practice_records` 表（迁移 `supabase/migrations/017_practice_records.sql`，**已于 2026-08-27 推到云端并验证表结构与代码查询一致**）。Web 练习改为「先写→对照→记住了/再练一次」，每次练习与错题落库；首页新增全局「练习记录 / 错题本」分区。覆盖 shared-schema / direct(Supabase) / local-store / api / mcp-server / web。
+- **C2 模型驱动自适应出题**：新增 OpenAI 兼容 LLM 客户端，由 env 开关：`WORK_LEARN_LLM_BASE_URL`、`WORK_LEARN_LLM_API_KEY`、`WORK_LEARN_LLM_MODEL`（默认 `gpt-4o-mini`）。`generateAdaptivePractice` 基于近期错题生成练习；未配置 LLM 时回退规则生成。Web 练习面板新增「AI 出题」按钮。
+- **C3 Companion Agent 浮层**：默认关。检测前台 Agent（Claude / Cursor / Codex / 终端）时弹出透明 always-on-top 浮层，显示已存表达以 nudate 复用。新增 `learn expressions` CLI 命令供浮层取数。
+- **C4 rc-hook 自动录制**：新增 `learn hook install|uninstall|status`，向 shell rc（~/.zshrc 等）注入带边界标记的包裹块，把交互 shell 包进 `learn run` 自动录制；默认关，`uninstall` 仅移除注入片段、不动其余配置。托盘新增安装入口。
+
+新增 CLI：`learn expressions [--json] [--limit N]`、`learn hook install|uninstall|status`。
+
 ## 当前产品结论
 
 本项目定位为一个跨 AI Agent 的个人英语语料学习系统。核心入口是安装到 Claude、ChatGPT、Hermes、OpenClaw 等 Agent 中的 Universal Learning Skill。
@@ -136,7 +147,7 @@ Agent 中调用 Skill
 ## 已经由实现回答的问题
 
 - 数据本地优先（SQLite），云端 Supabase 是同步副本，由 `learn sync` 做 pull → push → pull 双向同步，见 [docs/local-first-storage.md](docs/local-first-storage.md)；
-- 复习先用简单队列：完成一次即 `status = completed`、`interval_days = 1`，没有间隔重复算法（按当前决策先不推进 SRS）；
+- 复习已升级为间隔重复（SRS，SM-2 风格，按评级重排 `due_at`/`interval_days`，见下「间隔重复算法」），不再是一致性标完成；
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。
 
@@ -144,9 +155,9 @@ Agent 中调用 Skill
 
 ### P1：练习闭环
 
-- 练习记录：保存用户是否练过、练习结果、Agent 反馈和错题；
-- Web 练习模式：先自己写，再展开参考说法，再标记“记住了 / 再练一次”；
-- 模型驱动的自适应练习：决定使用本地模型还是云端模型，基于近期错误和保存语料动态出题。
+- [x] 练习记录：保存用户是否练过、练习结果、Agent 反馈和错题（`practice_records` 表 + `017` 迁移，云端已推，C1）；
+- [x] Web 练习模式：先自己写，再展开参考说法，再标记“记住了 / 再练一次”（C1）；
+- [x] 模型驱动自适应练习：由 `WORK_LEARN_LLM_*` env 开关接入任意 OpenAI 兼容模型（本地或云端均可），基于近期错题动态出题，未配置回退规则生成（C2）。
 
 ### P1：复用追踪
 
@@ -171,7 +182,7 @@ Agent 中调用 Skill
 
 - [x] `learn run -- <agent>`：CLI 用系统 `script` 在 PTY 中运行 agent、录制终端会话、脱敏后写入本地库（`source=terminal`），作为 macOS Companion 终端采集能力的第一刀（本地优先、离线可用）；
 - macOS Companion 应用层：全局快捷键、菜单栏、离线兜底、自动采集（依赖 `learn run` 采集内核）。**M1 最小壳已落地**：`apps/companion` 是基于 Electron 的菜单栏应用，作为薄壳复用 `learn` CLI（spawn 仓库内 `tsx` 跑 `apps/cli/src/index.ts`，因此必须在 better-sqlite3 编译所用的 Node 下启动），菜单栏显示「今日采集 / 待复习 / 本地待推送 / 上次同步」，并提供「采集剪贴板 / 同步云端 / 打开 Web」三个按钮；**全局快捷键（M2）已落地**：默认 `⌘⇧L`（可用 `WORK_LEARN_HOTKEY` 覆盖）触发「拷贝当前选中文本 → `learn capture` → 还原剪贴板」并弹通知，需在本机「系统设置 › 隐私与安全性 › 辅助功能」授予权限；**离线兜底 UI（M3）已落地**：面板顶部横幅强调「离线可用 · 数据先存本地」，并展示本地库/云端状态点（绿=连通、黄=未配置 Token、红=云端不可达），同步失败按「Token 缺失 / 云端不可达」分类提示，每 8s 自动探活（`learn doctor`）；**自动采集（M4）已落地**：「自动采集」开关（持久化于 `userData` 的 `companion-config.json`）开启后，Companion 用 `osascript` 自动打开一个被 `learn run -- <shell>` 包裹的 Terminal 窗口，用户在其中进行终端 Agent 会话、关窗即自动存盘，无需手动敲 `learn run`；托盘菜单与面板均有「打开录制终端」入口（目前默认 Terminal.app，iTerm 留待增强）。
-  - **M4 增强（rc-hook 自动录制，暂不做）**：在用户 shell 启动文件（`~/.zshrc` / `~/.bashrc`）写入 snippet + 设置 `WORK_LEARN_AUTO_CAPTURE=1` 环境变量，使**用户正常新开的任何终端窗口**默认被 `learn run` 包裹、自动录制，无需改用 Companion 开的录制窗口。决策：**排到可选增强队列末尾，主线闭环（录制→存→回看）跑顺后再做**；若做，必须默认关、显式一键开启 + 一键干净卸载，且只在原生 Terminal.app/iTerm 启用（Warp/Tmux 明确不支持），用 `unset` 环境变量防重入、并顺手 `fnm use 22` 注入 Node 22（better-sqlite3 ABI 约束）。理由：当前 M4 已能录，rc-hook 仅省「记得用录制窗口」一步，属体验优化非能力补齐；而改动用户系统级 rc 文件信任成本高、跨终端表现不一致、需兜底重入/环境注入等，性价比低于其他 P3。
+  - **M4 增强（rc-hook 自动录制，已实现，见 C4）**：在用户 shell 启动文件（`~/.zshrc` / `~/.bashrc`）写入包裹块，使**用户正常新开的任何终端窗口**默认被 `learn run` 包裹、自动录制，无需改用 Companion 开的录制窗口。实现已于 2026-08-26 的 C4 落地：`learn hook install|uninstall|status` 向 rc 注入带边界标记、用 `WORK_LEARN_RECORDING` 环境变量防重入的包裹块，默认关、可一键干净卸载；仅原生 shell 启用（Warp/Tmux 不支持）、不注入 `fnm`、不依赖特定 Node 版本（复用已安装的 `learn`）。
 - 间隔重复算法（SRS）：**本轮已实现**。在 `shared-schema` 新增纯函数 `scheduleNextReview(prevIntervalDays, grade)`（SM-2 风格：again→立即重学、hard×1.3、good×2.1、easy×3.2；easy 且间隔≥21 天判为已掌握），云端 `direct.ts` 与本地 `local-store` 两处 `markMastered` 同步改为「按评级重排 due_at/interval_days」而非一次性标完成；API `/api/reviews/:id/complete?grade=`、web `completeReview`、MCP `mark_mastered` 均透传评级；复习卡片展开答案后显示 Again/Hard/Good/Easy 四档按钮（CSS `.grade-button`）。
 
 ## 本轮功能迭代（2026-08-26）
@@ -180,7 +191,7 @@ Agent 中调用 Skill
 
 1. **SRS + 今日待复习队列**：见上「间隔重复算法」。复习从「一次性标完成」升级为按评级递增间隔的间隔重复；待复习队列即现有 ReviewList（`getReviewItems` 返回 `due_at ≤ now` 的 pending 项）。
 2. **多题型测验（确定性生成，无 LLM）**：`generatePracticeFromItems` 在原有 reuse/recall/correction/apply/question 基础上，新增 `mcq` / `fill` / `scenario` 三种可自测题型（选择、语境填空、情境应用），由材料的 vocabulary/usefulExpressions/practicePrompts 确定性生成；Web `PracticeButton` 新增 `PracticeExerciseItem` 交互组件（选项点击 / 填空检查 + 对错揭示，配套 CSS `.practice-options` / `.practice-fill`）。**说明**：全仓此前无任何 LLM 调用，高质量「AI 出题」需另接 LLM（API Key + 依赖），本轮未引入，作为后续升级项。
-3. **主动复用推送（in-app nudge）**：语料库在搜索词或选中 topic 时，顶部出现「相关已存表达」面板（`ReuseNudgePanel`，debounce 300ms 调 `/api/reuse/suggestions`），把存过的相似表达在浏览/检索时浮出。Companion 内的主动 nudge 表面（Agent 工作中浮层）留待下一步（需 Mac 重编 Electron）。
+3. **主动复用推送（in-app nudge）**：语料库在搜索词或选中 topic 时，顶部出现「相关已存表达」面板（`ReuseNudgePanel`，debounce 300ms 调 `/api/reuse/suggestions`），把存过的相似表达在浏览/检索时浮出。Companion 内的主动 nudge 表面（Agent 工作中浮层）**已落地（C3）**：检测前台 Agent（Claude / Cursor / Codex / 终端等）时弹出透明 always-on-top 浮层显示已存表达，默认关、托盘可开关。
 
 ### 本地预览提示
 - Web 默认 `pnpm --filter @work-learn/web dev --port 3101`；Vite proxy 把 `/api` 指向 `WORK_LEARN_API_TARGET`（默认 `http://localhost:3000`）。
@@ -191,9 +202,9 @@ Agent 中调用 Skill
 ## 需要后续确认的问题
 
 - 间隔重复算法（SRS）：**本轮（2026-08-26）已实现**，见上文「间隔重复算法（SRS）」与「本轮功能迭代」；复习改为按评级递增间隔（SM-2 风格），不再是一致性标完成，原「暂缓」决定已推翻。
-- `generate_practice` 目前生成结构化练习提示，覆盖材料和提问翻译，不调用模型；后续再决定是否引入本地/云端模型做自适应练习；
+- `generate_practice` 生成确定性结构化练习提示，覆盖材料和提问翻译，不调用模型；**C2 已新增 `generate_adaptive_practice`**：在配置 `WORK_LEARN_LLM_*` 时由 LLM 基于近期错题自适应出题，未配置时回退确定性生成。
 - 使用本地模型还是云端模型做语料分析；
-- macOS Companion 终端自动采集（M4）：**已落地**（「自动采集」开关开启后 `osascript` 自动开录制终端，关窗即存盘）；更激进的 rc-hook 自动录制仍排到可选增强队尾（见 M4 增强）。
+- macOS Companion 终端自动采集（M4）：**已落地**（「自动采集」开关开启后 `osascript` 自动开录制终端，关窗即存盘）；更激进的 rc-hook 自动录制**已于 C4 实现**（见 M4 增强，默认关、可一键干净卸载）。
 
 ## 本轮修复
 

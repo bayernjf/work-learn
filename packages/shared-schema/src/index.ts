@@ -180,11 +180,178 @@ export type GetUserPatternsInput = z.input<typeof getUserPatternsInputSchema>;
 export type PracticeMaterial = Pick<LearningMaterial, "id" | "source" | "topic" | "originalText" | "explanation" | "usefulExpressions" | "corrections" | "vocabulary" | "practicePrompts" | "tags" | "createdAt">;
 export type PracticeQuestion = Pick<QuestionTranslation, "id" | "source" | "question" | "translation" | "topic" | "createdAt">;
 export type PracticeExercise =
-  | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }
+  | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string; reference?: string }
   | { type: "question"; questionId: string; focus: string; prompt: string; answer: string }
   | { type: "mcq"; materialId?: string; focus: string; prompt: string; question: string; options: string[]; answer: string }
   | { type: "fill"; materialId?: string; focus: string; prompt: string; sentence: string; answer: string }
   | { type: "scenario"; materialId?: string; focus: string; prompt: string; scenario: string; options: string[]; answer: string };
+
+export type PracticeStatus = "pending" | "remembered" | "practice_again";
+
+export type PracticeResult = {
+  generatedAt: string;
+  materials: LearningMaterial[];
+  questions: QuestionTranslation[];
+  exercises: PracticeExercise[];
+};
+
+// A persisted practice attempt. The practice loop records one row per completed
+// exercise (graded types carry isCorrect; open-ended types carry the user's
+// written answer + a remembered/practice_again status).
+export type PracticeRecord = {
+  id: string;
+  materialId: string | null;
+  questionId: string | null;
+  exerciseType: PracticeExercise["type"];
+  focus: string;
+  prompt: string;
+  userAnswer: string;
+  isCorrect: boolean | null;
+  status: PracticeStatus;
+  createdAt: string;
+};
+
+export const recordPracticeInputSchema = z.object({
+  exerciseType: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
+  materialId: z.string().min(1).optional(),
+  questionId: z.string().min(1).optional(),
+  focus: z.string().max(500).default(""),
+  prompt: z.string().max(5000).default(""),
+  userAnswer: z.string().max(50_000).default(""),
+  isCorrect: z.boolean().nullable().optional(),
+  status: z.enum(["remembered", "practice_again", "pending"]).default("pending")
+});
+export type RecordPracticeInput = z.infer<typeof recordPracticeInputSchema>;
+
+export const getPracticeHistoryInputSchema = z.object({
+  onlyMistakes: z.boolean().optional(),
+  limit: z.number().int().min(1).max(200).optional()
+});
+export type GetPracticeHistoryInput = z.infer<typeof getPracticeHistoryInputSchema>;
+
+export const practiceRecordColumns =
+  "id,material_id,question_id,exercise_type,focus,prompt,user_answer,is_correct,status,created_at";
+
+export const toPracticeRecord = (row: Record<string, unknown>): PracticeRecord => ({
+  id: String(row.id),
+  materialId: row.material_id ? String(row.material_id) : null,
+  questionId: row.question_id ? String(row.question_id) : null,
+  exerciseType: (row.exercise_type as PracticeExercise["type"]) ?? "reuse",
+  focus: String(row.focus ?? ""),
+  prompt: String(row.prompt ?? ""),
+  userAnswer: String(row.user_answer ?? ""),
+  isCorrect: row.is_correct === null || row.is_correct === undefined ? null : Boolean(row.is_correct),
+  status: ((row.status as PracticeStatus) ?? "pending"),
+  createdAt: String(row.created_at)
+});
+
+export type AdaptiveContextItem = { kind: "mistake" | "expression" | "topic"; text: string };
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
+export const generateAdaptivePracticeInputSchema = z.object({
+  count: z.number().int().min(1).max(20).default(5),
+  focusTypes: z
+    .array(z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]))
+    .optional(),
+  materialId: z.string().min(1).optional(),
+  context: z
+    .array(z.object({ kind: z.enum(["mistake", "expression", "topic"]), text: z.string() }))
+    .default([]),
+  promptHint: z.string().max(2000).optional()
+});
+export type GenerateAdaptivePracticeInput = z.infer<typeof generateAdaptivePracticeInputSchema>;
+
+const adaptiveExerciseSchema = z.object({
+  type: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
+  materialId: z.string().optional(),
+  questionId: z.string().optional(),
+  focus: z.string(),
+  prompt: z.string(),
+  reference: z.string().optional(),
+  question: z.string().optional(),
+  options: z.array(z.string()).optional(),
+  answer: z.string().optional(),
+  sentence: z.string().optional(),
+  scenario: z.string().optional()
+});
+
+function parseExercisesFromJson(raw: string, allowed: string[], count: number): PracticeExercise[] {
+  const cleaned = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "").trim();
+  const parsed = JSON.parse(cleaned) as unknown;
+  const arr = Array.isArray(parsed) ? parsed : Array.isArray((parsed as { exercises?: unknown[] }).exercises) ? (parsed as { exercises: unknown[] }).exercises : [];
+  const out: PracticeExercise[] = [];
+  for (const item of arr) {
+    if (out.length >= count) break;
+    const result = adaptiveExerciseSchema.safeParse(item);
+    if (!result.success) continue;
+    const v = result.data;
+    if (!allowed.includes(v.type)) continue;
+    if (v.type === "mcq") {
+      out.push({ type: "mcq", materialId: v.materialId, focus: v.focus, prompt: v.prompt, question: v.question ?? v.prompt, options: v.options ?? [], answer: v.answer ?? "" });
+    } else if (v.type === "fill") {
+      out.push({ type: "fill", materialId: v.materialId, focus: v.focus, prompt: v.prompt, sentence: v.sentence ?? "", answer: v.answer ?? "" });
+    } else if (v.type === "scenario") {
+      out.push({ type: "scenario", materialId: v.materialId, focus: v.focus, prompt: v.prompt, scenario: v.scenario ?? "", options: v.options ?? [], answer: v.answer ?? "" });
+    } else if (v.type === "question") {
+      out.push({ type: "question", questionId: v.questionId ?? "", focus: v.focus, prompt: v.prompt, answer: v.answer ?? "" });
+    } else {
+      out.push({ type: v.type, materialId: v.materialId ?? "", focus: v.focus, prompt: v.prompt, reference: v.reference });
+    }
+  }
+  if (out.length === 0) throw new Error("LLM returned no usable exercises");
+  return out;
+}
+
+// Model-driven practice: asks an LLM (injected chat fn) to produce exercises
+// targeting the learner's recent mistakes / saved expressions. Pure function so
+// callers can supply any OpenAI-compatible chat client and fall back on failure.
+export async function generateAdaptivePractice(
+  input: GenerateAdaptivePracticeInput,
+  chat: (messages: ChatMessage[]) => Promise<string>
+): Promise<PracticeExercise[]> {
+  const allowed = input.focusTypes && input.focusTypes.length ? input.focusTypes : ["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"];
+  const contextText = input.context.length
+    ? input.context.map((c) => `- [${c.kind}] ${c.text}`).join("\n")
+    : "(no specific history; use general workplace English)";
+  const system = `You are an English-for-work practice generator. Given the learner's recent mistakes and saved expressions, produce ${input.count} varied practice exercises that target weak spots. Allowed types: ${allowed.join(", ")}. Return JSON of the form { "exercises": [ { "type", "focus", "prompt", and type-specific fields: mcq/fill/scenario need "answer" and mcq/scenario need "options"; fill needs "sentence"; question needs "answer"; reuse/recall/correction/apply need "reference" (the target expression or model answer) } ] }. Keep prompts concrete to real work. Output only the JSON object.`;
+  const user = `Learner context (recent mistakes / expressions):\n${contextText}${input.promptHint ? `\n\nExtra instructions: ${input.promptHint}` : ""}\n\nGenerate ${input.count} exercises.`;
+  const raw = await chat([
+    { role: "system", content: system },
+    { role: "user", content: user }
+  ]);
+  return parseExercisesFromJson(raw, allowed, input.count);
+}
+
+export type LlmConfig = { baseUrl: string; apiKey: string; model: string };
+
+export function getLlmConfig(): LlmConfig | null {
+  const baseUrl = process.env.WORK_LEARN_LLM_BASE_URL;
+  const apiKey = process.env.WORK_LEARN_LLM_API_KEY;
+  if (!baseUrl || !apiKey) return null;
+  return { baseUrl: baseUrl.replace(/\/$/, ""), apiKey, model: process.env.WORK_LEARN_LLM_MODEL ?? "gpt-4o-mini" };
+}
+
+// Minimal OpenAI-compatible chat completion call using the global fetch from
+// Node 18+. Throws if the LLM is not configured or the request fails, so
+// callers can fall back to rule-based practice.
+export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
+  const config = getLlmConfig();
+  if (!config) throw new Error("LLM not configured (set WORK_LEARN_LLM_BASE_URL and WORK_LEARN_LLM_API_KEY)");
+  const response = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
+    body: JSON.stringify({ model: config.model, messages, temperature: 0.7, response_format: { type: "json_object" } })
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`LLM request failed (${response.status}): ${text.slice(0, 200)}`);
+  }
+  const data = (await response.json()) as { choices?: { message?: { content?: string } }[] };
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) throw new Error("LLM returned empty content");
+  return content;
+}
+
 export type CorpusFilters = { source?: string; tag?: string };
 
 // A single session being synced from a local store. The id is preserved so the
@@ -442,13 +609,15 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "reuse",
         materialId: material.id,
         focus,
-        prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`
+        prompt: `Use "${focus}" in a new sentence about ${material.topic}. Keep it specific to your real work.`,
+        reference: focus
       },
       {
         type: "recall",
         materialId: material.id,
         focus,
-        prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`
+        prompt: `Explain in English when you would say: "${focus}". Then write one concise example.`,
+        reference: focus
       }
     ];
     if (material.corrections[0]) {
@@ -456,7 +625,8 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "correction",
         materialId: material.id,
         focus,
-        prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`
+        prompt: `Rewrite this naturally: "${material.originalText}". Compare your version with: "${material.corrections[0]}".`,
+        reference: material.corrections[0]
       });
     }
     if (material.practicePrompts[0]) {
@@ -464,7 +634,8 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
         type: "apply",
         materialId: material.id,
         focus,
-        prompt: material.practicePrompts[0]
+        prompt: material.practicePrompts[0],
+        reference: material.usefulExpressions[0] ?? focus
       });
     }
     return output;

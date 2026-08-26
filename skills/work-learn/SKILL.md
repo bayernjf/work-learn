@@ -19,6 +19,9 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `mark_mastered` — mark a review item completed by `reviewId`.
 - `snooze_review` — delay a review item by a chosen number of days.
 - `generate_practice` — generate structured practice prompts from one or recent saved materials. The tool returns prompts and source material; you run the practice conversation with the user.
+- `record_practice` — record one practice attempt's result (done / correct / feedback / mistakes) against a material or question. Input: `materialId` or `questionId`, `result`, optional `feedback`, `mistakes[]`. (C1)
+- `get_practice_history` — fetch recent practice records and the mistake book (wrong items) for a material/question or the user. (C1)
+- `generate_adaptive_practice` — when `WORK_LEARN_LLM_*` is configured, ask the LLM to generate adaptive practice from recent mistakes; otherwise fall back to deterministic prompts. (C2)
 - `get_user_patterns` — summarize recent topics, reusable expressions, corrections, vocabulary, and suggested next practice.
 - `record_reuse` — record that a saved expression naturally appeared in later work text.
 - `get_reuse_summary` — summarize active vocabulary, sleeping expressions, cross-scene reuse, and recent reuse events.
