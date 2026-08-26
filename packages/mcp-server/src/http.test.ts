@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { searchCorpus } from "./index.js";
+import { searchCorpus, suggestReuse } from "./index.js";
 
 /**
  * The removed refresh flow parsed the access token as a JWT to decide whether it
@@ -29,4 +29,19 @@ test("a personal access token reaches the api verbatim", async () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0]?.authorization, "Bearer wlpat_abc123");
   assert.equal(calls[0]?.url, "https://api.example/api/materials");
+});
+
+test("suggestReuse posts to the reuse suggestions endpoint", async () => {
+  const { calls, restore } = stubFetch();
+  try {
+    await suggestReuse({ apiUrl: "https://api.example", accessToken: "wlpat_abc123" }, {
+      text: "We should roll out a migration today.",
+      source: "codex"
+    });
+  } finally {
+    restore();
+  }
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]?.url, "https://api.example/api/reuse/suggestions");
+  assert.equal(calls[0]?.authorization, "Bearer wlpat_abc123");
 });

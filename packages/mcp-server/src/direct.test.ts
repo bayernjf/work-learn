@@ -134,6 +134,21 @@ test("generatePractice and getUserPatterns are scoped to the user", async () => 
   assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
 });
 
+test("suggestReuse scopes reads to the user", async () => {
+  const { client, calls } = stubClient();
+  const ctx = createDirectContext(client, USER);
+  await ctx.suggestReuse({ text: "We should roll out a migration today.", source: "codex" });
+  assert.equal(calls[0]?.table, "saved_expressions");
+  assert.ok(calls[0]?.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.ok(calls[0]?.columns?.includes("intent_id"));
+});
+
+test("read-only token can suggest reuse", async () => {
+  const { client } = stubClient();
+  const ctx = createDirectContext(client, USER, ["read"]);
+  await ctx.suggestReuse({ text: "We should roll out a migration today." });
+});
+
 test("fetchSyncSnapshot scopes every table to the user", async () => {
   const { client, calls } = stubClient();
   await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
@@ -151,7 +166,16 @@ test("getSyncStatus scopes counts and returns the latest material update", async
 
   const status = await getSyncStatus(client, USER);
 
-  assert.deepEqual(status.counts, { sessions: 1, materials: 2, questions: 3, reviews: 4, tombstones: 5 });
+  assert.deepEqual(status.counts, {
+    sessions: 1,
+    materials: 2,
+    questions: 3,
+    reviews: 4,
+    intents: 0,
+    expressions: 0,
+    reuseEvents: 0,
+    tombstones: 5
+  });
   assert.equal(status.latestMaterialUpdatedAt, latest);
   assert.ok(calls.every((call) => call.filters.some(([column, value]) => column === "user_id" && value === USER)));
   assert.ok(calls.some((call) => call.table === "learning_materials" && call.single === true));
