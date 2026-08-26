@@ -283,6 +283,19 @@ export const suggestReuseInputSchema = z.object({
   limit: z.number().int().min(1).max(1).default(1)
 });
 
+export const reuseNudgeSettingsSchema = z.object({
+  enabled: z.boolean().default(true),
+  cooldownHours: z.number().int().min(0).max(168).default(6),
+  dailyLimit: z.number().int().min(0).max(20).default(3),
+  updatedAt: z.string().datetime()
+});
+
+export const updateReuseNudgeSettingsSchema = z.object({
+  enabled: z.boolean().optional(),
+  cooldownHours: z.number().int().min(0).max(168).optional(),
+  dailyLimit: z.number().int().min(0).max(20).optional()
+});
+
 export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review", "intent", "expression", "reuse_event"]);
 
 export const syncTombstoneSchema = z.object({
@@ -451,6 +464,8 @@ export type SyncSavedExpression = z.infer<typeof syncSavedExpressionSchema>;
 export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
 export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
 export type SuggestReuseInput = z.infer<typeof suggestReuseInputSchema>;
+export type ReuseNudgeSettings = z.infer<typeof reuseNudgeSettingsSchema>;
+export type UpdateReuseNudgeSettings = z.infer<typeof updateReuseNudgeSettingsSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
 
@@ -480,8 +495,10 @@ export type ReuseSuggestion = {
 
 export type ReuseSuggestions = {
   generatedAt: string;
+  enabled: boolean;
   matchedExpressionIds: string[];
   suggestions: ReuseSuggestion[];
+  suppressedReason: "disabled" | "cooldown" | "daily_limit" | null;
 };
 
 const candidateScore = (candidate: SyncSavedExpression, matchedIntentIds: Set<string | null>, source?: string) => {
@@ -493,24 +510,73 @@ const candidateScore = (candidate: SyncSavedExpression, matchedIntentIds: Set<st
   return score;
 };
 
+export const defaultReuseNudgeSettings = (now = new Date().toISOString()): ReuseNudgeSettings => ({
+  enabled: true,
+  cooldownHours: 6,
+  dailyLimit: 3,
+  updatedAt: now
+});
+
+export const evaluateReuseNudgePolicy = (
+  settings: ReuseNudgeSettings,
+  events: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>,
+  nowIso: string
+): { allow: boolean; suppressedReason: ReuseSuggestions["suppressedReason"] } => {
+  if (!settings.enabled) return { allow: false, suppressedReason: "disabled" };
+  const now = new Date(nowIso);
+  const nudges = events.filter((event) => event.matchKind === "nudge");
+  const startOfDay = new Date(now);
+  startOfDay.setUTCHours(0, 0, 0, 0);
+  if (nudges.filter((event) => new Date(event.createdAt) >= startOfDay).length >= settings.dailyLimit) {
+    return { allow: false, suppressedReason: "daily_limit" };
+  }
+  const latest = nudges.map((event) => new Date(event.createdAt)).sort((a, b) => b.getTime() - a.getTime())[0];
+  if (latest && now.getTime() - latest.getTime() < settings.cooldownHours * 60 * 60 * 1000) {
+    return { allow: false, suppressedReason: "cooldown" };
+  }
+  return { allow: true, suppressedReason: null };
+};
+
+const isIgnoredNudgeCandidate = (
+  candidate: SyncSavedExpression,
+  events: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>
+): boolean => events.some((event) => {
+  if (event.expressionId !== candidate.id || event.matchKind !== "nudge") return false;
+  const nudgeAt = new Date(event.createdAt);
+  const reusedAt = candidate.lastReusedAt ? new Date(candidate.lastReusedAt) : null;
+  return !reusedAt || nudgeAt > reusedAt;
+});
+
 export const suggestReuse = (
   text: string,
   expressions: ReadonlyArray<SyncSavedExpression>,
-  input: Omit<Partial<SuggestReuseInput>, "text"> = {}
+  input: Omit<Partial<SuggestReuseInput>, "text"> = {},
+  policy?: {
+    settings?: ReuseNudgeSettings;
+    events?: ReadonlyArray<Pick<SyncReuseEvent, "expressionId" | "matchKind" | "createdAt">>;
+    now?: string;
+  }
 ): ReuseSuggestions => {
+  const generatedAt = policy?.now ?? new Date().toISOString();
   const matches = findReuseMatches(text, expressions);
   const matchedIds = new Set(matches.map((match) => match.expressionId));
   const matchedExpressions = expressions.filter((expression) => matchedIds.has(expression.id));
   const matchedIntentIds = new Set(matchedExpressions.map((expression) => expression.intentId));
   const limit = input.limit ?? 1;
+  const settings = policy?.settings ?? defaultReuseNudgeSettings(generatedAt);
+  const events = policy?.events ?? [];
+  const decision = evaluateReuseNudgePolicy(settings, events, generatedAt);
 
-  const sameIntent = expressions
-    .filter((expression) => expression.intentId && matchedIntentIds.has(expression.intentId) && !matchedIds.has(expression.id))
-    .sort((a, b) => candidateScore(b, matchedIntentIds, input.source) - candidateScore(a, matchedIntentIds, input.source) || b.createdAt.localeCompare(a.createdAt))
-    .slice(0, limit);
+  const sameIntent = decision.allow
+    ? expressions
+      .filter((expression) => expression.intentId && matchedIntentIds.has(expression.intentId) && !matchedIds.has(expression.id) && !isIgnoredNudgeCandidate(expression, events))
+      .sort((a, b) => candidateScore(b, matchedIntentIds, input.source) - candidateScore(a, matchedIntentIds, input.source) || b.createdAt.localeCompare(a.createdAt))
+      .slice(0, limit)
+    : [];
 
   return {
-    generatedAt: new Date().toISOString(),
+    generatedAt,
+    enabled: settings.enabled,
     matchedExpressionIds: matches.map((match) => match.expressionId),
     suggestions: sameIntent.map((expression) => ({
       expressionId: expression.id,
@@ -519,7 +585,8 @@ export const suggestReuse = (
       scene: expression.scene,
       note: expression.note,
       reason: "same_intent" as const
-    }))
+    })),
+    suppressedReason: decision.suppressedReason
   };
 };
 
