@@ -21,6 +21,7 @@ export interface WorkLearnContext {
   generatePractice(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
   recordReuse(input: unknown): Promise<unknown> | unknown;
+  getReuseSummary(): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */

@@ -18,6 +18,7 @@ import {
   syncIntentColumns,
   syncReuseEventColumns,
   syncSavedExpressionColumns,
+  summarizeReuse,
   updateMaterialSchema,
   portableImportSchema,
   syncBatchInputSchema,
@@ -142,6 +143,26 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       if (incremented.error) throw new Error(incremented.error.message);
     }
     return { recordedAt, recorded: matches.length, matches };
+  },
+
+  async getReuseSummary() {
+    requireScope(scopes, "read");
+    const [expressionRows, eventRows] = await Promise.all([
+      supabase
+        .from("saved_expressions")
+        .select(syncSavedExpressionColumns)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false }),
+      supabase
+        .from("reuse_events")
+        .select(syncReuseEventColumns)
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+    ]);
+    return summarizeReuse(
+      (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression),
+      (ok(eventRows) as Record<string, unknown>[]).map(normalizeReuseEvent)
+    );
   },
 
   async saveQuestionTranslation(input) {
@@ -342,7 +363,7 @@ const normalizeSavedExpression = (row: Record<string, unknown>) => ({
   intentId: row.intent_id ? String(row.intent_id) : null,
   text: String(row.text),
   textNorm: String(row.text_norm),
-  register: row.register ? String(row.register) : null,
+  register: (row.register === "formal" || row.register === "neutral" || row.register === "casual" ? row.register : null) as "formal" | "neutral" | "casual" | null,
   scene: row.scene ? String(row.scene) : null,
   note: row.note ? String(row.note) : null,
   reuseCount: Number(row.reuse_count ?? 0),
@@ -359,7 +380,7 @@ const normalizeReuseEvent = (row: Record<string, unknown>) => ({
   source: row.source ? String(row.source) : null,
   matchedText: String(row.matched_text),
   contextSnippet: row.context_snippet ? String(row.context_snippet) : null,
-  matchKind: String(row.match_kind),
+  matchKind: (row.match_kind === "variant" || row.match_kind === "nudge" ? row.match_kind : "exact") as "exact" | "variant" | "nudge",
   confidence: Number(row.confidence ?? 1),
   createdAt: String(row.created_at)
 });
@@ -660,7 +681,7 @@ export const importPortableData = async (supabase: SupabaseClient, userId: strin
     reviews: { inserted: 0, updated: 0, skipped: 0 },
     intents: { inserted: 0, updated: 0, skipped: 0 },
     expressions: { inserted: 0, updated: 0, skipped: 0 },
-    reuseEvents: { inserted: 0, updated: 0, skipped: 0 }
+    reuseEvents: { inserted: 0, updated: 0, skipped: 0 },
   };
   for (const session of providedSessions.values()) {
     if (!existing.sessions.has(session.id)) counts.sessions.inserted += 1;

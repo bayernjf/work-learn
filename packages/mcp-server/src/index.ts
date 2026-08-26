@@ -79,6 +79,8 @@ export const recordReuse = (config: McpConfig, input: unknown) => {
   return json(config, "/reuse", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const getReuseSummary = (config: McpConfig) => json(config, "/reuse");
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -102,5 +104,6 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input),
-  recordReuse: (input) => recordReuse(config, input)
+  recordReuse: (input) => recordReuse(config, input),
+  getReuseSummary: () => getReuseSummary(config)
 });
