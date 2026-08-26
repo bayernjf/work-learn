@@ -155,7 +155,7 @@ Agent 中调用 Skill
 - [x] P1-a：新增 saved expressions / reuse events 存储，保存语料时自动升格 useful expressions；
 - [x] P1-a：MCP/API/本地库提供 `record_reuse`，先用确定性短语匹配记录复用事件；
 - [x] 用户执行 `015_reuse_tracking.sql`；
-- [ ] P1-b：Web 复用页展示主动词汇量、表达广度和沉睡表达；
+- [x] P1-b：Web 复用页展示主动词汇量、表达广度和沉睡表达；
 - [ ] P1-c：新增 `suggest_reuse`，带频控、扩充式语气和全局开关；
 - [ ] P1-d：模型辅助的意图聚类、同义变体识别，以及用户可拆分/合并意图。
 
@@ -185,7 +185,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入；
 - 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达；
-- 下一步功能：P1-b Web 复用页，展示主动词汇量、表达广度和沉睡表达。
+- 下一步功能：P1-c `suggest_reuse`，在 Agent 中用扩充式语气提示同一意图下的其他说法，并带频控和开关。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 
