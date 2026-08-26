@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import Database from "better-sqlite3";
 import {
   createSessionInputSchema,
-  generatePracticeFromMaterials,
+  normalizeQuestion,
+  generatePracticeFromItems,
   generatePracticeInputSchema,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
@@ -155,8 +156,6 @@ CREATE TABLE IF NOT EXISTS sync_tombstones (
 `;
 
 /** Collapse a question to a comparable form for exact-dedupe. */
-export const normalizeQuestion = (q: string): string => q.trim().toLowerCase().replace(/\s+/g, " ");
-
 const jsonOrEmpty = (value: string): string[] => {
   try {
     const parsed = JSON.parse(value);
@@ -287,23 +286,27 @@ export class LocalStore {
     return { id, sessionId: parsed.sessionId, source: parsed.source, question: parsed.question, translation: parsed.translation, topic: parsed.topic, createdAt };
   }
 
-  searchCorpus(query?: string) {
+  searchCorpus(query?: string, filters: { source?: string; tag?: string } = {}) {
     const trimmed = query?.trim();
     const like = trimmed ? `%${trimmed}%` : null;
 
-    const materials = (
+    let materialRows = (
       like
         ? this.db
             .prepare(
               `SELECT * FROM learning_materials
-               WHERE original_text LIKE ? OR topic LIKE ? OR explanation LIKE ? OR useful_expressions LIKE ? OR vocabulary LIKE ?
+               WHERE original_text LIKE ? OR topic LIKE ? OR explanation LIKE ? OR useful_expressions LIKE ? OR vocabulary LIKE ? OR tags LIKE ?
                ORDER BY created_at DESC`
             )
-            .all(like, like, like, like, like)
+            .all(like, like, like, like, like, like)
         : this.db.prepare("SELECT * FROM learning_materials ORDER BY created_at DESC").all()
     ) as MaterialRow[];
+    if (filters.source) materialRows = materialRows.filter((row) => row.source === filters.source);
+    if (filters.tag) {
+      materialRows = materialRows.filter((row) => jsonOrEmpty(row.tags).includes(filters.tag as string));
+    }
 
-    const questions = (
+    let questionRows = (
       like
         ? this.db
             .prepare(
@@ -314,10 +317,11 @@ export class LocalStore {
             .all(like, like, like)
         : this.db.prepare("SELECT * FROM question_translations ORDER BY created_at DESC").all()
     ) as QuestionRow[];
+    if (filters.source) questionRows = questionRows.filter((row) => row.source === filters.source);
 
     return {
-      materials: materials.map(toMaterial),
-      questions: questions.map(toQuestion)
+      materials: materialRows.map(toMaterial),
+      questions: questionRows.map(toQuestion)
     };
   }
 
@@ -329,7 +333,7 @@ export class LocalStore {
                 learning_materials.topic, learning_materials.created_at
          FROM review_items
          JOIN learning_materials ON learning_materials.id = review_items.material_id
-         WHERE review_items.status = 'pending' AND review_items.due_at <= ?
+         WHERE review_items.status IN ('pending', 'snoozed') AND review_items.due_at <= ?
          ORDER BY review_items.due_at ASC`
       )
       .all(new Date().toISOString());
@@ -349,7 +353,11 @@ export class LocalStore {
 
   generatePractice(input: unknown) {
     const parsed = generatePracticeInputSchema.parse(input);
-    return generatePracticeFromMaterials(this.recentMaterials(50) as PracticeMaterial[], parsed);
+    return generatePracticeFromItems(
+      this.recentMaterials(50) as PracticeMaterial[],
+      this.recentQuestions(50) as PracticeQuestion[],
+      parsed
+    );
   }
 
   getUserPatterns(input: unknown) {
@@ -366,6 +374,18 @@ export class LocalStore {
       .run(new Date().toISOString(), new Date().toISOString(), reviewId);
     if (result.changes === 0) throw new Error("Review item not found or already completed");
     return { id: reviewId, status: "completed" };
+  }
+
+  snoozeReview(reviewId: string, days = 1) {
+    const dueAt = new Date(Date.now() + days * 86_400_000).toISOString();
+    const result = this.db
+      .prepare(
+        `UPDATE review_items SET status = 'snoozed', due_at = ?, updated_at = ?, sync_status = 'local_only'
+         WHERE id = ? AND status IN ('pending', 'snoozed')`
+      )
+      .run(dueAt, new Date().toISOString(), reviewId);
+    if (result.changes === 0) throw new Error("Review item not found or already completed");
+    return { id: reviewId, status: "snoozed" as const, dueAt };
   }
 
   /** Record a deletion so it can be pushed to other devices. */
@@ -690,6 +710,7 @@ export const createLocalContext = (store: LocalStore) => ({
   searchCorpus: (query?: string) => store.searchCorpus(query),
   getReviewItems: () => store.getReviewItems(),
   markMastered: (reviewId: string) => store.markMastered(reviewId),
+  snoozeReview: (reviewId: string, days?: number) => store.snoozeReview(reviewId, days),
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input)
 });
