@@ -23,6 +23,10 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `record_reuse` — record that a saved expression naturally appeared in later work text.
 - `get_reuse_summary` — summarize active vocabulary, sleeping expressions, cross-scene reuse, and recent reuse events.
 - `suggest_reuse` — given the user's current English text, find at most one other saved expression for the same intent. This is expansion, not correction.
+- `list_expressions` — list saved expressions and their intent assignment; use `includeUnclustered: true` to see expressions that still need an intent.
+- `cluster_intents` — the host model groups semantically equivalent expressions by communicative goal and persists the groups as intents. The model judges grouping; the tool only stores it.
+- `merge_intents` — merge two intents that describe the same goal.
+- `split_intent` — split one intent into two or more finer-grained intents.
 - `configure_reuse_nudges` — turn reuse nudges on/off or change their cooldown and daily limit when the user asks to make them quieter or stop.
 
 ## Saving a question and its translation
@@ -179,6 +183,25 @@ Tags:           <2-4 short labels>               -> tags
 
 One item per `save_material` call: pass one string per array, not a merged list.
 Never save a `Vocabulary` or `Tags` value the user has not seen.
+
+## Clustering expressions into intents
+
+Intents make `suggest_reuse` work: without an intent, the tool cannot know which
+saved phrases are alternatives for the same goal. Clustering is model-assisted —
+you are the model — but conservative. Do not merge aggressively.
+
+1. Call `list_expressions` with `includeUnclustered: true`.
+2. Group expressions by communicative goal (e.g. "deploy a database change",
+   "ask for clarification", "push back on scope"), not by topic or keyword.
+3. Call `cluster_intents` once with the groups. Keep labels short and verb-first.
+4. Leave an expression unclustered if you are unsure; a missing intent is better
+   than a wrong merge.
+5. Use `merge_intents` when two existing intents are clearly the same goal, and
+   `split_intent` when one intent bundles distinct goals.
+
+Treat one intent as a family of valid alternatives. They may differ in register,
+tone, or scene; none is the single correct answer. Do not split just because two
+phrasings use different words.
 
 ## Search, practice, review, and reuse
 
