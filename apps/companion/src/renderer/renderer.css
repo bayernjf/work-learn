@@ -96,6 +96,31 @@ header {
   padding: 0 12px;
 }
 
+.auto {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 12px 12px;
+  border-top: 1px solid #00000040;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.switch input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
 .guarantee {
   margin: 0;
   padding: 8px 12px 0;

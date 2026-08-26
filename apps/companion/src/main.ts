@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, globalShortcut, Notification, clipboard } from "electron";
 import { spawn } from "node:child_process";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 
 const WEB_URL = process.env.WORK_LEARN_WEB_URL ?? "https://work-learn.pages.dev";
 const HOTKEY = process.env.WORK_LEARN_HOTKEY ?? "CommandOrControl+Shift+L";
@@ -85,6 +86,54 @@ async function captureSelection() {
   if (window && window.webContents) window.webContents.send("refresh");
 }
 
+interface CompanionConfig {
+  autoCapture: boolean;
+}
+
+function configPath() {
+  return join(app.getPath("userData"), "companion-config.json");
+}
+
+function loadConfig(): CompanionConfig {
+  try {
+    return { autoCapture: false, ...(JSON.parse(readFileSync(configPath(), "utf8")) as Partial<CompanionConfig>) };
+  } catch {
+    return { autoCapture: false };
+  }
+}
+
+function saveConfig(cfg: CompanionConfig) {
+  try {
+    mkdirSync(dirname(configPath()), { recursive: true });
+    writeFileSync(configPath(), JSON.stringify(cfg));
+  } catch {
+    /* best effort */
+  }
+}
+
+// M4: open a real terminal window whose interactive shell is wrapped by
+// `learn run`, so the user's terminal agent sessions are recorded automatically
+// (closing the window saves the transcript via the existing run command).
+async function openRecordedTerminal(): Promise<LearnResult> {
+  const { command, baseArgs } = resolveLearn();
+  const shellName = (process.env.SHELL ?? "/bin/zsh").split("/").pop() || "zsh";
+  const cmd = `${command} ${baseArgs.map((a) => JSON.stringify(a)).join(" ")} run -- ${shellName}`;
+  const appleScript = `tell application "Terminal" to do script ${JSON.stringify(cmd)}`;
+  return runOsascript(appleScript);
+}
+
+async function setAutoCapture(on: boolean) {
+  const cfg = loadConfig();
+  cfg.autoCapture = on;
+  saveConfig(cfg);
+  if (on) {
+    const res = await openRecordedTerminal();
+    notify("Work Learn", res.ok ? "自动采集已开启：已打开录制终端" : "无法打开录制终端：" + res.output);
+  } else {
+    notify("Work Learn", "自动采集已停止");
+  }
+}
+
 let tray: Tray | null = null;
 let window: BrowserWindow | null = null;
 
@@ -132,6 +181,7 @@ app.whenReady().then(() => {
     Menu.buildFromTemplate([
       { label: "打开面板", click: () => showWindow() },
       { label: "采集选中文本", click: () => void captureSelection() },
+      { label: "打开录制终端", click: () => void openRecordedTerminal() },
       { label: "打开 Web 语料库", click: () => shell.openExternal(WEB_URL) },
       { type: "separator" },
       { label: "退出", click: () => app.quit() }
@@ -141,6 +191,9 @@ app.whenReady().then(() => {
 
   const registered = globalShortcut.register(HOTKEY, () => void captureSelection());
   if (!registered) console.warn(`[companion] global shortcut "${HOTKEY}" could not be registered (already in use?)`);
+
+  // M4: if auto-capture was enabled previously, open a recorded terminal on launch.
+  if (loadConfig().autoCapture) void openRecordedTerminal();
 
   ipcMain.handle("get-stats", async (): Promise<unknown> => {
     const { ok, output } = await runLearn(["stats", "--json"]);
@@ -169,6 +222,16 @@ app.whenReady().then(() => {
     } catch {
       return { ok: false, error: output };
     }
+  });
+  ipcMain.handle("get-config", async (): Promise<CompanionConfig> => loadConfig());
+  ipcMain.handle("open-recorded-terminal", async (): Promise<LearnResult> => {
+    const result = await openRecordedTerminal();
+    if (result.ok) notify("Work Learn", "已打开录制终端");
+    return result;
+  });
+  ipcMain.handle("set-auto-capture", async (_event, on: boolean): Promise<CompanionConfig> => {
+    await setAutoCapture(on);
+    return loadConfig();
   });
 
   // Stay alive in the background after the panel is closed.

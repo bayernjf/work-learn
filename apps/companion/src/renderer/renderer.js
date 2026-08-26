@@ -28,6 +28,7 @@ async function refresh() {
   document.getElementById("lastSync").textContent = fmtDate(s.lastPulledAt);
   setStatus("");
   await updateHealth();
+  await applyConfig();
 }
 
 document.getElementById("refresh").addEventListener("click", refresh);
@@ -92,6 +93,29 @@ function classifySyncError(output) {
   return "同步失败：" + msg;
 }
 
+async function applyConfig() {
+  try {
+    const cfg = await wl.getConfig();
+    const box = document.getElementById("autoCapture");
+    if (box) box.checked = !!(cfg && cfg.autoCapture);
+  } catch {
+    /* ignore config read errors */
+  }
+}
+
+document.getElementById("autoCapture").addEventListener("change", async (e) => {
+  const on = e.target.checked;
+  setStatus(on ? "开启自动采集中…" : "停止自动采集中…");
+  await wl.setAutoCapture(on);
+  setStatus(on ? "自动采集已开启" : "自动采集已停止", "ok");
+});
+
+document.getElementById("openRecorded").addEventListener("click", async () => {
+  setStatus("打开录制终端中…");
+  const res = await wl.openRecordedTerminal();
+  setStatus(res.ok ? "已打开录制终端" : "打开失败：" + res.output, res.ok ? "ok" : "error");
+});
+
 wl.onRefresh(refresh);
 window.addEventListener("DOMContentLoaded", refresh);
-setInterval(refresh, 8000); // keep stats and cloud health fresh while the app runs
+setInterval(refresh, 8000); // keep stats, cloud health and config fresh while the app runs
