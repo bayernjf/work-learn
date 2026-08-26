@@ -214,6 +214,15 @@ export const syncBatchInputSchema = z.object({
 export const syncPullQuerySchema = z.object({
   since: z.string().datetime().optional()
 });
+
+export const portableImportSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string().datetime().optional(),
+  sessions: z.array(syncSessionSchema).default([]),
+  materials: z.array(syncMaterialSchema).default([]),
+  questionTranslations: z.array(syncQuestionTranslationSchema).default([]),
+  reviews: z.array(syncReviewSchema).default([])
+});
 export const syncReviewColumns =
   "id,material_id,status,due_at,interval_days,completed_at,created_at,updated_at";
 
