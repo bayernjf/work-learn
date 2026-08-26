@@ -106,6 +106,12 @@ apps/api/src/
 - `search_corpus`
 - `get_review_items`
 - `mark_mastered`
+- `snooze_review`
+- `generate_practice`
+- `get_user_patterns`
+- `get_reuse_summary`
+- `record_reuse`
+- `suggest_reuse`
 
 工具入参继续由 `@work-learn/shared-schema` 的 Zod schema 校验。
 

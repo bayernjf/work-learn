@@ -45,7 +45,7 @@ packages/setup           npx 一键安装器，写入各 Agent 的 MCP 配置
 - `POST /api/sync`：接收 `learn sync` 推送的本地数据，幂等 upsert 到用户云端表
 - 所有请求和响应通过 `@work-learn/shared-schema` 校验。
 
-MCP Server 提供两种形态：本地 stdio 与远程 HTTP（挂载在 `/api/mcp`，普通用户通过 URL + 授权连接 Agent）。**stdio 默认走本地优先**——未设置 token 时直接读写本地 SQLite，设置了 `WORK_LEARN_ACCESS_TOKEN`（或 `WORK_LEARN_ACCESS_TOKEN_FILE`）才回退为调用线上 API。两种形态复用同一套工具逻辑，已实现 `create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary` 和 `record_reuse` 十一个工具。详见 [远程 MCP 方案](remote-mcp.md)。
+MCP Server 提供两种形态：本地 stdio 与远程 HTTP（挂载在 `/api/mcp`，普通用户通过 URL + 授权连接 Agent）。**stdio 默认走本地优先**——未设置 token 时直接读写本地 SQLite，设置了 `WORK_LEARN_ACCESS_TOKEN`（或 `WORK_LEARN_ACCESS_TOKEN_FILE`）才回退为调用线上 API。两种形态复用同一套工具逻辑，已实现 `create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse` 和 `suggest_reuse` 十二个工具。详见 [远程 MCP 方案](remote-mcp.md)。
 
 ## 4. 本地开发
 

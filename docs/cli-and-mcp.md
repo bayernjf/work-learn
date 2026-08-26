@@ -147,6 +147,7 @@ MCP 当前提供：
 - `get_user_patterns`
 - `get_reuse_summary`
 - `record_reuse`
+- `suggest_reuse`
 
 ### import API
 
