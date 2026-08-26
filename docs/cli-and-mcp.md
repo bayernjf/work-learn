@@ -12,6 +12,8 @@ learn practice # 从最近材料和提问翻译生成本地练习
 learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN）
 learn doctor   # 检查本地库、token 配置和 API 健康状态
 learn delete   # 删除本地材料或提问，并记录 tombstone
+learn backup   # 备份本地 SQLite 数据库
+learn restore  # 从 SQLite 备份恢复本地数据库（需 --file 和 --yes）
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
 ```
 
@@ -82,6 +84,27 @@ learn delete question --id <question-id>
 
 Web 端的材料卡片和提问卡片也提供了删除按钮，删除会直接写云端 tombstone。
 
+### backup
+
+把本地 SQLite 数据库复制成一个可恢复的备份文件。默认保存到 `~/.work-learn/backups/`，也可以用 `--out` 指定路径：
+
+```bash
+learn backup
+learn backup --out ~/Downloads/work-learn-backup.db
+```
+
+备份前会 checkpoint WAL，并验证备份文件包含 Work Learn 的必要表。
+
+### restore
+
+从 `learn backup` 生成的 SQLite 文件恢复本地库：
+
+```bash
+learn restore --file ~/Downloads/work-learn-backup.db --yes
+```
+
+恢复前会自动把当前库另存为 `work-learn.db.before-restore-<timestamp>`，恢复后会重新打开数据库做一次本地统计校验。恢复不会自动 `learn sync`，确认无误后再手动同步，避免误覆盖云端。
+
 ### export
 
 把本地库按天覆盖式导出为 markdown（`~/.work-learn/notes/YYYY/MM/YYYY-MM-DD.md`）：
@@ -122,6 +145,24 @@ MCP 当前提供：
 - `mark_mastered`
 - `generate_practice`
 - `get_user_patterns`
+- `record_reuse`
+
+### import API
+
+Web 端 JSON 导入调用 `POST /api/import`，需要 write scope。请求体是版本化 JSON：
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-08-26T00:00:00.000Z",
+  "sessions": [],
+  "materials": [],
+  "questionTranslations": [],
+  "reviews": []
+}
+```
+
+服务端按稳定 id 做 last-write-wins upsert，并为缺失复习项的材料补建 pending review。
 
 Claude Desktop 的本地配置示例（本地优先，无需 env）：
 

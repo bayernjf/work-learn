@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { redactSecrets } from "@work-learn/learning-core";
-import { DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
+import { DEFAULT_BACKUP_DIR, DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
 
 const execFileAsync = promisify(execFile);
 const [command, ...args] = process.argv.slice(2);
@@ -17,6 +17,8 @@ const commands = {
   sync: "Pull cloud changes, push local changes, and sync review state.",
   delete: "Delete a local material or question and record a tombstone.",
   doctor: "Check local DB, token config, and API health.",
+  backup: "Back up the local SQLite database.",
+  restore: "Restore the local SQLite database from a backup.",
   export: "Export local data to markdown notes."
 } as const;
 
@@ -34,6 +36,10 @@ if (command === "capture") {
   await deleteItem(args);
 } else if (command === "doctor") {
   await doctor(args);
+} else if (command === "backup") {
+  await backup(args);
+} else if (command === "restore") {
+  await restore(args);
 } else if (command === "export") {
   await exportNotes(args);
 } else if (!command || !(command in commands)) {
@@ -115,6 +121,43 @@ async function practice(args: string[]) {
   }
 }
 
+async function backup(args: string[]) {
+  const out = option(args, "--out");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
+  const destination = resolve(out ?? join(DEFAULT_BACKUP_DIR, `work-learn-${timestamp}.db`));
+  mkdirSync(dirname(destination), { recursive: true });
+  if (existsSync(destination) && !args.includes("--force")) {
+    throw new Error(`Backup already exists: ${destination}. Re-run with --force to overwrite it.`);
+  }
+  const store = openStore();
+  try {
+    const result = store.backupTo(destination);
+    console.log(JSON.stringify({ backedUp: true, ...result }, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function restore(args: string[]) {
+  const backupPath = option(args, "--file");
+  if (!backupPath) throw new Error("Provide the backup to restore with --file <path>");
+  if (!args.includes("--yes")) throw new Error("Restoring replaces the local database. Re-run with --yes to continue.");
+  const store = openStore();
+  try {
+    const dbPath = store.stats().dbPath;
+    store.close();
+    const result = LocalStore.restoreBackup(resolve(backupPath), dbPath);
+    const verification = new LocalStore({ dbPath: result.dbPath });
+    try {
+      console.log(JSON.stringify({ restored: true, ...result, verified: verification.stats() }, null, 2));
+    } finally {
+      verification.close();
+    }
+  } finally {
+    try { store.close(); } catch { /* already closed after pre-restore checkpoint */ }
+  }
+}
+
 async function readClipboard() {
   if (process.platform === "darwin") return (await execFileAsync("pbpaste")).stdout;
   if (process.platform === "linux") return (await execFileAsync("xclip", ["-selection", "clipboard", "-o"])).stdout;
@@ -158,8 +201,10 @@ async function pullChanges(apiUrl: string, token: string, store: LocalStore) {
 
 async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
   const batch = store.unsynced();
-  const total = batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length + batch.tombstones.length;
-  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, tombstones: 0 } };
+  const total =
+    batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length +
+    batch.intents.length + batch.expressions.length + batch.reuseEvents.length + batch.tombstones.length;
+  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, tombstones: 0 } };
 
   const response = await fetch(`${apiUrl}/api/sync`, {
     method: "POST",
@@ -176,10 +221,13 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
     materials: batch.materials.map((row) => row.id),
     questions: batch.questions.map((row) => row.id),
     reviews: batch.reviews.map((row) => row.id),
+    intents: batch.intents.map((row) => row.id),
+    expressions: batch.expressions.map((row) => row.id),
+    reuseEvents: batch.reuseEvents.map((row) => row.id),
     tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
   });
 
-  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; tombstones: number } };
+  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; tombstones: number } };
   return { pushed: result.data };
 }
 

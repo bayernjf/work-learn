@@ -186,7 +186,59 @@ async saveQuestionTranslation(input) {
 
 ---
 
-## 7. 明确不做 / 已排除
+## 7. 备份、恢复与可移植导入
+
+Markdown 导出只负责“可读归档”，**不作为无损恢复格式**：它会丢失稳定 id、review 状态、同步游标和 tombstone。恢复路径按可靠性分三层。
+
+### 7.1 云端同步是默认恢复路径
+
+换机器或本地库丢失时，优先登录同一个 Supabase 账号并运行：
+
+```bash
+learn sync
+```
+
+云端同步副本包含 sessions、materials、question translations、reviews 和 tombstones。`learn sync` 会 pull → push → pull，用稳定 UUID 幂等写回本地。
+
+### 7.2 SQLite 备份是最可靠的本地恢复路径
+
+已提供 CLI：
+
+```bash
+learn backup --out ~/Downloads/work-learn-backup.db
+learn restore --file ~/Downloads/work-learn-backup.db
+```
+
+设计约束：
+
+- `backup` 复制当前 `~/.work-learn/work-learn.db` 到用户指定路径；
+- `restore` 先验证目标文件是可打开的 SQLite，并检查必要业务表；
+- 恢复前自动备份当前库为 `work-learn.db.before-restore-<timestamp>`；
+- 恢复后运行一次本地自检，等价于 `learn doctor` 的本地库检查；
+- 不在恢复时自动 push，避免用户还没确认就覆盖云端；确认无误后再手动 `learn sync`。
+
+### 7.3 JSON 导出 / 导入用于跨账号或人工迁移
+
+JSON 是结构化迁移格式，保留业务字段但不应替代 SQLite 全量备份。Web 端已提供 `Export JSON` / `Import JSON`，导入走后端 `POST /api/import`：
+
+```json
+{
+  "version": 1,
+  "exportedAt": "2026-08-26T00:00:00.000Z",
+  "sessions": [],
+  "materials": [],
+  "questionTranslations": [],
+  "reviews": []
+}
+```
+
+导入按原始 id 幂等 upsert，沿用 last-write-wins，并在结果里返回新增、更新、跳过数量。浏览器不直接批量写 Supabase，避免权限、限流和大批量失败处理散落在前端。
+
+**结论**：Markdown 用于阅读；SQLite backup/restore 用于本机无损恢复；云端 sync 用于换设备；JSON import/export 用于跨账号或人工迁移。
+
+---
+
+## 8. 明确不做 / 已排除
 
 - **旧数据迁移**：真实用户从零开始、无存量数据，此问题是伪命题，**不做**。作者现有云端开发测试数据留在云端，不影响任何真实用户。
 - 复习队列同步（第一版）
@@ -195,7 +247,7 @@ async saveQuestionTranslation(input) {
 
 ---
 
-## 8. 实施顺序（4 个原子阶段，每阶段独立 commit）
+## 9. 实施顺序（4 个原子阶段，每阶段独立 commit）
 
 | 阶段 | 内容 |
 |------|------|

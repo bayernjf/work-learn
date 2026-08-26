@@ -1,7 +1,7 @@
-import { FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
+import { ChangeEvent, FormEvent, StrictMode, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, LearningMaterial, PortableCorpus, PracticeResult, QuestionTranslation, ReviewItem, SyncStatus, UserPatterns } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -62,6 +62,10 @@ function App({ supabase }: { supabase: SupabaseClient }) {
   const [patternsLoading, setPatternsLoading] = useState(false);
   const [patternsError, setPatternsError] = useState("");
   const searchInput = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+  const [importError, setImportError] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -242,17 +246,81 @@ function App({ supabase }: { supabase: SupabaseClient }) {
     }
   };
 
+  const handleExportJson = () => {
+    const exportedAt = new Date().toISOString();
+    const sessionIds = new Set([...materials.map((material) => material.session_id), ...questions.map((question) => question.session_id)]);
+    const sessions = new Map<string, { id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>();
+    for (const material of materials) {
+      sessions.set(material.session_id, { id: material.session_id, source: material.source, topic: material.topic, createdAt: material.created_at, updatedAt: material.updated_at });
+    }
+    for (const question of questions) {
+      if (!sessions.has(question.session_id)) sessions.set(question.session_id, { id: question.session_id, source: question.source, topic: question.topic, createdAt: question.created_at, updatedAt: question.updated_at });
+    }
+    const payload: PortableCorpus = {
+      version: 1,
+      exportedAt,
+      sessions: [...sessions.values()],
+      materials: materials.map((material) => ({
+        id: material.id,
+        sessionId: material.session_id,
+        source: material.source,
+        topic: material.topic,
+        originalText: material.original_text,
+        explanation: material.explanation,
+        usefulExpressions: material.useful_expressions,
+        corrections: material.corrections,
+        vocabulary: material.vocabulary,
+        practicePrompts: material.practice_prompts,
+        tags: material.tags,
+        createdAt: material.created_at,
+        updatedAt: material.updated_at
+      })),
+      questionTranslations: questions.map((question) => ({
+        id: question.id,
+        sessionId: question.session_id,
+        source: question.source,
+        question: question.question,
+        translation: question.translation,
+        topic: question.topic,
+        createdAt: question.created_at,
+        updatedAt: question.updated_at
+      })),
+      reviews: []
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    downloadBlob(blob, `work-learn-${new Date().toISOString().slice(0, 10)}.json`);
+  };
+
+  const handleImportClick = () => importInput.current?.click();
+
+  const handleImportFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!session || !file) return;
+    setImporting(true);
+    setImportMessage("");
+    setImportError("");
+    try {
+      const payload = JSON.parse(await file.text()) as PortableCorpus;
+      if (payload.version !== 1) throw new Error(t.import.invalidVersion);
+      const result = await importCorpus(session, payload);
+      const counts = result.data.counts;
+      setImportMessage(t.import.imported(
+        counts.materials.inserted + counts.materials.updated,
+        counts.questions.inserted + counts.questions.updated
+      ));
+      setReloadKey((key) => key + 1);
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : t.import.error);
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const handleExport = () => {
     const markdown = buildExportMarkdown(visible, visibleQuestions, t);
     const blob = new Blob([markdown], { type: "text/markdown;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `work-learn-${new Date().toISOString().slice(0, 10)}.md`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `work-learn-${new Date().toISOString().slice(0, 10)}.md`);
   };
 
   if (!session) {
@@ -288,8 +356,14 @@ function App({ supabase }: { supabase: SupabaseClient }) {
             <h1>{t.desk.title}</h1>
             <span>{loadError ? t.desk.couldNotLoad : corpusSummary(materials, t)}</span>
           </div>
-          <button type="button" className="ghost-button" disabled={empty} onClick={handleExport}>{t.export.button}</button>
+          <div className="desk-actions">
+            <button type="button" className="ghost-button" disabled={empty} onClick={handleExportJson}>{t.export.jsonButton}</button>
+            <button type="button" className="ghost-button" disabled={empty} onClick={handleExport}>{t.export.button}</button>
+            <button type="button" className="ghost-button" disabled={importing} onClick={handleImportClick}>{importing ? t.import.importing : t.import.button}</button>
+            <input ref={importInput} type="file" accept="application/json,.json" onChange={(event) => void handleImportFile(event)} hidden />
+          </div>
         </div>
+        {importMessage || importError ? <p className={importError ? "import-status import-error" : "import-status"} role="status">{importError || importMessage}</p> : null}
         {loadError ? (
           <div className="desk-error" role="alert">
             <p>{loadError}</p>
@@ -346,6 +420,17 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <AppFooter />
     </main>
   );
+}
+
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 }
 
 function facetCounts(values: string[]) {

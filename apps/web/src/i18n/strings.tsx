@@ -65,6 +65,7 @@ export const en = {
   },
 
   errors: {
+    importCorpus: "Could not import this JSON file",
     loadCorpus: "Could not load your corpus",
     completeReview: "Could not complete this review",
     config: "Could not load Work Learn configuration",
@@ -136,6 +137,7 @@ export const en = {
 
   export: {
     button: "Export markdown",
+    jsonButton: "Export JSON",
     generatedAt: "Generated at",
     source: "Source",
     created: "Created",
@@ -144,6 +146,14 @@ export const en = {
     materials: "materials",
     question: "question",
     questions: "questions",
+  },
+
+  import: {
+    button: "Import JSON",
+    importing: "Importing…",
+    invalidVersion: "This file is not a supported Work Learn JSON export.",
+    imported: (materials: number, questions: number) => `Imported or updated ${materials} materials and ${questions} questions.`,
+    error: "Could not import this file",
   },
 
   practice: {
@@ -194,7 +204,7 @@ Do this:
 3. Use the token verbatim. Never invent, guess, or truncate one. Treat it as a secret: do not echo it back to me, log it, or write it anywhere except that config file.
 4. If this client cannot speak remote MCP over Streamable HTTP, do not improvise a workaround — say so and stop, and I will use the local installer instead.
 5. Recommended: also install the Work Learn skill, which tells you when to save material. Download ${skillUrl} into this client's skills folder as work-learn/SKILL.md.
-6. Tell me to restart the client, then confirm these nine tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns.`,
+6. Tell me to restart the client, then confirm these ten tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, record_reuse.`,
     modesLabel: "Where the token goes",
     modeInline: "Token in the prompt",
     modeFile: "Token in a file",
@@ -210,7 +220,7 @@ Do this:
    If you run it from anywhere else, add --repo <path to the clone>.
 3. That installer detects Codex, Claude Code, Claude Desktop, CodeBuddy, Cursor and OpenCode, backs up each config file before writing it, records the path instead of the token, and installs the Work Learn skill. Do not hand-edit the config files yourself.
 4. If it fails, show me its output and stop. Do not fall back to putting a token in a config file.
-5. Tell me to restart the client, then confirm these nine tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns.
+5. Tell me to restart the client, then confirm these ten tools are available: create_session, save_material, save_question_translation, search_corpus, get_review_items, mark_mastered, snooze_review, generate_practice, get_user_patterns, record_reuse.
 
 The skill it installs is the same one published at ${skillUrl}.`,
     tokenStep: "Create a personal access token. Every route below needs one.",
@@ -401,6 +411,7 @@ export const zh: Strings = {
   },
 
   errors: {
+    importCorpus: "导入 JSON 文件失败",
     loadCorpus: "语料加载失败",
     completeReview: "标记复习完成失败",
     config: "读取 Work Learn 配置失败",
@@ -472,6 +483,7 @@ export const zh: Strings = {
 
   export: {
     button: "导出 Markdown",
+    jsonButton: "导出 JSON",
     generatedAt: "生成时间",
     source: "来源",
     created: "保存时间",
@@ -480,6 +492,14 @@ export const zh: Strings = {
     materials: "条材料",
     question: "条提问",
     questions: "条提问",
+  },
+
+  import: {
+    button: "导入 JSON",
+    importing: "导入中…",
+    invalidVersion: "这个文件不是受支持的 Work Learn JSON 导出。",
+    imported: (materials: number, questions: number) => `已导入或更新 ${materials} 条材料和 ${questions} 条提问。`,
+    error: "导入文件失败",
   },
 
   practice: {
@@ -530,7 +550,7 @@ export const zh: Strings = {
 3. token 原样使用，不要凭空编造、猜测或截断。把它当密钥对待：不要回显给我、不要写进日志，除了那个配置文件之外不要写到任何地方。
 4. 如果这个客户端不支持 Streamable HTTP 的远程 MCP，不要自己想变通办法 —— 直接告诉我并停下，我改用本地安装器。
 5. 建议顺便装上 Work Learn 的 skill，它会告诉你何时该保存材料：把 ${skillUrl} 下载到这个客户端的 skills 目录，路径为 work-learn/SKILL.md。
-6. 告诉我需要重启客户端，然后确认这 9 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns。`,
+6. 告诉我需要重启客户端，然后确认这 10 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、record_reuse。`,
     modesLabel: "token 放在哪",
     modeInline: "token 写进提示词",
     modeFile: "token 存在文件里",
@@ -546,7 +566,7 @@ export const zh: Strings = {
    如果你在别的目录执行，就加上 --repo <clone 的路径>。
 3. 这个安装器会自己检测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor 和 OpenCode，写入前先备份各自的配置文件，配置里记的是这个路径而不是 token，并且会顺带装上 Work Learn 的 skill。不要自己手改这些配置文件。
 4. 如果它失败了，把它的输出给我看然后停下。不要退而把 token 写进配置文件。
-5. 告诉我需要重启客户端，然后确认这 9 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns。
+5. 告诉我需要重启客户端，然后确认这 10 个工具可用：create_session、save_material、save_question_translation、search_corpus、get_review_items、mark_mastered、snooze_review、generate_practice、get_user_patterns、record_reuse。
 
 它装的 skill 就是 ${skillUrl} 这一份。`,
     tokenStep: "创建一个 personal access token，下面三种方式都需要它。",

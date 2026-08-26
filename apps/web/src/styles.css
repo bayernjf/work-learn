@@ -1538,3 +1538,17 @@ code {
   color: var(--ink-2);
 }
 .card-action-buttons { display: inline-flex; gap: 12px; }
+
+/* Import / export actions */
+.desk-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.import-status {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.import-error { color: var(--danger); }

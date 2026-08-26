@@ -8,10 +8,18 @@ import {
   hasScope,
   materialColumns,
   normalizeQuestion,
+  normalizeReuseText,
   questionTranslationColumns,
+  recordReuseInputSchema,
+  redactSecrets,
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
+  findReuseMatches,
+  syncIntentColumns,
+  syncReuseEventColumns,
+  syncSavedExpressionColumns,
   updateMaterialSchema,
+  portableImportSchema,
   syncBatchInputSchema,
   syncReviewColumns,
   syncTombstoneColumns,
@@ -93,7 +101,47 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     });
     if (review.error) throw new Error(review.error.message);
 
+    await ensureCloudExpressions(supabase, userId, materialId, parsed.source, parsed.usefulExpressions);
+
     return material;
+  },
+
+  async recordReuse(input) {
+    requireScope(scopes, "write");
+    const parsed = recordReuseInputSchema.parse(input);
+    const safeText = redactSecrets(parsed.text).text;
+    const safeContext = parsed.contextSnippet ? redactSecrets(parsed.contextSnippet).text : null;
+    const rows = ok(await supabase
+      .from("saved_expressions")
+      .select("id,text")
+      .eq("user_id", userId)) as Array<{ id: string; text: string }>;
+    const matches = findReuseMatches(safeText, rows);
+    const recordedAt = new Date().toISOString();
+    for (const match of matches) {
+      const event = await supabase
+        .from("reuse_events")
+        .insert({
+          user_id: userId,
+          expression_id: match.expressionId,
+          session_id: parsed.sessionId ?? null,
+          source: parsed.source ?? null,
+          matched_text: match.matchedText,
+          context_snippet: safeContext,
+          match_kind: match.matchKind,
+          confidence: match.confidence,
+          created_at: recordedAt
+        })
+        .select("id")
+        .single();
+      if (event.error) throw new Error(event.error.message);
+      const incremented = await supabase.rpc("increment_saved_expression_reuse", {
+        p_expression_id: match.expressionId,
+        p_user_id: userId,
+        p_used_at: recordedAt
+      });
+      if (incremented.error) throw new Error(incremented.error.message);
+    }
+    return { recordedAt, recorded: matches.length, matches };
   },
 
   async saveQuestionTranslation(input) {
@@ -280,7 +328,70 @@ const normalizeReview = (row: Record<string, unknown>) => ({
   updatedAt: String(row.updated_at)
 });
 
+const normalizeIntent = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  label: String(row.label),
+  description: row.description ? String(row.description) : null,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const normalizeSavedExpression = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  materialId: row.material_id ? String(row.material_id) : null,
+  intentId: row.intent_id ? String(row.intent_id) : null,
+  text: String(row.text),
+  textNorm: String(row.text_norm),
+  register: row.register ? String(row.register) : null,
+  scene: row.scene ? String(row.scene) : null,
+  note: row.note ? String(row.note) : null,
+  reuseCount: Number(row.reuse_count ?? 0),
+  firstReusedAt: row.first_reused_at ? String(row.first_reused_at) : null,
+  lastReusedAt: row.last_reused_at ? String(row.last_reused_at) : null,
+  createdAt: String(row.created_at),
+  updatedAt: String(row.updated_at)
+});
+
+const normalizeReuseEvent = (row: Record<string, unknown>) => ({
+  id: String(row.id),
+  expressionId: String(row.expression_id),
+  sessionId: row.session_id ? String(row.session_id) : null,
+  source: row.source ? String(row.source) : null,
+  matchedText: String(row.matched_text),
+  contextSnippet: row.context_snippet ? String(row.context_snippet) : null,
+  matchKind: String(row.match_kind),
+  confidence: Number(row.confidence ?? 1),
+  createdAt: String(row.created_at)
+});
+
 const toStringArray = (value: unknown): string[] => Array.isArray(value) ? value.map(String) : [];
+
+const ensureCloudExpressions = async (
+  supabase: SupabaseClient,
+  userId: string,
+  materialId: string,
+  source: string,
+  expressions: string[]
+) => {
+  const now = new Date().toISOString();
+  const rows = expressions
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((text) => ({
+      user_id: userId,
+      material_id: materialId,
+      text,
+      text_norm: normalizeReuseText(text),
+      scene: source,
+      created_at: now,
+      updated_at: now
+    }));
+  if (rows.length === 0) return;
+  const result = await supabase
+    .from("saved_expressions")
+    .upsert(rows, { onConflict: "user_id,text_norm", ignoreDuplicates: true });
+  if (result.error) throw new Error(result.error.message);
+};
 
 /**
  * Query a user's question/translation pairs, newest first. Kept apart from
@@ -312,19 +423,27 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
   let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
   let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
   let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
+  let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
+  let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);
+  let reuseEventsQuery = supabase.from("reuse_events").select(syncReuseEventColumns).eq("user_id", userId);
   let tombstonesQuery = supabase.from("sync_tombstones").select(syncTombstoneColumns).eq("user_id", userId);
   if (trimmed) {
     sessionsQuery = sessionsQuery.gte("updated_at", trimmed);
     materialsQuery = materialsQuery.gte("updated_at", trimmed);
     questionsQuery = questionsQuery.gte("updated_at", trimmed);
     reviewsQuery = reviewsQuery.gte("updated_at", trimmed);
+    intentsQuery = intentsQuery.gte("updated_at", trimmed);
+    expressionsQuery = expressionsQuery.gte("updated_at", trimmed);
     tombstonesQuery = tombstonesQuery.gte("deleted_at", trimmed);
   }
-  const [sessions, materials, questions, reviews, tombstones] = await Promise.all([
+  const [sessions, materials, questions, reviews, intents, expressions, reuseEvents, tombstones] = await Promise.all([
     sessionsQuery.order("updated_at", { ascending: true }),
     materialsQuery.order("updated_at", { ascending: true }),
     questionsQuery.order("updated_at", { ascending: true }),
     reviewsQuery.order("updated_at", { ascending: true }),
+    intentsQuery.order("updated_at", { ascending: true }),
+    expressionsQuery.order("updated_at", { ascending: true }),
+    reuseEventsQuery.order("created_at", { ascending: true }),
     tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
   return {
@@ -332,6 +451,9 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
     questions: (ok(questions) as Record<string, unknown>[]).map(normalizeQuestionRow),
     reviews: (ok(reviews) as Record<string, unknown>[]).map(normalizeReview),
+    intents: (ok(intents) as Record<string, unknown>[]).map(normalizeIntent),
+    expressions: (ok(expressions) as Record<string, unknown>[]).map(normalizeSavedExpression),
+    reuseEvents: (ok(reuseEvents) as Record<string, unknown>[]).map(normalizeReuseEvent),
     tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id),
       entity: String(row.entity),
@@ -352,7 +474,7 @@ const normalizeSyncSession = (row: Record<string, unknown>) => ({
 const upsertWithLww = async (
   supabase: SupabaseClient,
   userId: string,
-  table: "sessions" | "learning_materials" | "question_translations",
+  table: "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions",
   rows: Array<Record<string, unknown>>
 ) => {
   for (const row of rows) {
@@ -387,6 +509,20 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
         .gte("updated_at", String(row.updated_at));
       if (updated.error) throw new Error(updated.error.message);
     }
+  }
+};
+
+const upsertImmutableWithId = async (
+  supabase: SupabaseClient,
+  userId: string,
+  table: "reuse_events",
+  rows: Array<Record<string, unknown>>
+) => {
+  for (const row of rows) {
+    const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
+    if (existing) continue;
+    const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+    if (insert.error) throw new Error(insert.error.message);
   }
 };
 
@@ -440,26 +576,145 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     created_at: r.createdAt,
     updated_at: r.updatedAt
   }));
+  const intentRows = parsed.intents.map((intent) => ({
+    id: intent.id,
+    label: intent.label,
+    description: intent.description,
+    created_at: intent.createdAt,
+    updated_at: intent.updatedAt
+  }));
+  const expressionRows = parsed.expressions.map((expression) => ({
+    id: expression.id,
+    material_id: expression.materialId,
+    intent_id: expression.intentId,
+    text: expression.text,
+    text_norm: expression.textNorm,
+    register: expression.register,
+    scene: expression.scene,
+    note: expression.note,
+    reuse_count: expression.reuseCount,
+    first_reused_at: expression.firstReusedAt,
+    last_reused_at: expression.lastReusedAt,
+    created_at: expression.createdAt,
+    updated_at: expression.updatedAt
+  }));
+  const reuseEventRows = parsed.reuseEvents.map((event) => ({
+    id: event.id,
+    expression_id: event.expressionId,
+    session_id: event.sessionId,
+    source: event.source,
+    matched_text: event.matchedText,
+    context_snippet: event.contextSnippet,
+    match_kind: event.matchKind,
+    confidence: event.confidence,
+    created_at: event.createdAt
+  }));
 
   await applyCloudTombstones(supabase, userId, parsed.tombstones);
   await upsertWithLww(supabase, userId, "sessions", sessionRows);
   await upsertWithLww(supabase, userId, "learning_materials", materialRows);
   await upsertWithLww(supabase, userId, "question_translations", questionRows);
   await upsertReviewsWithLww(supabase, userId, reviewRows);
+  await upsertWithLww(supabase, userId, "intents", intentRows);
+  await upsertWithLww(supabase, userId, "saved_expressions", expressionRows);
+  await upsertImmutableWithId(supabase, userId, "reuse_events", reuseEventRows);
 
   return {
     sessions: sessionRows.length,
     materials: materialRows.length,
     questions: questionRows.length,
     reviews: reviewRows.length,
+    intents: intentRows.length,
+    expressions: expressionRows.length,
+    reuseEvents: reuseEventRows.length,
     tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
   };
 };
 
+export const importPortableData = async (supabase: SupabaseClient, userId: string, input: unknown) => {
+  const parsed = portableImportSchema.parse(input);
+  const providedSessions = new Map(parsed.sessions.map((session) => [session.id, session]));
+  for (const item of [...parsed.materials, ...parsed.questionTranslations, ...parsed.reuseEvents.filter((event) => event.sessionId).map((event) => ({ sessionId: event.sessionId!, source: event.source ?? "manual", topic: null, createdAt: event.createdAt, updatedAt: event.createdAt }))]) {
+    if (providedSessions.has(item.sessionId)) continue;
+    const createdAt = item.createdAt;
+    providedSessions.set(item.sessionId, {
+      id: item.sessionId,
+      source: item.source,
+      topic: item.topic ?? null,
+      createdAt,
+      updatedAt: "updatedAt" in item ? item.updatedAt : createdAt
+    });
+  }
+
+  const existing = {
+    sessions: new Set((ok(await supabase.from("sessions").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => row.id)),
+    materials: new Map((ok(await supabase.from("learning_materials").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => [row.id, row.updated_at])),
+    questions: new Map((ok(await supabase.from("question_translations").select("id, updated_at").eq("user_id", userId)) as Array<{ id: string; updated_at: string }>).map((row) => [row.id, row.updated_at]))
+  };
+
+  const counts = {
+    sessions: { inserted: 0, updated: 0, skipped: 0 },
+    materials: { inserted: 0, updated: 0, skipped: 0 },
+    questions: { inserted: 0, updated: 0, skipped: 0 },
+    reviews: { inserted: 0, updated: 0, skipped: 0 },
+    intents: { inserted: 0, updated: 0, skipped: 0 },
+    expressions: { inserted: 0, updated: 0, skipped: 0 },
+    reuseEvents: { inserted: 0, updated: 0, skipped: 0 }
+  };
+  for (const session of providedSessions.values()) {
+    if (!existing.sessions.has(session.id)) counts.sessions.inserted += 1;
+    else counts.sessions.updated += 1;
+  }
+  for (const material of parsed.materials) classify(material, existing.materials, counts.materials);
+  for (const question of parsed.questionTranslations) classify(question, existing.questions, counts.questions);
+
+  await syncToCloud(supabase, userId, {
+    sessions: [...providedSessions.values()],
+    materials: parsed.materials,
+    questions: parsed.questionTranslations,
+    reviews: parsed.reviews,
+    intents: parsed.intents,
+    expressions: parsed.expressions,
+    reuseEvents: parsed.reuseEvents,
+    tombstones: []
+  });
+
+  for (const material of parsed.materials) {
+    const reviewExists = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", material.id).maybeSingle();
+    if (reviewExists.error) throw new Error(reviewExists.error.message);
+    if (!reviewExists.data) {
+      const now = new Date().toISOString();
+      const inserted = await supabase.from("review_items").insert({
+        id: crypto.randomUUID(),
+        user_id: userId,
+        material_id: material.id,
+        status: "pending",
+        due_at: now,
+        interval_days: 0,
+        created_at: now,
+        updated_at: now
+      });
+      if (inserted.error) throw new Error(inserted.error.message);
+      counts.reviews.inserted += 1;
+    } else {
+      counts.reviews.skipped += 1;
+    }
+  }
+
+  return { importedAt: new Date().toISOString(), counts };
+};
+
+const classify = (item: { id: string; updatedAt: string }, existing: Map<string, string>, counts: { inserted: number; updated: number; skipped: number }) => {
+  const current = existing.get(item.id);
+  if (!current) counts.inserted += 1;
+  else if (item.updatedAt >= current) counts.updated += 1;
+  else counts.skipped += 1;
+};
+
 /** Return lightweight cloud corpus counts for the settings/doctor screens. */
 export const getSyncStatus = async (supabase: SupabaseClient, userId: string) => {
-  const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "sync_tombstones") => {
+  const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "intents" | "saved_expressions" | "reuse_events" | "sync_tombstones") => {
     const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId);
     if (result.error) throw new Error(result.error.message);
     return result.count ?? 0;
@@ -478,6 +733,9 @@ export const getSyncStatus = async (supabase: SupabaseClient, userId: string) =>
       materials: await count("learning_materials"),
       questions: await count("question_translations"),
       reviews: await count("review_items"),
+      intents: await count("intents"),
+      expressions: await count("saved_expressions"),
+      reuseEvents: await count("reuse_events"),
       tombstones: await count("sync_tombstones")
     },
     latestMaterialUpdatedAt: latest.data ? String(latest.data.updated_at) : null
@@ -523,11 +781,14 @@ export const deleteCloudQuestion = async (supabase: SupabaseClient, userId: stri
   return { id: questionId, deletedAt };
 };
 
-const cloudTableForEntity: Record<string, "sessions" | "learning_materials" | "question_translations" | "review_items"> = {
+const cloudTableForEntity: Record<string, "sessions" | "learning_materials" | "question_translations" | "review_items" | "intents" | "saved_expressions" | "reuse_events"> = {
   session: "sessions",
   material: "learning_materials",
   question: "question_translations",
-  review: "review_items"
+  review: "review_items",
+  intent: "intents",
+  expression: "saved_expressions",
+  reuse_event: "reuse_events"
 };
 
 const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, tombstones: ReadonlyArray<{ id: string; entity: string; deletedAt: string }>) => {

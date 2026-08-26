@@ -3,6 +3,7 @@ import { activeStrings } from "../i18n/strings";
 
 export type LearningMaterial = {
   id: string;
+  session_id: string;
   topic: string;
   source: string;
   original_text: string;
@@ -13,6 +14,7 @@ export type LearningMaterial = {
   practice_prompts: string[];
   tags: string[];
   created_at: string;
+  updated_at: string;
 };
 
 export type ReviewItem = {
@@ -45,6 +47,7 @@ export type QuestionTranslation = {
   translation: string;
   topic: string | null;
   created_at: string;
+  updated_at: string;
 };
 
 export const fetchQuestionTranslations = async (session: Session, query = "", source?: string) => {
@@ -233,4 +236,60 @@ export const deletePersonalAccessToken = async (session: Session, id: string) =>
     headers: { Authorization: `Bearer ${session.access_token}` }
   });
   if (!response.ok) throw new Error(activeStrings().errors.tokenDelete);
+};
+
+
+export type PortableCorpus = {
+  version: 1;
+  exportedAt: string;
+  sessions: Array<{ id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>;
+  materials: Array<{
+    id: string;
+    sessionId: string;
+    source: string;
+    topic: string;
+    originalText: string;
+    explanation: string;
+    usefulExpressions: string[];
+    corrections: string[];
+    vocabulary: string[];
+    practicePrompts: string[];
+    tags: string[];
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  questionTranslations: Array<{
+    id: string;
+    sessionId: string;
+    source: string;
+    question: string;
+    translation: string;
+    topic: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+  reviews: never[];
+};
+
+export type ImportResult = {
+  importedAt: string;
+  counts: {
+    sessions: { inserted: number; updated: number; skipped: number };
+    materials: { inserted: number; updated: number; skipped: number };
+    questions: { inserted: number; updated: number; skipped: number };
+    reviews: { inserted: number; updated: number; skipped: number };
+  };
+};
+
+export const importCorpus = async (session: Session, payload: PortableCorpus) => {
+  const response = await fetch("/api/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+    throw new Error(body.details ?? body.error ?? activeStrings().errors.importCorpus);
+  }
+  return (await response.json()) as { data: ImportResult };
 };

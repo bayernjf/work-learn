@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -77,6 +77,35 @@ test("material save feeds the review queue and can be marked mastered", () => {
     const id = (reviews[0] as { review_id: string }).review_id;
     store.markMastered(id);
     assert.equal(store.getReviewItems().length, 0);
+  });
+});
+
+test("saved material creates trackable expressions and records later reuse", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "deploy" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "deploy",
+      originalText: "Please roll out a migration carefully.",
+      usefulExpressions: ["roll out a migration", "cut a release"],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: ["deploy"]
+    });
+    assert.equal(store.unsynced().expressions.length, 2);
+
+    const result = store.recordReuse({
+      text: "We can roll out a migration after the tests pass.",
+      sessionId: session.id,
+      source: "codex"
+    });
+    assert.equal(result.recorded, 1);
+    const expression = store.unsynced().expressions.find((item) => item.text === "roll out a migration");
+    assert.equal(expression?.reuseCount, 1);
+    assert.ok(expression?.lastReusedAt);
+    assert.equal(store.unsynced().reuseEvents.length, 1);
   });
 });
 
@@ -394,5 +423,45 @@ test("searchCorpus can filter by source and tag", () => {
     const byTag = store.searchCorpus("", { tag: "review" });
     assert.equal(byTag.materials.length, 1);
     assert.equal(byTag.materials[0]?.source, "claude");
+  });
+});
+
+test("backupTo creates a restorable SQLite copy", () => {
+  withStore((store, dir) => {
+    const session = store.createSession({ source: "codex", topic: "backup" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "backup",
+      originalText: "keep this local corpus",
+      usefulExpressions: ["keep this local corpus"],
+      corrections: [],
+      vocabulary: ["corpus"],
+      practicePrompts: [],
+      tags: ["backup"]
+    });
+    const backupPath = join(dir, "backup.db");
+    const backup = store.backupTo(backupPath);
+    assert.equal(backup.backupPath, backupPath);
+    assert.equal(backup.stats.counts.materials, 1);
+    assert.ok(existsSync(backupPath));
+
+    const restoredPath = join(dir, "restored.db");
+    const restore = LocalStore.restoreBackup(backupPath, restoredPath);
+    assert.equal(restore.dbPath, restoredPath);
+    const restored = new LocalStore({ dbPath: restoredPath });
+    try {
+      assert.equal(restored.stats().counts.materials, 1);
+    } finally {
+      restored.close();
+    }
+  });
+});
+
+test("restoreBackup rejects a file without Work Learn tables", () => {
+  withStore((_store, dir) => {
+    const invalidPath = join(dir, "invalid.db");
+    writeFileSync(invalidPath, "not a sqlite database");
+    assert.throws(() => LocalStore.restoreBackup(invalidPath, join(dir, "target.db")), /sqlite_master|SQLite|database/i);
   });
 });

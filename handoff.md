@@ -140,6 +140,36 @@ Agent 中调用 Skill
 - 不限定单一重点 Agent：`@work-learn/setup` 同时探测 Codex、Claude Code、Claude Desktop、CodeBuddy、Cursor、OpenCode；
 - 除 `learn capture` 的剪贴板读取是 macOS 专有外，其余部分不依赖 macOS。
 
+## 功能迭代 Backlog
+
+### P1：练习闭环
+
+- 练习记录：保存用户是否练过、练习结果、Agent 反馈和错题；
+- Web 练习模式：先自己写，再展开参考说法，再标记“记住了 / 再练一次”；
+- 模型驱动的自适应练习：决定使用本地模型还是云端模型，基于近期错误和保存语料动态出题。
+
+### P1：复用追踪
+
+方案见 [docs/reuse-tracking.md](docs/reuse-tracking.md)。核心原则是追踪真实工作流里的主动复用，不把多重表达折叠成唯一标准答案；同一个意图下保留多种说法，按语域和场景扩充而不是纠正。
+
+- [ ] P1-a：新增 saved expressions / reuse events 存储，保存语料时自动升格 useful expressions；
+- [ ] P1-a：MCP/API/本地库提供 `record_reuse`，先用确定性短语匹配记录复用事件；
+- [x] 用户执行 `015_reuse_tracking.sql`；
+- [ ] P1-b：Web 复用页展示主动词汇量、表达广度和沉睡表达；
+- [ ] P1-c：新增 `suggest_reuse`，带频控、扩充式语气和全局开关；
+- [ ] P1-d：模型辅助的意图聚类、同义变体识别，以及用户可拆分/合并意图。
+
+### P2：备份、恢复与迁移
+
+- [x] CLI 增加 `learn backup` / `learn restore`，用 SQLite 文件做无损本机恢复；
+- [x] Web 增加 JSON 导出 / 导入，用于跨账号或人工迁移；
+- Markdown 继续只作为可读归档，不作为无损恢复格式。
+
+### P3：更大入口
+
+- macOS Companion：全局快捷键、菜单栏、离线兜底和终端会话辅助采集；
+- 间隔重复算法（SRS）：当前先不做，等练习记录积累后再替换简单复习队列。
+
 ## 需要后续确认的问题
 
 - 是否引入间隔重复算法，替换当前的一次性复习队列（当前决定暂缓）；
@@ -152,6 +182,8 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 ## 本轮新增后的待执行项
 
 - 合入 dev 后由 GitHub Actions 部署 API/Web；
+- 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
+- 发布后可人工试用 Web 的 JSON 导出 / 导入；
 - 真实 Agent 验证 `snooze_review`、提问翻译练习、source/tag 筛选和 Web 导出。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。

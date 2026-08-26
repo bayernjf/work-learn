@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -20,6 +20,7 @@ export interface WorkLearnContext {
   snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
   generatePractice(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
+  recordReuse(input: unknown): Promise<unknown> | unknown;
 }
 
 /** Register all Work Learn tools on the given MCP server. */
@@ -94,6 +95,16 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       limit: z.number().int().min(1).max(20).optional().describe("Maximum items per category, default 8.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.getUserPatterns(getUserPatternsInputSchema.parse(input))) }] }));
+
+  server.registerTool("record_reuse", {
+    description: "Check the current English text against saved Work Learn expressions and record exact phrase reuse events. Use after the user writes substantive English in a later work conversation.",
+    inputSchema: {
+      text: z.string().describe("The user's current English message or document text to inspect for saved expressions."),
+      sessionId: z.string().optional().describe("Current Work Learn session id when available."),
+      source: sourceSchema.optional().describe("Current agent/client source, such as codex or claude."),
+      contextSnippet: z.string().optional().describe("Short redacted surrounding context to store with the reuse event.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.recordReuse(recordReuseInputSchema.parse(input))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

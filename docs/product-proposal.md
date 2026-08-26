@@ -82,7 +82,8 @@ Skill 不负责直接实现数据库、账号、同步和复习算法，而是�
 - `mark_mastered`：记录掌握状态；
 - `snooze_review`：把复习项延后；
 - `generate_practice`：基于一条或最近多条语料生成结构化练习提示；
-- `get_user_patterns`：汇总近期高频表达、纠错模式、词汇和练习建议。
+- `get_user_patterns`：汇总近期高频表达、纠错模式、词汇和练习建议；
+- `record_reuse`：在后续真实对话里记录已保存表达的自然复用。
 
 Skill 只需要知道这些能力，不需要耦合具体数据库或前端实现。
 

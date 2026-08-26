@@ -28,6 +28,49 @@ export const hasScope = (scopes: string[] | undefined, scope: PatScope): boolean
 // Source is an open label, not a closed enum, so new agents work without a
 // schema change or redeploy. Use `knownAgents` for the curated list in UIs/CLI.
 export const sourceSchema = z.string().trim().min(1).max(50);
+export const expressionRegisterSchema = z.enum(["formal", "neutral", "casual"]);
+export const reuseMatchKindSchema = z.enum(["exact", "variant", "nudge"]);
+
+/** Normalize English text for conservative phrase-level reuse detection. */
+export const normalizeReuseText = (value: string): string =>
+  value
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+export type ReuseMatch = {
+  expressionId: string;
+  text: string;
+  matchedText: string;
+  matchKind: "exact";
+  confidence: number;
+};
+
+/** Find saved expressions that occur as exact normalized phrases in text. */
+export const findReuseMatches = (
+  text: string,
+  expressions: ReadonlyArray<{ id: string; text: string }>
+): ReuseMatch[] => {
+  const haystack = normalizeReuseText(text);
+  if (!haystack) return [];
+  const matches: ReuseMatch[] = [];
+  for (const expression of expressions) {
+    const needle = normalizeReuseText(expression.text);
+    if (!needle || needle.length < 3) continue;
+    if (haystack.includes(needle)) {
+      matches.push({
+        expressionId: expression.id,
+        text: expression.text,
+        matchedText: expression.text,
+        matchKind: "exact",
+        confidence: 1
+      });
+    }
+  }
+  return matches;
+};
 
 /** Collapse a question to a comparable form for exact-dedupe. */
 export const normalizeQuestion = (q: string): string => q.trim().toLowerCase().replace(/\s+/g, " ");
@@ -191,7 +234,50 @@ export const syncReviewSchema = z.object({
   updatedAt: z.string().datetime()
 });
 
-export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review"]);
+export const syncIntentSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1).max(200),
+  description: z.string().max(1000).nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const syncSavedExpressionSchema = z.object({
+  id: z.string().min(1),
+  materialId: z.string().min(1).nullable(),
+  intentId: z.string().min(1).nullable(),
+  text: z.string().min(1).max(500),
+  textNorm: z.string().min(1).max(500),
+  register: expressionRegisterSchema.nullable(),
+  scene: z.string().max(100).nullable(),
+  note: z.string().max(1000).nullable(),
+  reuseCount: z.number().int().min(0),
+  firstReusedAt: z.string().datetime().nullable(),
+  lastReusedAt: z.string().datetime().nullable(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime()
+});
+
+export const syncReuseEventSchema = z.object({
+  id: z.string().min(1),
+  expressionId: z.string().min(1),
+  sessionId: z.string().min(1).nullable(),
+  source: sourceSchema.nullable(),
+  matchedText: z.string().min(1).max(500),
+  contextSnippet: z.string().max(500).nullable(),
+  matchKind: reuseMatchKindSchema,
+  confidence: z.number().min(0).max(1),
+  createdAt: z.string().datetime()
+});
+
+export const recordReuseInputSchema = z.object({
+  text: z.string().min(1).max(10_000),
+  sessionId: z.string().min(1).optional(),
+  source: sourceSchema.optional(),
+  contextSnippet: z.string().max(500).optional()
+});
+
+export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review", "intent", "expression", "reuse_event"]);
 
 export const syncTombstoneSchema = z.object({
   id: z.string().min(1),
@@ -208,14 +294,34 @@ export const syncBatchInputSchema = z.object({
   materials: z.array(syncMaterialSchema),
   questions: z.array(syncQuestionTranslationSchema),
   reviews: z.array(syncReviewSchema).optional().default([]),
+  intents: z.array(syncIntentSchema).optional().default([]),
+  expressions: z.array(syncSavedExpressionSchema).optional().default([]),
+  reuseEvents: z.array(syncReuseEventSchema).optional().default([]),
   tombstones: z.array(syncTombstoneSchema).optional().default([])
 });
 
 export const syncPullQuerySchema = z.object({
   since: z.string().datetime().optional()
 });
+
+export const portableImportSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string().datetime().optional(),
+  sessions: z.array(syncSessionSchema).default([]),
+  materials: z.array(syncMaterialSchema).default([]),
+  questionTranslations: z.array(syncQuestionTranslationSchema).default([]),
+  reviews: z.array(syncReviewSchema).default([]),
+  intents: z.array(syncIntentSchema).default([]),
+  expressions: z.array(syncSavedExpressionSchema).default([]),
+  reuseEvents: z.array(syncReuseEventSchema).default([])
+});
 export const syncReviewColumns =
   "id,material_id,status,due_at,interval_days,completed_at,created_at,updated_at";
+export const syncIntentColumns = "id,label,description,created_at,updated_at";
+export const syncSavedExpressionColumns =
+  "id,material_id,intent_id,text,text_norm,register,scene,note,reuse_count,first_reused_at,last_reused_at,created_at,updated_at";
+export const syncReuseEventColumns =
+  "id,expression_id,session_id,source,matched_text,context_snippet,match_kind,confidence,created_at";
 
 
 // The columns the API returns for a material. Explicit rather than "*", because
@@ -334,5 +440,9 @@ export type QuestionTranslation = z.infer<typeof questionTranslationSchema>;
 export type SaveQuestionTranslationInput = z.infer<typeof saveQuestionTranslationInputSchema>;
 export type SyncBatchInput = z.infer<typeof syncBatchInputSchema>;
 export type SyncReview = z.infer<typeof syncReviewSchema>;
+export type SyncIntent = z.infer<typeof syncIntentSchema>;
+export type SyncSavedExpression = z.infer<typeof syncSavedExpressionSchema>;
+export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
+export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;

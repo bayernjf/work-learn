@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
-import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
+import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -188,6 +188,18 @@ app.post("/sync", async (c) => {
   }
 });
 
+app.post("/import", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    requireScope(auth.scopes, "write");
+    return c.json({ data: await importPortableData(createSupabaseServiceClient(), auth.userId, await c.req.json()) }, 201);
+  } catch (error) {
+    return c.json(errorResponse("Could not import data", error));
+  }
+});
+
 app.get("/materials", async (c) => {
   const ctx = await contextFor(c.req.header("Authorization"));
   if (!ctx) return c.json({ error: "Unauthorized" }, 401);
@@ -260,6 +272,20 @@ app.post("/patterns", async (c) => {
     return c.json({ data: await ctx.getUserPatterns(parsed.data) });
   } catch (error) {
     return c.json(errorResponse("Could not load user patterns", error));
+  }
+});
+
+app.post("/reuse", async (c) => {
+  const ctx = await contextFor(c.req.header("Authorization"));
+  if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+
+  const parsed = recordReuseInputSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!parsed.success) return c.json({ error: "Invalid reuse request", issues: parsed.error.issues }, 400);
+
+  try {
+    return c.json({ data: await ctx.recordReuse(parsed.data) }, 201);
+  } catch (error) {
+    return c.json(errorResponse("Could not record expression reuse", error));
   }
 });
 
