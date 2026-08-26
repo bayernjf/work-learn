@@ -23,6 +23,7 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `record_reuse` — record that a saved expression naturally appeared in later work text.
 - `get_reuse_summary` — summarize active vocabulary, sleeping expressions, cross-scene reuse, and recent reuse events.
 - `suggest_reuse` — given the user's current English text, find at most one other saved expression for the same intent. This is expansion, not correction.
+- `configure_reuse_nudges` — turn reuse nudges on/off or change their cooldown and daily limit when the user asks to make them quieter or stop.
 
 ## Saving a question and its translation
 
