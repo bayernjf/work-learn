@@ -58,7 +58,7 @@ export const findReuseMatches = (
   const matches: ReuseMatch[] = [];
   for (const expression of expressions) {
     const needle = normalizeReuseText(expression.text);
-    if (!needle || needle.length < 3) continue;
+    if (!needle || needle.length <= 3) continue;
     if (haystack.includes(needle)) {
       matches.push({
         expressionId: expression.id,
@@ -277,6 +277,12 @@ export const recordReuseInputSchema = z.object({
   contextSnippet: z.string().max(500).optional()
 });
 
+export const suggestReuseInputSchema = z.object({
+  text: z.string().min(1).max(10_000),
+  source: sourceSchema.optional(),
+  limit: z.number().int().min(1).max(1).default(1)
+});
+
 export const tombstoneEntitySchema = z.enum(["session", "material", "question", "review", "intent", "expression", "reuse_event"]);
 
 export const syncTombstoneSchema = z.object({
@@ -444,6 +450,7 @@ export type SyncIntent = z.infer<typeof syncIntentSchema>;
 export type SyncSavedExpression = z.infer<typeof syncSavedExpressionSchema>;
 export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
 export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
+export type SuggestReuseInput = z.infer<typeof suggestReuseInputSchema>;
 export type SyncTombstone = z.infer<typeof syncTombstoneSchema>;
 export type SyncPullQuery = z.infer<typeof syncPullQuerySchema>;
 
@@ -460,6 +467,60 @@ export type ReuseSummary = {
   activeExpressions: SyncSavedExpression[];
   sleepingExpressions: SyncSavedExpression[];
   recentEvents: Array<SyncReuseEvent & { text: string }>;
+};
+
+export type ReuseSuggestion = {
+  expressionId: string;
+  text: string;
+  register: "formal" | "neutral" | "casual" | null;
+  scene: string | null;
+  note: string | null;
+  reason: "same_intent" | "scene" | "recent";
+};
+
+export type ReuseSuggestions = {
+  generatedAt: string;
+  matchedExpressionIds: string[];
+  suggestions: ReuseSuggestion[];
+};
+
+const candidateScore = (candidate: SyncSavedExpression, matchedIntentIds: Set<string | null>, source?: string) => {
+  let score = 0;
+  if (candidate.intentId && matchedIntentIds.has(candidate.intentId)) score += 100;
+  if (source && candidate.scene === source) score += 10;
+  score += Math.min(candidate.reuseCount, 10);
+  if (candidate.lastReusedAt) score += 5;
+  return score;
+};
+
+export const suggestReuse = (
+  text: string,
+  expressions: ReadonlyArray<SyncSavedExpression>,
+  input: Omit<Partial<SuggestReuseInput>, "text"> = {}
+): ReuseSuggestions => {
+  const matches = findReuseMatches(text, expressions);
+  const matchedIds = new Set(matches.map((match) => match.expressionId));
+  const matchedExpressions = expressions.filter((expression) => matchedIds.has(expression.id));
+  const matchedIntentIds = new Set(matchedExpressions.map((expression) => expression.intentId));
+  const limit = input.limit ?? 1;
+
+  const sameIntent = expressions
+    .filter((expression) => expression.intentId && matchedIntentIds.has(expression.intentId) && !matchedIds.has(expression.id))
+    .sort((a, b) => candidateScore(b, matchedIntentIds, input.source) - candidateScore(a, matchedIntentIds, input.source) || b.createdAt.localeCompare(a.createdAt))
+    .slice(0, limit);
+
+  return {
+    generatedAt: new Date().toISOString(),
+    matchedExpressionIds: matches.map((match) => match.expressionId),
+    suggestions: sameIntent.map((expression) => ({
+      expressionId: expression.id,
+      text: expression.text,
+      register: expression.register,
+      scene: expression.scene,
+      note: expression.note,
+      reason: "same_intent" as const
+    }))
+  };
 };
 
 export const summarizeReuse = (
