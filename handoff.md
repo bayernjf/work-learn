@@ -156,7 +156,7 @@ Agent 中调用 Skill
 
 ### P2：备份、恢复与迁移
 
-- CLI 增加 `learn backup` / `learn restore`，用 SQLite 文件做无损本机恢复；
+- [x] CLI 增加 `learn backup` / `learn restore`，用 SQLite 文件做无损本机恢复；
 - Web 增加 JSON 导出 / 导入，用于跨账号或人工迁移；
 - Markdown 继续只作为可读归档，不作为无损恢复格式。
 
@@ -177,6 +177,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 ## 本轮新增后的待执行项
 
 - 合入 dev 后由 GitHub Actions 部署 API/Web；
+- 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 真实 Agent 验证 `snooze_review`、提问翻译练习、source/tag 筛选和 Web 导出。
 
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。

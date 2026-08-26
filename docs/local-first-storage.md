@@ -202,7 +202,7 @@ learn sync
 
 ### 7.2 SQLite 备份是最可靠的本地恢复路径
 
-新增 CLI：
+已提供 CLI：
 
 ```bash
 learn backup --out ~/Downloads/work-learn-backup.db
@@ -232,7 +232,7 @@ JSON 是结构化迁移格式，保留业务字段但不应替代 SQLite 全量�
 }
 ```
 
-后续可在 Web 端增加 `Export JSON` / `Import JSON`。导入应走后端 API，按原始 id 幂等 upsert，沿用 last-write-wins，并在结果里返回新增、更新、跳过数量。浏览器不直接批量写 Supabase，避免权限、限流和大批量失败处理散落在前端。
+Web 端 JSON 导出 / 导入仍在 backlog。导入应走后端 API，按原始 id 幂等 upsert，沿用 last-write-wins，并在结果里返回新增、更新、跳过数量。浏览器不直接批量写 Supabase，避免权限、限流和大批量失败处理散落在前端。
 
 **结论**：Markdown 用于阅读；SQLite backup/restore 用于本机无损恢复；云端 sync 用于换设备；JSON import/export 用于跨账号或人工迁移。
 
