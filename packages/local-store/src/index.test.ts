@@ -357,7 +357,7 @@ test("generatePractice includes saved question translations", () => {
     const practice = store.generatePractice({ limit: 3 });
     assert.equal(practice.questions.length, 1);
     assert.ok(practice.exercises.some((exercise: { type: string; answer?: string }) => exercise.type === "question"));
-    assert.ok(practice.exercises.some((exercise: { answer?: string }) => exercise.answer === "How does this API handle authentication?"));
+    assert.ok(practice.exercises.some((exercise: { type: string; answer?: string }) => exercise.type === 'question' && exercise.answer === "How does this API handle authentication?"));
   });
 });
 
