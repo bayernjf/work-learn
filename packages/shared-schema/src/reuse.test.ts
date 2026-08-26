@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { findReuseMatches, normalizeReuseText, suggestReuse, summarizeReuse, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
+import { evaluateReuseNudgePolicy, findReuseMatches, normalizeReuseText, suggestReuse, summarizeReuse, defaultReuseNudgeSettings, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
 
 test("normalizeReuseText collapses punctuation and case", () => {
   assert.equal(normalizeReuseText("  Roll-Out  a MIGRATION!\n"), "roll out a migration");
@@ -95,5 +95,27 @@ test("suggestReuse stays quiet without a matched saved phrase", () => {
   const result = suggestReuse("Let me look at the logs first.", expressions);
 
   assert.deepEqual(result.matchedExpressionIds, []);
+  assert.deepEqual(result.suggestions, []);
+});
+
+test("evaluateReuseNudgePolicy respects disabled and cooldown", () => {
+  const settings = defaultReuseNudgeSettings("2026-08-26T12:00:00.000Z");
+  assert.equal(evaluateReuseNudgePolicy({ ...settings, enabled: false }, [], "2026-08-26T12:00:00.000Z").allow, false);
+  assert.equal(evaluateReuseNudgePolicy(settings, [
+    { expressionId: "exp-2", matchKind: "nudge", createdAt: "2026-08-26T09:00:00.000Z" }
+  ], "2026-08-26T12:00:00.000Z").allow, false);
+});
+
+test("suggestReuse does not repeat an ignored nudge candidate", () => {
+  const now = "2026-08-26T09:00:00.000Z";
+  const expressions: SyncSavedExpression[] = [
+    { id: "exp-1", materialId: null, intentId: "intent-deploy", text: "roll out a migration", textNorm: "roll out a migration", register: null, scene: null, note: null, reuseCount: 0, firstReusedAt: null, lastReusedAt: null, createdAt: now, updatedAt: now },
+    { id: "exp-2", materialId: null, intentId: "intent-deploy", text: "deploy the migration", textNorm: "deploy the migration", register: null, scene: null, note: null, reuseCount: 0, firstReusedAt: null, lastReusedAt: null, createdAt: now, updatedAt: now }
+  ];
+  const result = suggestReuse("Let's roll out a migration.", expressions, {}, {
+    settings: defaultReuseNudgeSettings(now),
+    events: [{ expressionId: "exp-2", matchKind: "nudge", createdAt: "2026-08-25T10:00:00.000Z" }],
+    now
+  });
   assert.deepEqual(result.suggestions, []);
 });
