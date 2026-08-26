@@ -181,7 +181,10 @@ export type PracticeMaterial = Pick<LearningMaterial, "id" | "source" | "topic" 
 export type PracticeQuestion = Pick<QuestionTranslation, "id" | "source" | "question" | "translation" | "topic" | "createdAt">;
 export type PracticeExercise =
   | { type: "reuse" | "recall" | "correction" | "apply"; materialId: string; focus: string; prompt: string }
-  | { type: "question"; questionId: string; focus: string; prompt: string; answer: string };
+  | { type: "question"; questionId: string; focus: string; prompt: string; answer: string }
+  | { type: "mcq"; materialId?: string; focus: string; prompt: string; question: string; options: string[]; answer: string }
+  | { type: "fill"; materialId?: string; focus: string; prompt: string; sentence: string; answer: string }
+  | { type: "scenario"; materialId?: string; focus: string; prompt: string; scenario: string; options: string[]; answer: string };
 export type CorpusFilters = { source?: string; tag?: string };
 
 // A single session being synced from a local store. The id is preserved so the
@@ -276,6 +279,29 @@ export const recordReuseInputSchema = z.object({
   source: sourceSchema.optional(),
   contextSnippet: z.string().max(500).optional()
 });
+
+// ---- Spaced repetition (SRS) ----
+// Review grading used by the spaced-repetition scheduler.
+export const reviewGradeSchema = z.enum(["again", "hard", "good", "easy"]);
+export type ReviewGrade = z.infer<typeof reviewGradeSchema>;
+
+// Computes the next review interval + due date from the previous interval and a grade.
+// Pure so it can run identically on the cloud (Supabase) and local (SQLite) stores.
+export const scheduleNextReview = (
+  prevIntervalDays: number,
+  grade: ReviewGrade,
+  now: Date = new Date()
+): { intervalDays: number; dueAt: string; mastered: boolean } => {
+  if (grade === "again") {
+    return { intervalDays: 0, dueAt: now.toISOString(), mastered: false };
+  }
+  const base = prevIntervalDays <= 0 ? 1 : prevIntervalDays;
+  const factor = grade === "hard" ? 1.3 : grade === "good" ? 2.1 : 3.2;
+  const next = Math.max(1, Math.round(base * factor));
+  const mastered = grade === "easy" && prevIntervalDays >= 21;
+  const dueAt = new Date(now.getTime() + next * 86_400_000).toISOString();
+  return { intervalDays: next, dueAt, mastered };
+};
 
 export const suggestReuseInputSchema = z.object({
   text: z.string().min(1).max(10_000),
@@ -452,6 +478,78 @@ export const generatePracticeFromItems = (materials: PracticeMaterial[], questio
       prompt: `Ask this naturally in English, then compare your wording with the saved version:\n"${question.question}"`,
       answer: question.translation
     });
+  }
+
+  // Graded, multi-format exercises (self-checking). Generated deterministically from the
+  // material's own fields. Note: high-quality AI-authored question stems/options would need
+  // an LLM call; these keep the product fully local/offline.
+  const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const pickSample = <T,>(arr: T[], n: number): T[] => {
+    const copy = [...arr];
+    for (let i = copy.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = copy[j]!;
+      copy[j] = copy[i]!;
+      copy[i] = tmp;
+    }
+    return copy.slice(0, n);
+  };
+  const shuffleArr = <T,>(arr: T[]): T[] => pickSample(arr, arr.length);
+  const blankInText = (text: string, word: string): string | null => {
+    const pattern = new RegExp(`\\b${escapeRegExp(word)}\\b`, "i");
+    if (!pattern.test(text)) return null;
+    return text.replace(pattern, "_____");
+  };
+
+  for (const material of selectedMaterials) {
+    const vocab = material.vocabulary.filter(Boolean);
+    const expressions = material.usefulExpressions.filter(Boolean);
+    if (vocab.length >= 1) {
+      const word = vocab[0];
+      if (word) {
+        const blanked = blankInText(material.originalText, word) ?? blankInText(material.explanation, word);
+        if (blanked) {
+          exercises.push({
+            type: "fill",
+            materialId: material.id,
+            focus: word,
+            prompt: "根据语境填空（填一个词）",
+            sentence: blanked,
+            answer: word
+          });
+        }
+      }
+    }
+    if (expressions.length >= 3) {
+      const answer = expressions[0];
+      if (answer) {
+        const distractors = expressions.slice(1);
+        const options = shuffleArr([answer, ...pickSample(distractors, Math.min(3, distractors.length))]);
+      const clue = material.explanation
+        ? `场景：「${material.topic}」。对应释义：${material.explanation}`
+        : `场景：「${material.topic}」`;
+      exercises.push({
+        type: "mcq",
+        materialId: material.id,
+        focus: answer,
+        prompt: "识别你存过的地道表达",
+        question: `${clue}\n\n以下哪个是你存过的、最贴合该场景的表达？`,
+        options,
+        answer
+      });
+      if (material.practicePrompts[0]) {
+        exercises.push({
+          type: "scenario",
+          materialId: material.id,
+          focus: answer,
+          prompt: "情境应用",
+          scenario: `${material.practicePrompts[0]}\n\n你会选下面哪个表达？`,
+          options,
+          answer
+        });
+      }
+      }
+    }
   }
 
   return { generatedAt: new Date().toISOString(), materials: selectedMaterials, questions: selectedQuestions, exercises };

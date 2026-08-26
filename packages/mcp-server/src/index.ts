@@ -67,7 +67,7 @@ export const searchCorpus = (config: McpConfig, query?: string, filters?: { sour
 
 export const getReviewItems = (config: McpConfig) => json(config, "/reviews");
 
-export const markMastered = (config: McpConfig, reviewId: string) => json(config, `/reviews/${encodeURIComponent(reviewId)}/complete`, { method: "POST" });
+export const markMastered = (config: McpConfig, reviewId: string, grade = "good") => json(config, `/reviews/${encodeURIComponent(reviewId)}/complete?grade=${encodeURIComponent(grade)}`, { method: "POST" });
 
 export const snoozeReview = (config: McpConfig, reviewId: string, days = 1) => json(config, `/reviews/${encodeURIComponent(reviewId)}/snooze?days=${days}`, { method: "POST" });
 
@@ -152,7 +152,7 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   saveQuestionTranslation: (input) => saveQuestionTranslation(config, input),
   searchCorpus: (query, filters) => searchCorpus(config, query, filters),
   getReviewItems: () => getReviewItems(config),
-  markMastered: (reviewId) => markMastered(config, reviewId),
+  markMastered: (reviewId, grade) => markMastered(config, reviewId, grade),
   snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input),

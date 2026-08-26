@@ -228,9 +228,13 @@ app.get("/reviews", async (c) => {
 app.post("/reviews/:id/complete", async (c) => {
   const ctx = await contextFor(c.req.header("Authorization"));
   if (!ctx) return c.json({ error: "Unauthorized" }, 401);
+  const grade = c.req.query("grade") ?? "good";
 
   try {
-    return c.json({ data: await ctx.markMastered(c.req.param("id")) });
+    if (!["again", "hard", "good", "easy"].includes(grade)) {
+      return c.json({ error: "Invalid grade" }, 400);
+    }
+    return c.json({ data: await ctx.markMastered(c.req.param("id"), grade as "again" | "hard" | "good" | "easy") });
   } catch (error) {
     return c.json(errorResponse("Could not complete review item", error));
   }
