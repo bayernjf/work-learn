@@ -1609,7 +1609,10 @@ code {
 
 /* Per-card practice */
 .practice-block { margin-top: 12px; }
+.practice-actions-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .practice-toggle { padding: 0; font-size: 12px; }
+.practice-ai { padding: 0 8px; font-size: 12px; border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); }
+.practice-ai:disabled { opacity: .6; cursor: default; }
 .practice-panel {
   margin-top: 10px;
   padding: 12px 14px;

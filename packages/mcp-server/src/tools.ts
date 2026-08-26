@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -19,6 +19,7 @@ export interface WorkLearnContext {
   markMastered(reviewId: string, grade?: string): Promise<unknown> | unknown;
   snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
   generatePractice(input: unknown): Promise<unknown> | unknown;
+  generateAdaptivePractice(input: unknown): Promise<unknown> | unknown;
   recordPractice(input: unknown): Promise<unknown> | unknown;
   getPracticeHistory(input: unknown): Promise<unknown> | unknown;
   getUserPatterns(input: unknown): Promise<unknown> | unknown;
@@ -101,6 +102,17 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       limit: z.number().int().min(1).max(10).optional().describe("Number of recent materials to use, default 3.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.generatePractice(generatePracticeInputSchema.parse(input))) }] }));
+
+  server.registerTool("generate_adaptive_practice", {
+    description: "Generate model-driven adaptive practice exercises tailored to the user's recent mistakes and saved expressions. Uses an LLM when WORK_LEARN_LLM_BASE_URL/API_KEY are set; otherwise falls back to the rule-based generator. Returns exercises in the same shape as generate_practice.",
+    inputSchema: {
+      count: z.number().int().min(1).max(20).optional(),
+      focusTypes: z.array(z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"])).optional(),
+      materialId: z.string().optional(),
+      context: z.array(z.object({ kind: z.enum(["mistake", "expression", "topic"]), text: z.string() })).optional(),
+      promptHint: z.string().optional()
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.generateAdaptivePractice(generateAdaptivePracticeInputSchema.parse(input))) }] }));
 
   server.registerTool("record_practice", {
     description: "Record a completed Work Learn practice attempt: the user's written answer, whether a graded exercise was correct, and whether they marked it remembered or want to practice again. Powers the practice loop and the mistake book (get_practice_history).",

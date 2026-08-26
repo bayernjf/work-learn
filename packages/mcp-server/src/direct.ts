@@ -4,6 +4,9 @@ import {
   createSessionInputSchema,
   generatePracticeFromItems,
   generatePracticeInputSchema,
+  generateAdaptivePracticeInputSchema,
+  generateAdaptivePractice,
+  chatCompletion,
   getPracticeHistoryInputSchema,
   practiceRecordColumns,
   recordPracticeInputSchema,
@@ -40,7 +43,8 @@ import {
   updateReuseNudgeSettingsSchema,
   scheduleNextReview,
   type ReviewGrade,
-  type PatScope
+  type PatScope,
+  type PracticeResult
 } from "@work-learn/shared-schema";
 import type { WorkLearnContext } from "./tools.js";
 
@@ -598,6 +602,31 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     const result = await query;
     if (result.error) throw new Error(result.error.message);
     return (ok(result) as Record<string, unknown>[]).map(toPracticeRecord);
+  },
+
+  async generateAdaptivePractice(input) {
+    requireScope(scopes, "read");
+    const parsed = generateAdaptivePracticeInputSchema.parse(input);
+    const mistakesResult = await supabase
+      .from("practice_records")
+      .select(practiceRecordColumns)
+      .eq("user_id", userId)
+      .eq("is_correct", false)
+      .order("created_at", { ascending: false })
+      .limit(40);
+    const mistakes = (ok(mistakesResult) as Record<string, unknown>[]).map(toPracticeRecord);
+    const context = parsed.context.length
+      ? parsed.context
+      : mistakes.map((m) => ({ kind: "mistake" as const, text: m.prompt || m.focus }));
+    try {
+      const exercises = await generateAdaptivePractice({ ...parsed, context }, chatCompletion);
+      return { generatedAt: new Date().toISOString(), materials: [], questions: [], exercises, mode: "adaptive" as const };
+    } catch {
+      // LLM not configured or returned bad output: fall back to the deterministic
+      // rule-based generator so practice always works.
+      const fallback = (await this.generatePractice({ limit: parsed.count, materialId: parsed.materialId })) as PracticeResult;
+      return { ...fallback, mode: "adaptive_fallback" as const };
+    }
   },
 
   async getUserPatterns(input) {

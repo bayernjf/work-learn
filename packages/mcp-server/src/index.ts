@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getPracticeHistoryInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getPracticeHistoryInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -74,6 +74,11 @@ export const snoozeReview = (config: McpConfig, reviewId: string, days = 1) => j
 export const generatePractice = (config: McpConfig, input: unknown) => {
   const parsed = generatePracticeInputSchema.parse(input);
   return json(config, "/practice", { method: "POST", body: JSON.stringify(parsed) });
+};
+
+export const generateAdaptivePractice = (config: McpConfig, input: unknown) => {
+  const parsed = generateAdaptivePracticeInputSchema.parse(input);
+  return json(config, "/practice/adaptive", { method: "POST", body: JSON.stringify(parsed) });
 };
 
 export const getUserPatterns = (config: McpConfig, input: unknown) => {
@@ -168,6 +173,7 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   markMastered: (reviewId, grade) => markMastered(config, reviewId, grade),
   snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
+  generateAdaptivePractice: (input) => generateAdaptivePractice(config, input),
   getUserPatterns: (input) => getUserPatterns(config, input),
   recordPractice: (input) => recordPractice(config, input),
   getPracticeHistory: (input) => getPracticeHistory(config, input),

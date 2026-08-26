@@ -245,6 +245,24 @@ export const generatePractice = async (session: Session, materialId?: string) =>
   return (await response.json()) as { data: PracticeResult };
 };
 
+export type AdaptivePracticeInput = {
+  count?: number;
+  focusTypes?: string[];
+  materialId?: string;
+  context?: { kind: "mistake" | "expression" | "topic"; text: string }[];
+  promptHint?: string;
+};
+
+export const generateAdaptivePractice = async (session: Session, input: AdaptivePracticeInput = {}) => {
+  const response = await fetch("/api/practice/adaptive", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify(input)
+  });
+  if (!response.ok) throw new Error(activeStrings().errors.practice);
+  return (await response.json()) as { data: PracticeResult };
+};
+
 export type PracticeRecord = {
   id: string;
   materialId: string | null;

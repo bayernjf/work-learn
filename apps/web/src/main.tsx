@@ -1,7 +1,7 @@
 import { ChangeEvent, FormEvent, StrictMode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import type { Session, SupabaseClient } from "@supabase/supabase-js";
-import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, fetchReuseSuggestions, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, getUserPatterns, recordPractice, getPracticeHistory, LearningMaterial, PortableCorpus, PracticeRecord, PracticeResult, QuestionTranslation, ReuseSuggestionItem, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
+import { completeReview, snoozeReview, deleteMaterial, deleteQuestionTranslation, fetchMaterials, fetchQuestionTranslations, fetchReviews, fetchReuseSummary, fetchReuseNudgeSettings, fetchReuseSuggestions, updateReuseNudgeSettings, fetchSyncStatus, importCorpus, updateMaterial, generatePractice, generateAdaptivePractice, getUserPatterns, recordPractice, getPracticeHistory, LearningMaterial, PortableCorpus, PracticeRecord, PracticeResult, QuestionTranslation, ReuseSuggestionItem, ReuseSummary, ReuseNudgeSettings, ReviewItem, SyncStatus, UserPatterns, IntentListResult, fetchIntents, clusterIntents, mergeIntents, splitIntent } from "./lib/api";
 import { bootstrapSupabase, setRememberMe } from "./lib/supabase";
 import { TokenManager } from "./components/TokenManager";
 import { OAuthConsent } from "./components/OAuthConsent";
@@ -909,6 +909,7 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<PracticeResult | null>(null);
 
@@ -928,15 +929,36 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
     }
   };
 
+  const runAi = async () => {
+    setOpen(true);
+    setAiLoading(true);
+    setError("");
+    try {
+      const response = await generateAdaptivePractice(session, { materialId, count: 5 });
+      setResult(response.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t.errors.practice);
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const aiMode = result && "mode" in result ? (result as { mode?: string }).mode : undefined;
+
   return (
     <div className="practice-block">
-      <button type="button" className="text-button practice-toggle" onClick={toggle}>
-        {open ? t.practice.hide : t.practice.practice}
-      </button>
+      <div className="practice-actions-row">
+        <button type="button" className="text-button practice-toggle" onClick={toggle}>
+          {open ? t.practice.hide : t.practice.practice}
+        </button>
+        <button type="button" className="text-button practice-ai" onClick={runAi} disabled={aiLoading}>
+          {aiLoading ? `${t.practice.ai}…` : t.practice.ai}
+        </button>
+      </div>
       {open ? (
         <div className="practice-panel">
-          <h4>{t.practice.heading}</h4>
-          {loading ? <p className="practice-meta">{t.practice.practicing}</p> : null}
+          <h4>{t.practice.heading}{aiMode ? ` · ${t.practice.ai}` : ""}</h4>
+          {loading || aiLoading ? <p className="practice-meta">{t.practice.practicing}</p> : null}
           {error ? <p className="practice-meta practice-error">{error}</p> : null}
           {result?.exercises.length ? (
             <ol className="practice-list">
@@ -945,7 +967,7 @@ function PracticeButton({ session, materialId }: { session: Session; materialId:
               ))}
             </ol>
           ) : null}
-          {!loading && !error && !result?.exercises.length ? <p className="practice-meta">{t.practice.empty}</p> : null}
+          {!loading && !aiLoading && !error && !result?.exercises.length ? <p className="practice-meta">{t.practice.empty}</p> : null}
         </div>
       ) : null}
     </div>

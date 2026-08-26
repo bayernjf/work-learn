@@ -9,8 +9,11 @@ import {
   normalizeQuestion,
   generatePracticeFromItems,
   generatePracticeInputSchema,
+  generateAdaptivePracticeInputSchema,
+  generateAdaptivePractice,
   getPracticeHistoryInputSchema,
   recordPracticeInputSchema,
+  chatCompletion,
   getUserPatternsFromItems,
   getUserPatternsInputSchema,
   clusterIntentsInputSchema,
@@ -42,6 +45,8 @@ import {
   type RecordPracticeInput,
   type GetPracticeHistoryInput,
   type PracticeRecord,
+  type PracticeExercise,
+  type GenerateAdaptivePracticeInput,
   type ReuseNudgeSettings,
   type SaveMaterialInput,
   type SplitIntentInput,
@@ -661,6 +666,21 @@ export class LocalStore {
     query += ` LIMIT ${parsed.limit ?? 50}`;
     const rows = this.db.prepare(query).all(...params) as PracticeRecordRow[];
     return rows.map(toPracticeRecordRow);
+  }
+
+  async generateAdaptivePractice(input: unknown) {
+    const parsed = generateAdaptivePracticeInputSchema.parse(input) as GenerateAdaptivePracticeInput;
+    const mistakes = this.getPracticeHistory({ onlyMistakes: true, limit: 40 });
+    const context = parsed.context.length
+      ? parsed.context
+      : mistakes.map((m) => ({ kind: "mistake" as const, text: m.prompt || m.focus }));
+    try {
+      const exercises = await generateAdaptivePractice({ ...parsed, context }, chatCompletion);
+      return { generatedAt: new Date().toISOString(), materials: [], questions: [], exercises, mode: "adaptive" as const };
+    } catch {
+      const fallback = this.generatePractice({ limit: parsed.count, materialId: parsed.materialId });
+      return { ...fallback, mode: "adaptive_fallback" as const };
+    }
   }
 
   getReuseSummary() {
@@ -1320,6 +1340,7 @@ export const createLocalContext = (store: LocalStore) => ({
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),
   recordPractice: (input: unknown) => store.recordPractice(input),
   getPracticeHistory: (input: unknown) => store.getPracticeHistory(input),
+  generateAdaptivePractice: (input: unknown) => store.generateAdaptivePractice(input),
   recordReuse: (input: unknown) => store.recordReuse(input),
   getReuseSummary: () => store.getReuseSummary(),
   suggestReuse: (input: unknown) => store.suggestReuse(input),
