@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema } from "@work-learn/shared-schema";
 
 export type McpToolName =
   | "create_session"
@@ -10,7 +10,8 @@ export type McpToolName =
   | "mark_mastered"
   | "snooze_review"
   | "generate_practice"
-  | "get_user_patterns";
+  | "get_user_patterns"
+  | "record_reuse";
 
 type McpConfig = {
   apiUrl: string;
@@ -30,7 +31,7 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
 
 export const createMcpEndpoint = (config: McpConfig) => ({
   config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns"] as McpToolName[]
+  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "record_reuse"] as McpToolName[]
 });
 
 export const createSession = (config: McpConfig, input: unknown) => {
@@ -73,6 +74,11 @@ export const getUserPatterns = (config: McpConfig, input: unknown) => {
   return json(config, "/patterns", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const recordReuse = (config: McpConfig, input: unknown) => {
+  const parsed = recordReuseInputSchema.parse(input);
+  return json(config, "/reuse", { method: "POST", body: JSON.stringify(parsed) });
+};
+
 export const toolInputSchemas = {
   create_session: createSessionInputSchema,
   save_material: saveMaterialInputSchema,
@@ -95,5 +101,6 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   markMastered: (reviewId) => markMastered(config, reviewId),
   snoozeReview: (reviewId, days) => snoozeReview(config, reviewId, days),
   generatePractice: (input) => generatePractice(config, input),
-  getUserPatterns: (input) => getUserPatterns(config, input)
+  getUserPatterns: (input) => getUserPatterns(config, input),
+  recordReuse: (input) => recordReuse(config, input)
 });
