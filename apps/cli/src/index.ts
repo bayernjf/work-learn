@@ -1,10 +1,10 @@
 import { execFile } from "node:child_process";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { redactSecrets } from "@work-learn/learning-core";
-import { DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
+import { DEFAULT_BACKUP_DIR, DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
 
 const execFileAsync = promisify(execFile);
 const [command, ...args] = process.argv.slice(2);
@@ -17,6 +17,8 @@ const commands = {
   sync: "Pull cloud changes, push local changes, and sync review state.",
   delete: "Delete a local material or question and record a tombstone.",
   doctor: "Check local DB, token config, and API health.",
+  backup: "Back up the local SQLite database.",
+  restore: "Restore the local SQLite database from a backup.",
   export: "Export local data to markdown notes."
 } as const;
 
@@ -34,6 +36,10 @@ if (command === "capture") {
   await deleteItem(args);
 } else if (command === "doctor") {
   await doctor(args);
+} else if (command === "backup") {
+  await backup(args);
+} else if (command === "restore") {
+  await restore(args);
 } else if (command === "export") {
   await exportNotes(args);
 } else if (!command || !(command in commands)) {
@@ -112,6 +118,43 @@ async function practice(args: string[]) {
     }), null, 2));
   } finally {
     store.close();
+  }
+}
+
+async function backup(args: string[]) {
+  const out = option(args, "--out");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-").replace("T", "-").slice(0, 19);
+  const destination = resolve(out ?? join(DEFAULT_BACKUP_DIR, `work-learn-${timestamp}.db`));
+  mkdirSync(dirname(destination), { recursive: true });
+  if (existsSync(destination) && !args.includes("--force")) {
+    throw new Error(`Backup already exists: ${destination}. Re-run with --force to overwrite it.`);
+  }
+  const store = openStore();
+  try {
+    const result = store.backupTo(destination);
+    console.log(JSON.stringify({ backedUp: true, ...result }, null, 2));
+  } finally {
+    store.close();
+  }
+}
+
+async function restore(args: string[]) {
+  const backupPath = option(args, "--file");
+  if (!backupPath) throw new Error("Provide the backup to restore with --file <path>");
+  if (!args.includes("--yes")) throw new Error("Restoring replaces the local database. Re-run with --yes to continue.");
+  const store = openStore();
+  try {
+    const dbPath = store.stats().dbPath;
+    store.close();
+    const result = LocalStore.restoreBackup(resolve(backupPath), dbPath);
+    const verification = new LocalStore({ dbPath: result.dbPath });
+    try {
+      console.log(JSON.stringify({ restored: true, ...result, verified: verification.stats() }, null, 2));
+    } finally {
+      verification.close();
+    }
+  } finally {
+    try { store.close(); } catch { /* already closed after pre-restore checkpoint */ }
   }
 }
 
