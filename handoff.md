@@ -62,7 +62,7 @@ Agent 中调用 Skill
 - [x] Web 练习入口：语料卡片"练习"按钮调用 /api/practice；首页"你的学习模式"面板调用 /api/patterns
 - [x] 复习卡片改为先回忆再展开：默认只显示原文，点"显示答案"后展开 better/why/reuse/词汇和练习按钮
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
-- [x] 云端提问翻译按规范化问题去重，新增 `014_question_norm_dedupe.sql`（待执行）
+- [x] 云端提问翻译按规范化问题去重，新增并已执行 `014_question_norm_dedupe.sql`
 - [x] 复习项支持 snooze 到明天，Web/API/MCP/本地队列均支持
 - [x] Web 端支持编辑语料的 topic、explanation、tags 等字段
 - [x] `learn practice` 可从本地库生成练习
@@ -151,7 +151,6 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 ## 本轮新增后的待执行项
 
-- 在 Supabase 执行 `supabase/migrations/014_question_norm_dedupe.sql`；
 - 合入 dev 后由 GitHub Actions 部署 API/Web；
 - 真实 Agent 验证 `snooze_review`、提问翻译练习、source/tag 筛选和 Web 导出。
 
