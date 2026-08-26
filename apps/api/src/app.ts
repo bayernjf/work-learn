@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createSessionInputSchema, generatePracticeInputSchema, getUserPatternsInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
-import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
+import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
 import { mcpRoute } from "./routes/mcp.js";
@@ -185,6 +185,18 @@ app.post("/sync", async (c) => {
     return c.json({ data: await syncToCloud(createSupabaseServiceClient(), auth.userId, parsed.data) });
   } catch (error) {
     return c.json(errorResponse("Could not sync", error));
+  }
+});
+
+app.post("/import", async (c) => {
+  const auth = await authenticate(c.req.header("Authorization"));
+  if (!auth.ok) return c.json({ error: "Unauthorized" }, 401);
+
+  try {
+    requireScope(auth.scopes, "write");
+    return c.json({ data: await importPortableData(createSupabaseServiceClient(), auth.userId, await c.req.json()) }, 201);
+  } catch (error) {
+    return c.json(errorResponse("Could not import data", error));
   }
 });
 
