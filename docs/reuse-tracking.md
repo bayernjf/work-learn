@@ -52,6 +52,16 @@ The first implementation uses no model. It normalizes text by lowercasing, norma
 
 The current user message or document is treated as a haystack. A saved expression counts as reused when its normalized form appears as a phrase in that haystack. This avoids semantic false positives and keeps the feature explainable.
 
+**Three-tier matching (implemented 2026-08-27):**
+
+1. **Exact**: normalized phrase appears as substring. `match_kind: exact`, confidence 1.0.
+2. **Inflectional variant**: both sides lemmatized (tense, number, comparison only), then substring match. `match_kind: variant`, confidence 0.85. Irregular verbs via lookup table; doubled-consonant and -e-drop forms handled conservatively with whitelists.
+3. **Elastic variant**: lemmatized match allowing at most one function-word difference (article/preposition/pronoun/auxiliary omission or replacement). Phrasal-verb particles (out, in, up, down, etc.) are treated as content words, not function words. `match_kind: variant`, confidence 0.7.
+
+**Candidate suggestions (`findReuseCandidates`):** expressions with content-word Jaccard overlap ≥ 0.6 that did not match via any tier are returned as candidates. These are never recorded automatically — they should be shown to the user for confirmation.
+
+No synonym expansion is performed at any tier; semantic matching belongs to intent clustering.
+
 ### Phase 2: Model-assisted matching
 
 A later version can let the host agent identify the user's intent and detect same-intent variants. Low-confidence matches should not be recorded automatically; they can become suggestions instead.

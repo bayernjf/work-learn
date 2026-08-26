@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateReuseNudgePolicy, findReuseMatches, normalizeReuseText, suggestReuse, summarizeReuse, defaultReuseNudgeSettings, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
+import { evaluateReuseNudgePolicy, findReuseCandidates, findReuseMatches, hasElasticMatch, lemmatizeWord, lemmatizeText, normalizeReuseText, suggestReuse, summarizeReuse, defaultReuseNudgeSettings, type SyncReuseEvent, type SyncSavedExpression } from "./index.js";
 
 test("normalizeReuseText collapses punctuation and case", () => {
   assert.equal(normalizeReuseText("  Roll-Out  a MIGRATION!\n"), "roll out a migration");
@@ -118,4 +118,167 @@ test("suggestReuse does not repeat an ignored nudge candidate", () => {
     now
   });
   assert.deepEqual(result.suggestions, []);
+});
+
+// --- Inflection / variant matching ---
+
+test("lemmatizeWord handles regular verb inflections", () => {
+  assert.equal(lemmatizeWord("rolls"), "roll");
+  assert.equal(lemmatizeWord("rolled"), "roll");
+  assert.equal(lemmatizeWord("rolling"), "roll");
+  assert.equal(lemmatizeWord("running"), "run");
+  assert.equal(lemmatizeWord("stopped"), "stop");
+  assert.equal(lemmatizeWord("tries"), "try");
+  assert.equal(lemmatizeWord("tried"), "try");
+});
+
+test("lemmatizeWord handles irregular verbs", () => {
+  assert.equal(lemmatizeWord("went"), "go");
+  assert.equal(lemmatizeWord("gone"), "go");
+  assert.equal(lemmatizeWord("saw"), "see");
+  assert.equal(lemmatizeWord("seen"), "see");
+  assert.equal(lemmatizeWord("made"), "make");
+  assert.equal(lemmatizeWord("took"), "take");
+  assert.equal(lemmatizeWord("written"), "write");
+  assert.equal(lemmatizeWord("was"), "be");
+  assert.equal(lemmatizeWord("had"), "have");
+});
+
+test("lemmatizeWord handles regular plurals", () => {
+  assert.equal(lemmatizeWord("migrations"), "migration");
+  assert.equal(lemmatizeWord("boxes"), "box");
+  assert.equal(lemmatizeWord("queries"), "query");
+});
+
+test("lemmatizeWord preserves base forms that look inflected", () => {
+  assert.equal(lemmatizeWord("this"), "this");
+  assert.equal(lemmatizeWord("bus"), "bus");
+  assert.equal(lemmatizeWord("series"), "series");
+  assert.equal(lemmatizeWord("computer"), "computer");
+  assert.equal(lemmatizeWord("server"), "server");
+  assert.equal(lemmatizeWord("meeting"), "meeting");
+  assert.equal(lemmatizeWord("building"), "building");
+  assert.equal(lemmatizeWord("access"), "access");
+});
+
+test("findReuseMatches detects inflectional variant reuse", () => {
+  const matches = findReuseMatches("We are rolling out a migration tomorrow.", [
+    { id: "exp-1", text: "roll out a migration" },
+    { id: "exp-2", text: "cut a release" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.expressionId, "exp-1");
+  assert.equal(matches[0]?.matchKind, "variant");
+  assert.equal(matches[0]?.confidence, 0.85);
+});
+
+test("findReuseMatches prefers exact over variant for same expression", () => {
+  const matches = findReuseMatches("We will roll out a migration.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "exact");
+  assert.equal(matches[0]?.confidence, 1);
+});
+
+test("findReuseMatches does not match semantically different phrases", () => {
+  // "deploy" and "roll out" are synonyms but not inflectional variants — must not match.
+  const matches = findReuseMatches("We will deploy the migration.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 0);
+});
+
+test("findReuseMatches variant handles irregular verb forms", () => {
+  const matches = findReuseMatches("He went through the logs.", [
+    { id: "exp-1", text: "go through the logs" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+});
+
+test("findReuseMatches variant handles plural noun and tense together", () => {
+  const matches = findReuseMatches("They have built a service.", [
+    { id: "exp-1", text: "build a service" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+});
+
+test("lemmatizeText lemmatizes each token", () => {
+  assert.equal(lemmatizeText("rolling out migrations"), "roll out migration");
+  assert.equal(lemmatizeText("went through logs"), "go through log");
+});
+
+// --- Layer 2: function-word elastic matching ---
+
+test("elastic match allows one function word omission", () => {
+  // "roll out a migration" vs "rolling out migrations" — "a" omitted
+  assert.equal(hasElasticMatch("roll out a migration", "we be roll out migration tomorrow"), true);
+});
+
+test("elastic match allows one function word replacement", () => {
+  // "a" → "the"
+  assert.equal(hasElasticMatch("roll out a migration", "roll out the migration"), true);
+});
+
+test("elastic match rejects content word differences", () => {
+  // "deploy" vs "roll out" — content word differs
+  assert.equal(hasElasticMatch("roll out a migration", "deploy the migration"), false);
+});
+
+test("elastic match rejects extra content word", () => {
+  // "big" is an extra content word
+  assert.equal(hasElasticMatch("roll out a migration", "roll out a big migration"), false);
+});
+
+test("elastic match rejects phrasal verb particle differences", () => {
+  // "out" and "in" are content words (phrasal verb particles), not function words
+  assert.equal(hasElasticMatch("roll out a migration", "roll in a migration"), false);
+});
+
+test("findReuseMatches elastic tier matches article omission", () => {
+  const matches = findReuseMatches("We are rolling out migrations tomorrow.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+  assert.equal(matches[0]?.confidence, 0.7);
+});
+
+test("findReuseMatches elastic tier matches article replacement", () => {
+  const matches = findReuseMatches("Roll out the migration today.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(matches.length, 1);
+  assert.equal(matches[0]?.matchKind, "variant");
+  assert.equal(matches[0]?.confidence, 0.7);
+});
+
+// --- Layer 3: candidate suggestions ---
+
+test("findReuseCandidates returns high-overlap expressions", () => {
+  // "roll out a big migration" shares roll/out/migration but has extra
+  // content word "big", so elastic match rejects it — candidate instead.
+  const candidates = findReuseCandidates("Roll out a big migration.", [
+    { id: "exp-1", text: "roll out a migration" },
+    { id: "exp-2", text: "cut a release" }
+  ]);
+  assert.equal(candidates.length, 1);
+  assert.equal(candidates[0]?.expressionId, "exp-1");
+  assert.ok(candidates[0]!.overlap >= 0.6);
+});
+
+test("findReuseCandidates excludes exact matches", () => {
+  const candidates = findReuseCandidates("Roll out a migration.", [
+    { id: "exp-1", text: "roll out a migration" }
+  ]);
+  assert.equal(candidates.length, 0);
+});
+
+test("findReuseCandidates excludes low-overlap expressions", () => {
+  const candidates = findReuseCandidates("Deploy the migration today.", [
+    { id: "exp-1", text: "cut a release" }
+  ]);
+  assert.equal(candidates.length, 0);
 });

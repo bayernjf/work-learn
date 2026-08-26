@@ -1,10 +1,13 @@
 import { z } from "zod";
 import { knownAgents } from "./agents.js";
 import { redactSecrets } from "./redaction.js";
+import { lemmatizeText, lemmatizeWord, hasElasticMatch, findReuseCandidates } from "./inflection.js";
 
 export { knownAgents };
 export { redactSecrets } from "./redaction.js";
 export type { RedactionResult } from "./redaction.js";
+export { lemmatizeText, lemmatizeWord, hasElasticMatch, findReuseCandidates } from "./inflection.js";
+export type { ReuseCandidate } from "./inflection.js";
 
 // Personal access token scopes. `read` covers searching and listing the user's
 // corpus; `write` covers saving material, syncing, and completing reviews.
@@ -44,17 +47,30 @@ export type ReuseMatch = {
   expressionId: string;
   text: string;
   matchedText: string;
-  matchKind: "exact";
+  matchKind: "exact" | "variant";
   confidence: number;
 };
 
-/** Find saved expressions that occur as exact normalized phrases in text. */
+/**
+ * Find saved expressions that occur in text.
+ *
+ * Three tiers, each more permissive but still conservative:
+ * 1. `exact`: normalized phrase (case/punctuation stripped) appears as substring. confidence 1.
+ * 2. `variant` (inflection): lemmatized phrase appears in lemmatized text. confidence 0.85.
+ * 3. `variant` (elastic): lemmatized phrase matches a window allowing at most one
+ *    function-word difference (insertion/omission/replacement). confidence 0.7.
+ *
+ * Synonyms and semantically similar phrases are never matched here — that
+ * belongs to intent clustering. Expressions ≤3 chars after normalization are
+ * skipped to avoid noise.
+ */
 export const findReuseMatches = (
   text: string,
   expressions: ReadonlyArray<{ id: string; text: string }>
 ): ReuseMatch[] => {
   const haystack = normalizeReuseText(text);
   if (!haystack) return [];
+  const lemmatizedHaystack = lemmatizeText(haystack);
   const matches: ReuseMatch[] = [];
   for (const expression of expressions) {
     const needle = normalizeReuseText(expression.text);
@@ -66,6 +82,29 @@ export const findReuseMatches = (
         matchedText: expression.text,
         matchKind: "exact",
         confidence: 1
+      });
+      continue;
+    }
+    // Tier 2: inflectional variant (lemmatized exact match).
+    const lemmatizedNeedle = lemmatizeText(needle);
+    if (lemmatizedHaystack.includes(lemmatizedNeedle)) {
+      matches.push({
+        expressionId: expression.id,
+        text: expression.text,
+        matchedText: expression.text,
+        matchKind: "variant",
+        confidence: 0.85
+      });
+      continue;
+    }
+    // Tier 3: elastic match (one function-word difference).
+    if (hasElasticMatch(lemmatizedNeedle, lemmatizedHaystack)) {
+      matches.push({
+        expressionId: expression.id,
+        text: expression.text,
+        matchedText: expression.text,
+        matchKind: "variant",
+        confidence: 0.7
       });
     }
   }
