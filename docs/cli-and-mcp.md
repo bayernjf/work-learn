@@ -7,12 +7,31 @@
 ```bash
 learn capture  # 采集 stdin 或剪贴板，脱敏后写入本地库
 learn review   # 查看本地待复习项
-learn search   # 搜索本地语料（--q 或直接跟关键词）
+learn search   # 搜索本地语料（--q/--query，或直接跟关键词）
+learn practice # 从最近材料和提问翻译生成本地练习
 learn sync     # 双向同步本地与云端数据（需 WORK_LEARN_ACCESS_TOKEN）
 learn doctor   # 检查本地库、token 配置和 API 健康状态
 learn delete   # 删除本地材料或提问，并记录 tombstone
 learn export   # 本地库导出为按天 markdown（--from/--to/--out）
-learn practice # 从最近的材料和提问翻译生成本地练习
+```
+
+### search
+
+```bash
+learn search "query"
+learn search --source codex --tag auth
+```
+
+`--source` 同时筛选材料和提问；`--tag` 只筛选材料标签。
+
+### practice
+
+`learn practice` 不调用模型，直接从本地 SQLite 最近保存的材料和提问翻译生成结构化练习提示：
+
+```bash
+learn practice
+learn practice --limit 5
+learn practice --material <material-id>
 ```
 
 ### capture

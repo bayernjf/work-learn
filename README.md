@@ -51,7 +51,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 - `npx @work-learn/setup` 一键安装：探测 Codex / Claude Code / Claude Desktop / CodeBuddy / Cursor / OpenCode，写入前备份配置，可顺带安装 Skill；支持 `--token-file` 让 token 不出现在命令行和对话里；
 - Universal Learning Skill（`skills/work-learn/SKILL.md`）和 `scripts/install-skill.sh`；
 - Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
-- `learn` CLI 六个命令：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`、`search`、`sync`（推送本地未同步数据到云端）、`practice`（本地生成练习）、`export`（按天导出 markdown）。
+- `learn` CLI 六个命令：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`、`search`（支持 `--source`/`--tag`）、`sync`（推送本地未同步数据到云端）、`practice`（本地生成练习）、`export`（按天导出 markdown）。
 
 下一步：
 
