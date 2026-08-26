@@ -8,7 +8,7 @@ Work Learn 是一个跨 AI Agent 的个人英语语料学习系统。它把用�
 
 第一版面向使用 AI Agent 进行全栈开发的独立开发者，先提供一条固定的对话整理与复习闭环。英语学习是首个产品场景，底层能力可扩展到技术知识、工作决策和个人 AI 工作资产沉淀。
 
-Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨 Agent 同步；CLI 负责终端会话和无 Skill 场景的兼容接入。本地 Companion 仍在设计中，尚未实现。
+Skill 负责理解和整理当前对话；MCP/API 负责保存、搜索、复习和跨 Agent 同步；CLI 负责终端会话和无 Skill 场景的兼容接入。本地 Companion 已实现（M1 最小壳、M2 全局快捷键、M3 离线兜底、M4 自动采集 + rc-hook 自动录制）。
 
 ```text
 Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保存 -> Web 查看和复习
@@ -44,20 +44,20 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 已经可用的部分：
 
-- 十七个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`；
+- 二十个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`、`record_practice`、`get_practice_history`、`generate_adaptive_practice`；
 - 本地优先：CLI 与 stdio MCP 默认读写本地 SQLite（`~/.work-learn/work-learn.db`），不需要 token 也不需要起 API；只有配置了 token 才转而调用线上 API；
 - 两种 MCP 形态共用同一套工具实现：本地 stdio（`packages/mcp-server`）与远程 HTTP（`POST /api/mcp`，无状态 Streamable HTTP）；
 - 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销，可设只读 / 可读可写 scope）、MCP OAuth 2.1（动态注册、PKCE、access token 为 opaque 随机串按哈希查库、refresh token 轮换、Web consent 页）；
 - `npx @work-learn/setup` 一键安装：探测 Codex / Claude Code / Claude Desktop / CodeBuddy / Cursor / OpenCode，写入前备份配置，可顺带安装 Skill；支持 `--token-file` 让 token 不出现在命令行和对话里；
 - Universal Learning Skill（`skills/work-learn/SKILL.md`）和 `scripts/install-skill.sh`；
 - Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
-- `learn` CLI 八个命令：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`、`search`（支持 `--source`/`--tag`）、`sync`（推送本地未同步数据到云端）、`practice`（本地生成练习）、`backup`（SQLite 备份）、`restore`（SQLite 恢复，需显式 `--yes`）、`export`（按天导出 markdown）。
+- `learn` CLI：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`（SRS 间隔重复队列）、`search`（支持 `--source`/`--tag`）、`practice`（本地生成练习）、`run`（PTY 录制终端会话）、`stats`（本地库统计）、`sync`（推送本地未同步数据到云端）、`doctor`（自检）、`delete`（删除语料）、`backup`（SQLite 备份）、`restore`（SQLite 恢复，需显式 `--yes`）、`export`（按天导出 markdown）、`expressions`（列出已保存表达）、`hook`（rc-hook 自动录制安装/卸载/查看）、`nudges`（复用 nudge 配置与待推送项）。
 
 下一步：
 
 - 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）。
 
-测试：相关包检查全绿（`packages/shared-schema` 19 例；`packages/local-store` 21 例；`packages/mcp-server` 23 例；`apps/api` 鉴权相关测试保持独立运行）。
+测试：相关包单元测试保持全绿（详见各包 `src/*.test.ts`）。
 
 ## 设计原则
 

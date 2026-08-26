@@ -190,7 +190,7 @@ Agent 中调用 Skill
 在语料库/复习闭环上新增三项能力，均已实现且 Web 类型检查通过（`apps/web` 下 `npx tsc --noEmit` 无错）：
 
 1. **SRS + 今日待复习队列**：见上「间隔重复算法」。复习从「一次性标完成」升级为按评级递增间隔的间隔重复；待复习队列即现有 ReviewList（`getReviewItems` 返回 `due_at ≤ now` 的 pending 项）。
-2. **多题型测验（确定性生成，无 LLM）**：`generatePracticeFromItems` 在原有 reuse/recall/correction/apply/question 基础上，新增 `mcq` / `fill` / `scenario` 三种可自测题型（选择、语境填空、情境应用），由材料的 vocabulary/usefulExpressions/practicePrompts 确定性生成；Web `PracticeButton` 新增 `PracticeExerciseItem` 交互组件（选项点击 / 填空检查 + 对错揭示，配套 CSS `.practice-options` / `.practice-fill`）。**说明**：全仓此前无任何 LLM 调用，高质量「AI 出题」需另接 LLM（API Key + 依赖），本轮未引入，作为后续升级项。
+2. **多题型测验（确定性生成，无 LLM）**：`generatePracticeFromItems` 在原有 reuse/recall/correction/apply/question 基础上，新增 `mcq` / `fill` / `scenario` 三种可自测题型（选择、语境填空、情境应用），由材料的 vocabulary/usefulExpressions/practicePrompts 确定性生成；Web `PracticeButton` 新增 `PracticeExerciseItem` 交互组件（选项点击 / 填空检查 + 对错揭示，配套 CSS `.practice-options` / `.practice-fill`）。**说明**：此确定性多题型测验本身不调用模型；LLM 驱动的「AI 出题」已由 C2 的 `generate_adaptive_practice`（见上 C2）实现，由 `WORK_LEARN_LLM_*` 开关控制，未配置时回退规则生成。
 3. **主动复用推送（in-app nudge）**：语料库在搜索词或选中 topic 时，顶部出现「相关已存表达」面板（`ReuseNudgePanel`，debounce 300ms 调 `/api/reuse/suggestions`），把存过的相似表达在浏览/检索时浮出。Companion 内的主动 nudge 表面（Agent 工作中浮层）**已落地（C3）**：检测前台 Agent（Claude / Cursor / Codex / 终端等）时弹出透明 always-on-top 浮层显示已存表达，默认关、托盘可开关。
 
 ### 本地预览提示
@@ -209,6 +209,7 @@ Agent 中调用 Skill
 ## 本轮修复
 
 - `LocalStore` 构造函数现在读取 `WORK_LEARN_DB_PATH`（原为 `options.dbPath ?? DEFAULT_DB_PATH`，忽略了该环境变量），与文档一致；可用它隔离测试库，避免污染 `~/.work-learn/work-learn.db`。
+- `packages/learning-core` 的 typecheck / build 因 `shared-schema` 的 `getLlmConfig()` 读取 `process.env`（C2 引入的 LLM 客户端）而失败：`learning-core` 此前未声明 `@types/node`。已在 `devDependencies` 显式加入 `@types/node@^20.19.43`，并一并提交 `pnpm-lock.yaml`（CI 用 `--frozen-lockfile`），typecheck / build 全绿（commit `fff5862`，未 push）。
 
 CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
