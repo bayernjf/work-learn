@@ -270,7 +270,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [x] `apps/api/api/[[...route]].ts:6-7` 补 `PATCH` / `DELETE` 导出——Vercel 只放行入口文件显式导出的方法，缺了它们导致 `PATCH /api/materials/:id`、`DELETE /api/materials/:id`、`DELETE /api/question-translations/:id`、`PATCH /api/reuse/settings` 在生产直接 405，Hono 路由到不了；本地 dev 正常，属"本地绿、生产坏"。
 - [x] `.github/workflows/deploy-api.yml:40-49` 新增"方法路由冒烟"：部署后对生产发无鉴权 `DELETE`/`PATCH`，返回 405 即判定入口又漏了方法、CI 红。防同类故障复发。
 - [x] `apps/api/src/routes/mcp.ts:17` 注释 five → twenty（工具实际注册 20 个，见 `packages/mcp-server/src/tools.ts:39-219`）。
-- [ ] 删除死文件 `apps/api/api/index.ts`（全仓零引用，`vercel.json` 只构建 `api/[[...route]].js`）。
+- [x] 删除死文件 `apps/api/api/index.ts`（commit `0b59fa3`）。
 
 ### P0 — 数据丢失级
 
@@ -290,7 +290,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 
 - **review id 漂移**：两端各自生成随机 uuid，按 `material_id` 匹配翻转（`local-store:1039`、`direct.ts:856`），翻转后按 id 的 tombstone 删除落空 → 幽灵行。（→ 已修，commit `fbd3f6a`，见下「续六」。）
 - **`updated_at` 可信度**：`012:44-62` 只为 4 表建 trigger；`intents/saved_expressions/user_settings/practice_records` 没有。`reuse_events` 无 `updated_at` 却被 `applyCloudTombstones` `.lte("updated_at")`（`direct.ts:1162`）→ 推其 tombstone 必 500。（后半条已在 P0-2 修复；前半条：`intents`/`saved_expressions`/`user_settings` 三表已由迁移 `018` 补齐触发器，`practice_records`/`reuse_events` 为追加写、无 `updated_at` 列，刻意不动。）
-- **过滤注入**：`direct.ts:772` `q` 直接插值进 PostgREST `.or()`，含 `,`/`)` 可注入额外条件；外层 `eq(user_id)` 挡跨用户但可绕过搜索语义。
+- **过滤注入**：`direct.ts:772` `q` 直接插值进 PostgREST `.or()`，含 `,`/`)` 可注入额外条件；外层 `eq(user_id)` 挡跨用户但可绕过搜索语义。（→ 已修，commit `6797859`：搜索词放进双引号值内，分隔符全部失效为字面量；字面双引号直接丢弃——PostgREST 文法里转义歧义，换取确定解析。全仓仅此一处 `.or(` 插值，`searchCorpus` 走参数化 rpc 本就安全。）
 - **`/register` 可被刷**：`routes/oauth.ts:44-58` 无认证、无限流、不校验 `redirect_uris`；`client_name` 全由攻击者控制并渲染进同意页（钓鱼面）。
 - **CI 不跑测试**：`.github/workflows/ci.yml:20-23` 只有 typecheck+build，111 个测试一个都不拦回归——与"方法路由 405 没人发现"同根：**验证没进流水线**。
 
@@ -313,7 +313,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
   - [ ] 补 `scheduleNextReview`（现零测试）、`markSynced` 往返、`apps/api` 用 `app.request()` 的进程内路由测试；
   - [x] CI 加一条「测试数为 0 即失败」的护栏（commit `d1aa84c`，详见下方「零测试护栏」）。
-- [ ] 清债（可最后）：删两个空壳包、收敛双实现、拆 `main.tsx`。
+- [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、收敛双实现、拆 `main.tsx`。
 
 ## 测试此前从未真正运行（2026-08-30）
 
@@ -477,3 +477,35 @@ P2 的「review id 漂移 → 幽灵行」已修。**成因**：review 行的 id
 **兼容性**：修复前已记录的 review tombstone（id 是 review 行 id）在重放时按 `material_id` 匹配不到任何行，静默 no-op，无害；它们遗留的幽灵行由 material tombstone 级联或人工清理，不在本次范围。
 
 **验证**：mcp-server 31/31（新增 1 条按键断言 + 1 条既有用例按新语义更新：tombstone 记录的必须是 material_id）；`local-store` 新增 2 条（本地删除记录的 review tombstone 必须带 material_id、pull 到 material 键的 review tombstone 必须删掉本地不同 id 的 review 行），**本机跑不了 better-sqlite3，等 CI 验证**。三处 `tsc --noEmit` 干净，local-store 副本已同步。
+
+## 2026-08-30 续七：过滤注入修复 + 清债第一步
+
+### 过滤注入（commit `6797859`）
+
+全仓唯一一处 `.or()` 插值在 `searchQuestionTranslations`（`searchCorpus` 走参数化 rpc，本就安全）。搜索词裸插进 PostgREST 逻辑表达式，`,`/`(`/`)` 都是条件分隔符，可追加攻击者选择的条件（`user_id` 仍被 `eq` 挡住，不能跨用户，但可改写命中语义）。现在搜索词放进双引号值（`col.ilike."%term%"`），分隔符全部失效为字面量；字面双引号直接丢弃——PostgREST 文法里引号转义有歧义，丢弃换取确定解析。新增 2 条测试（注入词被中和、正常搜索三个条件不变），mcp-server 33/33。
+
+### 清债第一步（commits `0b59fa3` / `40b862a`）
+
+- 删死文件 `apps/api/api/index.ts`（`vercel.json` 只构建 `[[...route]].js`，零引用）。
+- 删空壳包 `packages/learning-skill`（零消费者）、`packages/learning-core`（只转发 `redactSecrets`，shared-schema 直出；唯一真实消费者 `apps/cli` 已改从 shared-schema 导入）。
+- 两个包的依赖声明与 `pnpm-lock.yaml` 一并剪除；`.npmrc`（`node-linker=hoisted`）入库——它在本机是 workspace 解析能用的前提，之前丢了导致本次事故（见下）。
+
+### 本机 node_modules 事故（重要，恢复指引）
+
+`.npmrc` 丢失后，本次 `pnpm install` 用了默认 isolated 链接器，为本机建了一批 **junction**。本机 junction 不可遍历（`Test-Path` 经 junction 返回 False），ESM 解析 workspace 包全部失败（`ERR_MODULE_NOT_FOUND`）；随后补 `.npmrc` 再装，又因 junction 挡住了 hoisted 副本的建立而中途失败。**本地测试/类型检查当前不可用，不代表代码有问题——CI（ubuntu，无此问题）是权威门**。恢复步骤（需在终端手动执行，删除命令需要批准）：
+
+```powershell
+cd c:\000mycodes\work-learn
+# 1) 删掉所有 node_modules（含 apps/*、packages/* 下共 11 个目录）
+Get-ChildItem -Path . -Recurse -Directory -Filter node_modules -Depth 3 | ForEach-Object { Remove-Item -Recurse -Force $_.FullName }
+# 2) 在 .npmrc 已存在（node-linker=hoisted）的前提下重装
+pnpm install --ignore-scripts
+# 3) 验证
+pnpm --filter @work-learn/api test
+pnpm --filter @work-learn/mcp-server test
+pnpm --filter @work-learn/shared-schema test
+```
+
+恢复后注意：`apps/cli/node_modules/@work-learn/local-store` 会是 hoisted 副本，后续改 local-store 源码时不再需要手动复制（hoisted 模式装的就是当前源码副本，改完要重装一次 pnpm install 才同步到副本）。
+
+**清债剩余**：收敛 `direct.ts` 与 `local-store` 双实现、拆 `apps/web/src/main.tsx`（1786 行）——都属重活，另立专题。
