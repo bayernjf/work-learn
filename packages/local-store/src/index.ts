@@ -897,7 +897,11 @@ export class LocalStore {
     const review = this.db.prepare("SELECT id FROM review_items WHERE material_id = ?").get(materialId) as { id: string } | undefined;
     const tx = this.db.transaction(() => {
       if (review) {
-        this.recordTombstone("review", review.id, deletedAt);
+        // The review tombstone is keyed by material_id, not by the review row
+        // id: each end generates its own review id for the same material, so a
+        // deletion recorded under the local id would miss the row everywhere
+        // else and leave a ghost. material_id is the stable 1:1 key.
+        this.recordTombstone("review", materialId, deletedAt);
         this.db.prepare("DELETE FROM review_items WHERE material_id = ?").run(materialId);
       }
       this.recordTombstone("material", materialId, deletedAt);
@@ -1134,7 +1138,9 @@ export class LocalStore {
       const deleteSession = this.db.prepare("DELETE FROM sessions WHERE id = ? AND ? >= updated_at");
       const deleteMaterial = this.db.prepare("DELETE FROM learning_materials WHERE id = ? AND ? >= updated_at");
       const deleteQuestion = this.db.prepare("DELETE FROM question_translations WHERE id = ? AND ? >= updated_at");
-      const deleteReview = this.db.prepare("DELETE FROM review_items WHERE id = ? AND ? >= updated_at");
+      // A review tombstone carries the material id (reviews are 1:1 with
+      // materials and review ids drift between ends), so match on it.
+      const deleteReview = this.db.prepare("DELETE FROM review_items WHERE material_id = ? AND ? >= updated_at");
       const deleteIntent = this.db.prepare("DELETE FROM intents WHERE id = ? AND ? >= updated_at");
       const deleteExpression = this.db.prepare("DELETE FROM saved_expressions WHERE id = ? AND ? >= updated_at");
       // reuse_events carries no updated_at -- it is append-only -- so a tombstone

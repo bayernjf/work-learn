@@ -1232,8 +1232,11 @@ export const deleteCloudMaterial = async (supabase: SupabaseClient, userId: stri
   const reviews = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", materialId);
   if (reviews.error) throw new Error(reviews.error.message);
   const reviewIds = (reviews.data ?? []) as Array<{ id: string }>;
-  for (const review of reviewIds) {
-    await applyCloudTombstones(supabase, userId, [{ id: review.id, entity: "review", deletedAt }]);
+  // The review tombstone is keyed by material_id: review ids drift between
+  // ends, so a deletion recorded under the cloud's own review id would miss
+  // the row on every other device.
+  if (reviewIds.length > 0) {
+    await applyCloudTombstones(supabase, userId, [{ id: materialId, entity: "review", deletedAt }]);
   }
   await applyCloudTombstones(supabase, userId, [{ id: materialId, entity: "material", deletedAt }]);
   const deleted = await supabase.from("learning_materials").delete().eq("user_id", userId).eq("id", materialId);
@@ -1267,7 +1270,10 @@ const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, to
     // reuse_events is append-only and has no updated_at at all; comparing one
     // made every deletion of a reuse event a 500.
     const guarded = t.entity !== "reuse_event";
-    const query = supabase.from(table).delete().eq("user_id", userId).eq("id", t.id);
+    // A review tombstone carries the material id, the stable 1:1 key, because
+    // each end generates its own review row id for the same material.
+    const idColumn = t.entity === "review" ? "material_id" : "id";
+    const query = supabase.from(table).delete().eq("user_id", userId).eq(idColumn, t.id);
     const deleted = await (guarded ? query.lte("updated_at", t.deletedAt) : query);
     if (deleted.error) throw new Error(deleted.error.message);
     const upserted = await supabase

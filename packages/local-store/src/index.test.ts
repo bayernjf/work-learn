@@ -587,10 +587,61 @@ test("markSynced stamps tombstones in the same transaction as the rows", () => {
     }) as { id: string };
 
     const deleted = store.deleteMaterial(material.id) as { id: string; deletedAt: string };
-    assert.equal(store.unsynced().tombstones.length, 1);
+    assert.equal(store.unsynced().tombstones.length, 2, "the material and its review each get a tombstone");
 
     store.markSynced({ tombstones: [{ id: deleted.id, entity: "material" }] });
-    assert.equal(store.unsynced().tombstones.length, 0, "the tombstone must be stamped after a successful push");
+    assert.equal(store.unsynced().tombstones.length, 1, "only the stamped tombstone is cleared");
+  });
+});
+
+test("a local material deletion keys its review tombstone by material id", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "review drift" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "review drift",
+      originalText: "delete me",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    store.deleteMaterial(material.id);
+    const reviewTombstones = store.unsynced().tombstones.filter((t) => t.entity === "review");
+    assert.deepEqual(
+      reviewTombstones.map((t) => t.id),
+      [material.id],
+      "the review tombstone must carry the material id so other ends can find their differently-id'd review row"
+    );
+  });
+});
+
+test("a pulled review tombstone deletes the local review by material_id", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "review drift pull" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "review drift pull",
+      originalText: "pulled deletion",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const deletedAt = new Date(Date.now() + 60_000).toISOString();
+    store.applyRemoteBatch({
+      sessions: [],
+      materials: [],
+      questions: [],
+      reviews: [],
+      tombstones: [
+        { id: material.id, entity: "material", deletedAt },
+        { id: material.id, entity: "review", deletedAt }
+      ]
+    });
+
+    const review = (store as unknown as { db: { prepare(sql: string): { get(...args: unknown[]): unknown } } })
+      .db.prepare("SELECT id FROM review_items WHERE material_id = ?")
+      .get(material.id);
+    assert.equal(review, undefined, "the locally-id'd review row must fall to the material-keyed tombstone");
   });
 });
 

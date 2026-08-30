@@ -265,7 +265,10 @@ test("deleteCloudMaterial tombstones the review and material", async () => {
   assert.equal(result.id, "material-1");
   assert.ok(deleted.includes("review_items"));
   assert.ok(deleted.includes("learning_materials"));
-  assert.ok(upserted.some((u) => u.entity === "review" && u.id === "review-1"));
+  assert.ok(
+    upserted.some((u) => u.entity === "review" && u.id === "material-1"),
+    "the review tombstone is keyed by material_id, which survives review id drift"
+  );
   assert.ok(upserted.some((u) => u.entity === "material" && u.id === "material-1"));
 });
 
@@ -426,6 +429,32 @@ test("tombstones only guard on updated_at for tables that have one", async () =>
   // reuse_events has no updated_at column at all, so any comparison is a 500.
   assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
   assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
+});
+
+test("a review tombstone deletes by material_id, the key that survives id drift", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    tombstones: [{ id: "material-1", entity: "review", deletedAt: "2026-08-30T12:00:00.000Z" }]
+  });
+
+  const reviewDelete = calls.find((call) => call.table === "review_items" && call.verb === "delete");
+  assert.ok(reviewDelete, "the review tombstone must issue a delete");
+  assert.ok(
+    reviewDelete.filters.some(([column, value]) => column === "material_id" && value === "material-1"),
+    "review row ids drift between ends; material_id is the stable 1:1 key"
+  );
+  assert.equal(
+    reviewDelete.filters.some(([column]) => column === "id"),
+    false,
+    "deleting by review row id is exactly the ghost-row bug"
+  );
+  assert.ok(
+    reviewDelete.comparisons?.some((comparison) => comparison.column === "updated_at"),
+    "a review edited after the deletion must survive"
+  );
 });
 
 const EXPRESSION_FIXTURE = {
