@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken } from "../lib/oauth.js";
+import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 
 /**
@@ -43,13 +43,11 @@ oauthRoute.get("/.well-known/oauth-authorization-server", (c) =>
 /** Dynamic Client Registration (RFC 7591) */
 oauthRoute.post("/register", async (c) => {
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-  const redirectUris = Array.isArray(body.redirect_uris)
-    ? (body.redirect_uris as unknown[]).filter((u): u is string => typeof u === "string")
-    : [];
-  if (redirectUris.length === 0) return c.json({ error: "invalid_redirect_uri" }, 400);
+  const check = validateRedirectUris(body.redirect_uris);
+  if (!check.ok) return c.json({ error: check.error }, 400);
 
   const client = await registerClient({
-    redirect_uris: redirectUris,
+    redirect_uris: check.uris,
     client_name: typeof body.client_name === "string" ? body.client_name : undefined,
     client_uri: typeof body.client_uri === "string" ? body.client_uri : undefined,
     logo_uri: typeof body.logo_uri === "string" ? body.logo_uri : undefined,

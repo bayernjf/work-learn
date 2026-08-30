@@ -763,6 +763,16 @@ const ensureCloudExpressions = async (
  * `WorkLearnContext` because listing these is a read-only endpoint concern, not
  * one of the five MCP tools.
  */
+/**
+ * Quote a search term for use inside a PostgREST `.or()` logical expression.
+ * Commas and parentheses delimit conditions there, so an unquoted term
+ * containing them would append attacker-chosen conditions to the query --
+ * still scoped to the caller's user_id, but able to change which rows match.
+ * Double quotes are dropped rather than escaped: a term can no longer contain
+ * a literal quote, which is the price for unambiguous parsing.
+ */
+const orSearchTerm = (term: string): string => `"${term.replace(/"/g, "")}"`;
+
 export const searchQuestionTranslations = async (supabase: SupabaseClient, userId: string, query?: string, source?: string) => {
   const trimmed = query?.trim();
   let statement = supabase
@@ -770,7 +780,10 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
     .select(questionTranslationColumns)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (trimmed) statement = statement.or(`question.ilike.%${trimmed}%,translation.ilike.%${trimmed}%,topic.ilike.%${trimmed}%`);
+  if (trimmed) {
+    const pattern = orSearchTerm(`%${trimmed}%`);
+    statement = statement.or(`question.ilike.${pattern},translation.ilike.${pattern},topic.ilike.${pattern}`);
+  }
   if (source) statement = statement.eq("source", source);
   const result = await statement;
   return ok(result) ?? [];
@@ -785,8 +798,13 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
 export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string) => {
   const trimmed = since?.trim();
   let sessionsQuery = supabase.from("sessions").select("id,source,topic,created_at,updated_at").eq("user_id", userId);
-  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
-  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
+  // The cloud keeps materials and questions alive when their session is
+  // deleted (session_id SET NULL). The local store's FK for both is NOT NULL,
+  // so a pulled row with a null session would fail the whole batch. Skip the
+  // orphans at the source; a device whose session is gone has no parent to
+  // attach them to.
+  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId).not("session_id", "is", null);
+  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId).not("session_id", "is", null);
   let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
   let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
   let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);
@@ -876,12 +894,44 @@ const upsertWithLww = async (
     if (tombstoned.has(String(row.id))) continue;
     const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
     if (!existing) {
-      // `onConflict: id` rather than a bare insert: the probe above and this
-      // write are separate HTTP calls with no transaction between them, so a
-      // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
-      // makes the retry a no-op instead of a permanent duplicate-key failure.
-      const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
-      if (insert.error) throw new Error(insert.error.message);
+      // Cloud uniqueness for expressions is (user_id, text_norm), not id: a
+      // sibling device may have saved the same normalized text under a
+      // different id. A plain insert would violate that constraint, and since
+      // the batch has no transaction the CLI would never mark the row synced
+      // and would retry it on every sync -- a poison pill that wedges the
+      // whole sync. Probe by norm and adopt the cloud row instead, applying
+      // the same last-write-wins rule as the update path below.
+      let adoptId: string | null = null;
+      if (table === "saved_expressions") {
+        const { data: byNorm, error: normError } = await supabase
+          .from(table)
+          .select("id,updated_at")
+          .eq("user_id", userId)
+          .eq("text_norm", String(row.text_norm))
+          .maybeSingle();
+        if (normError) throw new Error(normError.message);
+        if (byNorm && String(byNorm.id) !== String(row.id)) adoptId = String(byNorm.id);
+      }
+      if (adoptId) {
+        // Keep the cloud row's id -- it is the one reuse_events reference.
+        // The `.lte` guard makes a fresher cloud copy win by matching zero rows.
+        const { id: _localId, ...payload } = row;
+        const updated = await supabase
+          .from(table)
+          .update({ user_id: userId, ...payload })
+          .eq("user_id", userId)
+          .eq("id", adoptId)
+          .lte("updated_at", String(row.updated_at))
+          .select("id");
+        if (updated.error) throw new Error(updated.error.message);
+      } else {
+        // `onConflict: id` rather than a bare insert: the probe above and this
+        // write are separate HTTP calls with no transaction between them, so a
+        // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
+        // makes the retry a no-op instead of a permanent duplicate-key failure.
+        const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
+        if (insert.error) throw new Error(insert.error.message);
+      }
     } else {
       // Last-write-wins: overwrite only when the cloud copy is not newer than the
       // row being pushed. `.lte` (cloud.updated_at <= incoming) keeps a fresher
@@ -1200,8 +1250,11 @@ export const deleteCloudMaterial = async (supabase: SupabaseClient, userId: stri
   const reviews = await supabase.from("review_items").select("id").eq("user_id", userId).eq("material_id", materialId);
   if (reviews.error) throw new Error(reviews.error.message);
   const reviewIds = (reviews.data ?? []) as Array<{ id: string }>;
-  for (const review of reviewIds) {
-    await applyCloudTombstones(supabase, userId, [{ id: review.id, entity: "review", deletedAt }]);
+  // The review tombstone is keyed by material_id: review ids drift between
+  // ends, so a deletion recorded under the cloud's own review id would miss
+  // the row on every other device.
+  if (reviewIds.length > 0) {
+    await applyCloudTombstones(supabase, userId, [{ id: materialId, entity: "review", deletedAt }]);
   }
   await applyCloudTombstones(supabase, userId, [{ id: materialId, entity: "material", deletedAt }]);
   const deleted = await supabase.from("learning_materials").delete().eq("user_id", userId).eq("id", materialId);
@@ -1235,7 +1288,10 @@ const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, to
     // reuse_events is append-only and has no updated_at at all; comparing one
     // made every deletion of a reuse event a 500.
     const guarded = t.entity !== "reuse_event";
-    const query = supabase.from(table).delete().eq("user_id", userId).eq("id", t.id);
+    // A review tombstone carries the material id, the stable 1:1 key, because
+    // each end generates its own review row id for the same material.
+    const idColumn = t.entity === "review" ? "material_id" : "id";
+    const query = supabase.from(table).delete().eq("user_id", userId).eq(idColumn, t.id);
     const deleted = await (guarded ? query.lte("updated_at", t.deletedAt) : query);
     if (deleted.error) throw new Error(deleted.error.message);
     const upserted = await supabase

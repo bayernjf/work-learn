@@ -897,7 +897,11 @@ export class LocalStore {
     const review = this.db.prepare("SELECT id FROM review_items WHERE material_id = ?").get(materialId) as { id: string } | undefined;
     const tx = this.db.transaction(() => {
       if (review) {
-        this.recordTombstone("review", review.id, deletedAt);
+        // The review tombstone is keyed by material_id, not by the review row
+        // id: each end generates its own review id for the same material, so a
+        // deletion recorded under the local id would miss the row everywhere
+        // else and leave a ghost. material_id is the stable 1:1 key.
+        this.recordTombstone("review", materialId, deletedAt);
         this.db.prepare("DELETE FROM review_items WHERE material_id = ?").run(materialId);
       }
       this.recordTombstone("material", materialId, deletedAt);
@@ -1088,20 +1092,30 @@ export class LocalStore {
     const practiceMaterialExists = this.db.prepare("SELECT id FROM learning_materials WHERE id = ?");
     const practiceQuestionExists = this.db.prepare("SELECT id FROM question_translations WHERE id = ?");
     const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 };
+    // Parent ids that exist locally or arrive in this batch. The cloud keeps a
+    // material or question alive after its session is deleted (SET NULL); the
+    // local FK is NOT NULL, so such an orphan must be skipped, not written.
+    const knownSessionIds = new Set((this.db.prepare("SELECT id FROM sessions").all() as Array<{ id: string }>).map((row) => row.id));
+    const knownMaterialIds = new Set((this.db.prepare("SELECT id FROM learning_materials").all() as Array<{ id: string }>).map((row) => row.id));
+    for (const row of parsed.sessions) knownSessionIds.add(row.id);
+    for (const row of parsed.materials) knownMaterialIds.add(row.id);
     const tx = this.db.transaction(() => {
       for (const row of parsed.sessions) {
         upsertSession.run({ ...row, now });
         counts.sessions++;
       }
       for (const row of parsed.materials) {
+        if (!knownSessionIds.has(row.sessionId)) continue;
         upsertMaterial.run({ ...row, usefulExpressions: JSON.stringify(row.usefulExpressions), corrections: JSON.stringify(row.corrections), vocabulary: JSON.stringify(row.vocabulary), practicePrompts: JSON.stringify(row.practicePrompts), tags: JSON.stringify(row.tags), now });
         counts.materials++;
       }
       for (const row of parsed.questions) {
+        if (!knownSessionIds.has(row.sessionId)) continue;
         upsertQuestion.run({ ...row, questionNorm: normalizeQuestion(row.question), now });
         counts.questions++;
       }
       for (const row of parsed.reviews) {
+        if (!knownMaterialIds.has(row.materialId)) continue;
         const existing = findReviewByMaterial.get(row.materialId) as { id: string; updated_at: string } | undefined;
         if (existing) updateReviewByMaterial.run({ ...row, now });
         else insertReview.run({ ...row, now });
@@ -1134,7 +1148,9 @@ export class LocalStore {
       const deleteSession = this.db.prepare("DELETE FROM sessions WHERE id = ? AND ? >= updated_at");
       const deleteMaterial = this.db.prepare("DELETE FROM learning_materials WHERE id = ? AND ? >= updated_at");
       const deleteQuestion = this.db.prepare("DELETE FROM question_translations WHERE id = ? AND ? >= updated_at");
-      const deleteReview = this.db.prepare("DELETE FROM review_items WHERE id = ? AND ? >= updated_at");
+      // A review tombstone carries the material id (reviews are 1:1 with
+      // materials and review ids drift between ends), so match on it.
+      const deleteReview = this.db.prepare("DELETE FROM review_items WHERE material_id = ? AND ? >= updated_at");
       const deleteIntent = this.db.prepare("DELETE FROM intents WHERE id = ? AND ? >= updated_at");
       const deleteExpression = this.db.prepare("DELETE FROM saved_expressions WHERE id = ? AND ? >= updated_at");
       // reuse_events carries no updated_at -- it is append-only -- so a tombstone
@@ -1161,28 +1177,50 @@ export class LocalStore {
     return counts;
   }
 
-  /** Mark rows as synced after a successful push. */
-  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[]; intents?: string[]; expressions?: string[]; reuseEvents?: string[]; practiceRecords?: string[]; tombstones?: Array<{ id: string; entity: string }> }) {
+  /**
+   * Mark rows as synced after a successful push.
+   *
+   * The mutable tables only stamp the exact `updated_at` that was in the pushed
+   * batch: a row edited while the batch was in flight has a newer timestamp and
+   * must stay unsynced, or the stamp would silently swallow the newer edit.
+   * reuse_events and practice_records are append-only, so their ids carry no
+   * version. Tombstones are stamped inside the same transaction instead of
+   * racing it.
+   */
+  markSynced(rows: {
+    sessions?: Array<{ id: string; updatedAt: string }>;
+    materials?: Array<{ id: string; updatedAt: string }>;
+    questions?: Array<{ id: string; updatedAt: string }>;
+    reviews?: Array<{ id: string; updatedAt: string }>;
+    intents?: Array<{ id: string; updatedAt: string }>;
+    expressions?: Array<{ id: string; updatedAt: string }>;
+    reuseEvents?: string[];
+    practiceRecords?: string[];
+    tombstones?: Array<{ id: string; entity: string }>;
+  }) {
     const now = new Date().toISOString();
-    const statements: Array<[string, string[]]> = [
-      ["sessions", ids.sessions ?? []],
-      ["learning_materials", ids.materials ?? []],
-      ["question_translations", ids.questions ?? []],
-      ["review_items", ids.reviews ?? []],
-      ["intents", ids.intents ?? []],
-      ["saved_expressions", ids.expressions ?? []],
-      ["reuse_events", ids.reuseEvents ?? []],
-      ["practice_records", ids.practiceRecords ?? []]
+    const versioned: Array<[string, Array<{ id: string; updatedAt: string }>]> = [
+      ["sessions", rows.sessions ?? []],
+      ["learning_materials", rows.materials ?? []],
+      ["question_translations", rows.questions ?? []],
+      ["review_items", rows.reviews ?? []],
+      ["intents", rows.intents ?? []],
+      ["saved_expressions", rows.expressions ?? []]
     ];
-    const tombstoneIds = ids.tombstones ?? [];
     const tx = this.db.transaction(() => {
-      for (const [table, ids] of statements) {
+      for (const [table, entries] of versioned) {
+        const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ? AND updated_at = ?`);
+        for (const entry of entries) stmt.run(now, entry.id, entry.updatedAt);
+      }
+      const stamp = (table: string, ids: string[]) => {
         const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ?`);
         for (const id of ids) stmt.run(now, id);
-      }
+      };
+      stamp("reuse_events", rows.reuseEvents ?? []);
+      stamp("practice_records", rows.practiceRecords ?? []);
+      const markTombstone = this.db.prepare("UPDATE sync_tombstones SET sync_status = 'synced', synced_at = ? WHERE id = ? AND entity = ?");
+      for (const t of rows.tombstones ?? []) markTombstone.run(now, t.id, t.entity);
     });
-    const markTombstone = this.db.prepare("UPDATE sync_tombstones SET sync_status = 'synced', synced_at = ? WHERE id = ? AND entity = ?");
-    for (const t of tombstoneIds) markTombstone.run(now, t.id, t.entity);
     tx();
   }
 

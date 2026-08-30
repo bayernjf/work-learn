@@ -463,11 +463,13 @@ test("deleting a material records tombstones for push", () => {
       originalText: "this will be removed",
       usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
     }) as { id: string };
-    const reviewId = (store.getReviewItems()[0] as { review_id: string }).review_id;
     store.deleteMaterial(material.id);
     const batch = store.unsynced();
     assert.ok(batch.tombstones.some((t) => t.entity === "material" && t.id === material.id));
-    assert.ok(batch.tombstones.some((t) => t.entity === "review" && t.id === reviewId));
+    assert.ok(
+      batch.tombstones.some((t) => t.entity === "review" && t.id === material.id),
+      "the review tombstone is keyed by material id, the stable key that survives review id drift"
+    );
     assert.equal(batch.materials.length, 0);
   });
 });
@@ -536,6 +538,168 @@ test("a recorded practice attempt is pushed and can be marked synced", () => {
 
     store.markSynced({ practiceRecords: [record.id] });
     assert.equal(store.unsynced().practiceRecords.length, 0);
+  });
+});
+
+test("markSynced only stamps the pushed version of a row", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "mark synced race" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "mark synced race",
+      originalText: "we should roll it out",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const [snapshot] = store.unsynced().materials;
+    assert.ok(snapshot);
+
+    // The batch is in flight when the user edits the same row: a newer
+    // updated_at and sync_status back to local_only. LocalStore keeps `db`
+    // private and exposes no material-edit method, so the test reaches in
+    // through a structural cast.
+    (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } })
+      .db.prepare("UPDATE learning_materials SET original_text = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ?")
+      .run("we should roll it out today", "2026-08-30T23:59:00.000Z", material.id);
+
+    // Stamping with the snapshot's version must not swallow the newer edit.
+    store.markSynced({ materials: [{ id: material.id, updatedAt: snapshot.updatedAt }] });
+    const stillPending = store.unsynced().materials.find((row) => row.id === material.id);
+    assert.ok(stillPending, "a row edited while the batch was in flight must stay unsynced");
+    assert.equal(stillPending.originalText, "we should roll it out today", "the newer edit must survive the stamp");
+
+    // Pushing the newer version does stamp it.
+    const [current] = store.unsynced().materials;
+    assert.ok(current);
+    store.markSynced({ materials: [{ id: material.id, updatedAt: current.updatedAt }] });
+    assert.equal(store.unsynced().materials.length, 0);
+  });
+});
+
+test("markSynced stamps tombstones in the same transaction as the rows", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "tombstone stamp" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "tombstone stamp",
+      originalText: "to be deleted",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const deleted = store.deleteMaterial(material.id) as { id: string; deletedAt: string };
+    assert.equal(store.unsynced().tombstones.length, 2, "the material and its review each get a tombstone");
+
+    store.markSynced({ tombstones: [{ id: deleted.id, entity: "material" }] });
+    assert.equal(store.unsynced().tombstones.length, 1, "only the stamped tombstone is cleared");
+  });
+});
+
+test("a local material deletion keys its review tombstone by material id", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "review drift" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "review drift",
+      originalText: "delete me",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    store.deleteMaterial(material.id);
+    const reviewTombstones = store.unsynced().tombstones.filter((t) => t.entity === "review");
+    assert.deepEqual(
+      reviewTombstones.map((t) => t.id),
+      [material.id],
+      "the review tombstone must carry the material id so other ends can find their differently-id'd review row"
+    );
+  });
+});
+
+test("a pulled material, question or review whose parent is missing is skipped, not fatal", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "orphan pull" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "orphan pull",
+      originalText: "keep me",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const result = store.applyRemoteBatch({
+      sessions: [],
+      materials: [{
+        id: "orphan-material",
+        sessionId: "no-such-session",
+        source: "codex",
+        topic: "t",
+        originalText: "orphan",
+        explanation: "",
+        usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: [],
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      questions: [{
+        id: "orphan-question",
+        sessionId: "no-such-session",
+        source: "codex",
+        question: "how do I say it?",
+        translation: "translation",
+        topic: null,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      reviews: [{
+        id: "orphan-review",
+        materialId: "no-such-material",
+        status: "pending",
+        dueAt: "2026-08-31T12:00:00.000Z",
+        intervalDays: 0,
+        completedAt: null,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }]
+    });
+
+    assert.equal(result.materials, 0, "the orphan material must not be written");
+    assert.equal(result.questions, 0, "same for the orphan question");
+    assert.equal(result.reviews, 0, "same for the orphan review");
+    const orphan = (store as unknown as { db: { prepare(sql: string): { all(...args: unknown[]): unknown[] } } })
+      .db.prepare("SELECT id FROM learning_materials WHERE id = ?")
+      .all("orphan-material");
+    assert.equal(orphan.length, 0, "the row must not exist after the pull");
+  });
+});
+
+test("a pulled review tombstone deletes the local review by material_id", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "review drift pull" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "review drift pull",
+      originalText: "pulled deletion",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const deletedAt = new Date(Date.now() + 60_000).toISOString();
+    store.applyRemoteBatch({
+      sessions: [],
+      materials: [],
+      questions: [],
+      reviews: [],
+      tombstones: [
+        { id: material.id, entity: "material", deletedAt },
+        { id: material.id, entity: "review", deletedAt }
+      ]
+    });
+
+    const review = (store as unknown as { db: { prepare(sql: string): { get(...args: unknown[]): unknown } } })
+      .db.prepare("SELECT id FROM review_items WHERE material_id = ?")
+      .get(material.id);
+    assert.equal(review, undefined, "the locally-id'd review row must fall to the material-keyed tombstone");
   });
 });
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, syncToCloud } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, searchQuestionTranslations, syncToCloud } from "./direct.js";
 
 type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
 type Call = {
@@ -12,6 +12,7 @@ type Call = {
   comparisons?: Comparison[];
   columns?: string;
   single?: boolean;
+  payload?: unknown;
 };
 
 /**
@@ -19,7 +20,13 @@ type Call = {
  * bypasses RLS, so what these tests assert is that the filters are present at
  * all -- a missing user_id here is a cross-user read, not a failed query.
  */
-function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null; tombstoned?: string[] }) {
+function stubClient(options?: {
+  counts?: Record<string, number>;
+  latestUpdatedAt?: string | null;
+  tombstoned?: string[];
+  /** Answer for a `.eq("text_norm", ...).maybeSingle()` probe: the cloud row already holding that norm. */
+  existingByNorm?: { id: string; updated_at: string } | null;
+}) {
   const calls: Call[] = [];
 
   const chain = (call: Call) => {
@@ -31,12 +38,24 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       call.single = true;
       return builder;
     };
+    builder.is = (column: string, value: unknown) => {
+      call.filters.push([column, value]);
+      return builder;
+    };
     builder.select = (columns?: string) => {
       call.columns = columns;
       return builder;
     };
     builder.eq = (column: string, value: unknown) => {
       call.filters.push([column, value]);
+      return builder;
+    };
+    builder.or = (expression: string) => {
+      call.filters.push(["or", expression]);
+      return builder;
+    };
+    builder.not = (column: string, operator: string, value: unknown) => {
+      call.filters.push(["not", [column, operator, value]]);
       return builder;
     };
     // Range filters decide which rows a mutation may touch, so the operator is
@@ -56,7 +75,11 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       };
     }
     builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
-      if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      if (call.single) {
+        const normProbe = options?.existingByNorm !== undefined && call.filters.some(([column]) => column === "text_norm");
+        if (normProbe) return Promise.resolve(resolve({ data: options?.existingByNorm ?? null, error: null }));
+        return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      }
       if (call.table === "sync_tombstones" && options?.tombstoned) {
         return Promise.resolve(resolve({ data: options.tombstoned.map((id) => ({ id })), error: null }));
       }
@@ -79,9 +102,21 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
           call.columns = columns;
           return chain(call);
         },
-        update: () => chain(record(table, "update")),
-        insert: () => chain(record(table, "insert")),
-        upsert: () => chain(record(table, "upsert")),
+        update: (payload?: unknown) => {
+          const call = record(table, "update");
+          call.payload = payload;
+          return chain(call);
+        },
+        insert: (payload?: unknown) => {
+          const call = record(table, "insert");
+          call.payload = payload;
+          return chain(call);
+        },
+        upsert: (payload?: unknown) => {
+          const call = record(table, "upsert");
+          call.payload = payload;
+          return chain(call);
+        },
         delete: () => chain(record(table, "delete"))
       };
     },
@@ -238,7 +273,10 @@ test("deleteCloudMaterial tombstones the review and material", async () => {
   assert.equal(result.id, "material-1");
   assert.ok(deleted.includes("review_items"));
   assert.ok(deleted.includes("learning_materials"));
-  assert.ok(upserted.some((u) => u.entity === "review" && u.id === "review-1"));
+  assert.ok(
+    upserted.some((u) => u.entity === "review" && u.id === "material-1"),
+    "the review tombstone is keyed by material_id, which survives review id drift"
+  );
   assert.ok(upserted.some((u) => u.entity === "material" && u.id === "material-1"));
 });
 
@@ -328,6 +366,27 @@ const PRACTICE_RECORD = {
   createdAt: "2026-08-30T12:00:00.000Z"
 };
 
+test("fetchSyncSnapshot skips materials and questions orphaned by a deleted session", async () => {
+  const { client, calls } = stubClient();
+  await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
+
+  const material = calls.find((call) => call.table === "learning_materials");
+  const question = calls.find((call) => call.table === "question_translations");
+  const review = calls.find((call) => call.table === "review_items");
+  assert.ok(material, "materials must be pulled");
+  assert.ok(question, "questions must be pulled");
+  assert.ok(review, "reviews must be pulled");
+  const excludesOrphans = (call: Call) =>
+    call.filters.some(([column, value]) => column === "not" && Array.isArray(value) && value[0] === "session_id");
+  assert.ok(excludesOrphans(material), "a material whose session was deleted must not reach a device with no such session");
+  assert.ok(excludesOrphans(question), "same for questions");
+  assert.equal(
+    review.filters.some(([column]) => column === "not"),
+    false,
+    "review_items.material_id is NOT NULL and cascades; there is nothing to skip"
+  );
+});
+
 test("fetchSyncSnapshot pulls practice records scoped to the user", async () => {
   const { client, calls } = stubClient();
   await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
@@ -399,4 +458,97 @@ test("tombstones only guard on updated_at for tables that have one", async () =>
   // reuse_events has no updated_at column at all, so any comparison is a 500.
   assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
   assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
+});
+
+test("a search term cannot inject conditions into the or filter", async () => {
+  const { client, calls } = stubClient();
+  await searchQuestionTranslations(client, USER, 'migration", deploy) or (id.neq.x');
+
+  const orFilter = calls.flatMap((call) => call.filters).find(([column]) => column === "or")?.[1] as string | undefined;
+  assert.ok(orFilter, "searching must issue an or filter");
+  assert.ok(
+    orFilter.includes('"%migration, deploy) or (id.neq.x%"'),
+    "the delimiters must sit inert inside a quoted value, and the quote that would have closed it early must be gone"
+  );
+});
+
+test("a plain search still ors across question, translation and topic", async () => {
+  const { client, calls } = stubClient();
+  await searchQuestionTranslations(client, USER, "roll out");
+
+  const orFilter = calls.flatMap((call) => call.filters).find(([column]) => column === "or")?.[1] as string | undefined;
+  assert.equal(orFilter, 'question.ilike."%roll out%",translation.ilike."%roll out%",topic.ilike."%roll out%"');
+});
+
+test("a review tombstone deletes by material_id, the key that survives id drift", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    tombstones: [{ id: "material-1", entity: "review", deletedAt: "2026-08-30T12:00:00.000Z" }]
+  });
+
+  const reviewDelete = calls.find((call) => call.table === "review_items" && call.verb === "delete");
+  assert.ok(reviewDelete, "the review tombstone must issue a delete");
+  assert.ok(
+    reviewDelete.filters.some(([column, value]) => column === "material_id" && value === "material-1"),
+    "review row ids drift between ends; material_id is the stable 1:1 key"
+  );
+  assert.equal(
+    reviewDelete.filters.some(([column]) => column === "id"),
+    false,
+    "deleting by review row id is exactly the ghost-row bug"
+  );
+  assert.ok(
+    reviewDelete.comparisons?.some((comparison) => comparison.column === "updated_at"),
+    "a review edited after the deletion must survive"
+  );
+});
+
+const EXPRESSION_FIXTURE = {
+  id: "local-expr-1",
+  materialId: null,
+  intentId: null,
+  text: "roll out a migration",
+  textNorm: "roll out a migration",
+  register: null,
+  scene: null,
+  note: null,
+  reuseCount: 0,
+  firstReusedAt: null,
+  lastReusedAt: null,
+  createdAt: "2026-08-30T11:00:00.000Z",
+  updatedAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("an expression whose norm the cloud already holds is adopted, not inserted", async () => {
+  const { client, calls } = stubClient({
+    existingByNorm: { id: "cloud-expr-1", updated_at: "2026-08-30T10:00:00.000Z" }
+  });
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], expressions: [EXPRESSION_FIXTURE] });
+
+  assert.equal(
+    calls.some((call) => call.table === "saved_expressions" && call.verb === "upsert"),
+    false,
+    "inserting would violate UNIQUE(user_id, text_norm) and poison the batch forever"
+  );
+  const adopt = calls.find((call) => call.table === "saved_expressions" && call.verb === "update");
+  assert.ok(adopt, "the incoming content must merge into the cloud row the norm already maps to");
+  assert.ok(adopt.filters.some(([column, value]) => column === "id" && value === "cloud-expr-1"),
+    "the update must target the cloud row, not the local id");
+  assert.ok(
+    adopt.comparisons?.some((comparison) => comparison.op === "lte" && comparison.column === "updated_at"),
+    "adoption must follow the same last-write-wins rule as a plain update"
+  );
+  const payload = adopt.payload as Record<string, unknown> | undefined;
+  assert.ok(payload && !("id" in payload), "the cloud row keeps its id; the local id must not overwrite it");
+});
+
+test("an expression the cloud has never seen is still inserted with onConflict id", async () => {
+  const { client, calls } = stubClient({ existingByNorm: null });
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], expressions: [EXPRESSION_FIXTURE] });
+
+  const insert = calls.find((call) => call.table === "saved_expressions" && call.verb === "upsert");
+  assert.ok(insert, "a genuinely new expression must be pushed");
 });
