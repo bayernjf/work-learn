@@ -869,7 +869,11 @@ const upsertWithLww = async (
     if (tombstoned.has(String(row.id))) continue;
     const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
     if (!existing) {
-      const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+      // `onConflict: id` rather than a bare insert: the probe above and this
+      // write are separate HTTP calls with no transaction between them, so a
+      // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
+      // makes the retry a no-op instead of a permanent duplicate-key failure.
+      const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
       if (insert.error) throw new Error(insert.error.message);
     } else {
       // Last-write-wins: overwrite only when the cloud copy is not newer than the
@@ -907,7 +911,7 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
       .eq("material_id", row.material_id)
       .maybeSingle();
     if (!existing) {
-      const insert = await supabase.from("review_items").insert({ user_id: userId, ...row });
+      const insert = await supabase.from("review_items").upsert({ user_id: userId, ...row }, { onConflict: "id" });
       if (insert.error) throw new Error(insert.error.message);
     } else {
       // Same last-write-wins rule as upsertWithLww: keep a fresher cloud row.
@@ -929,10 +933,11 @@ const upsertImmutableWithId = async (
   table: "reuse_events",
   rows: Array<Record<string, unknown>>
 ) => {
+  // These tables are append-only: a replayed or concurrent push must not rewrite
+  // a row and must not fail. ON CONFLICT (id) DO NOTHING is both idempotent and
+  // atomic, which the previous select-then-insert pair was not.
   for (const row of rows) {
-    const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
-    if (existing) continue;
-    const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+    const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id", ignoreDuplicates: true });
     if (insert.error) throw new Error(insert.error.message);
   }
 };
