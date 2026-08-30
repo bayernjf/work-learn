@@ -835,13 +835,38 @@ const normalizeSyncSession = (row: Record<string, unknown>) => ({
   updatedAt: String(row.updated_at)
 });
 
+const tombstoneEntityForTable: Record<string, string> = {
+  sessions: "session",
+  learning_materials: "material",
+  question_translations: "question",
+  intents: "intent",
+  saved_expressions: "expression"
+};
+
+const loadTombstonedIds = async (supabase: SupabaseClient, userId: string, entity: string, ids: string[]) => {
+  if (ids.length === 0) return new Set<string>();
+  const { data, error } = await supabase
+    .from("sync_tombstones")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("entity", entity)
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  return new Set(((data ?? []) as Array<{ id: string }>).map((row) => String(row.id)));
+};
+
 const upsertWithLww = async (
   supabase: SupabaseClient,
   userId: string,
   table: "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions",
   rows: Array<Record<string, unknown>>
 ) => {
+  if (rows.length === 0) return;
+  // A row the cloud has tombstoned is deleted; pushing a stale local copy must
+  // not resurrect it, so skip those ids entirely.
+  const tombstoned = await loadTombstonedIds(supabase, userId, tombstoneEntityForTable[table], rows.map((row) => String(row.id)));
   for (const row of rows) {
+    if (tombstoned.has(String(row.id))) continue;
     const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
     if (!existing) {
       const insert = await supabase.from(table).insert({ user_id: userId, ...row });
@@ -863,7 +888,18 @@ const upsertWithLww = async (
 };
 
 const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, rows: Array<Record<string, unknown>>) => {
+  if (rows.length === 0) return;
+  // Reviews are keyed by material_id in the cloud. If the parent material was
+  // deleted (tombstoned), its review went with it; re-pushing must not recreate
+  // an orphan review. Review ids drift between ends, so gate on the material.
+  const deletedMaterials = await loadTombstonedIds(
+    supabase,
+    userId,
+    "material",
+    [...new Set(rows.map((row) => String(row.material_id)))]
+  );
   for (const row of rows) {
+    if (deletedMaterials.has(String(row.material_id))) continue;
     const { data: existing } = await supabase
       .from("review_items")
       .select("id")

@@ -19,7 +19,7 @@ type Call = {
  * bypasses RLS, so what these tests assert is that the filters are present at
  * all -- a missing user_id here is a cross-user read, not a failed query.
  */
-function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null }) {
+function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null; tombstoned?: string[] }) {
   const calls: Call[] = [];
 
   const chain = (call: Call) => {
@@ -57,6 +57,9 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
     }
     builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
       if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      if (call.table === "sync_tombstones" && options?.tombstoned) {
+        return Promise.resolve(resolve({ data: options.tombstoned.map((id) => ({ id })), error: null }));
+      }
       return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
     };
     return builder;
@@ -310,4 +313,29 @@ test("syncToCloud last-write-wins keeps a fresher cloud row (lte, not gte)", asy
     "id",
     "the update must select its rows so a zero-row result (fresher cloud row) is an observable skip"
   );
+});
+
+const MATERIAL_FIXTURE = {
+  id: "material-1",
+  sessionId: "session-1",
+  source: "claude" as const,
+  topic: "Sync",
+  originalText: "original",
+  usefulExpressions: [],
+  corrections: [],
+  vocabulary: [],
+  practicePrompts: [],
+  tags: [],
+  createdAt: "2026-08-30T11:00:00.000Z",
+  updatedAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("syncToCloud does not write back a row the cloud has deleted", async () => {
+  const { client, calls } = stubClient({ tombstoned: ["material-1"] });
+  await syncToCloud(client, USER, { sessions: [], materials: [MATERIAL_FIXTURE], questions: [] });
+
+  const writes = calls.filter(
+    (call) => call.table === "learning_materials" && ["insert", "update", "upsert"].includes(call.verb)
+  );
+  assert.deepEqual(writes, [], "a tombstoned id must not be written back -- that resurrects a deleted row");
 });
