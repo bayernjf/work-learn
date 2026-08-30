@@ -4,7 +4,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
 import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus } from "./direct.js";
 
-type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string; single?: boolean };
+type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
+type Call = {
+  table: string;
+  verb: string;
+  filters: Array<[string, unknown]>;
+  comparisons?: Comparison[];
+  columns?: string;
+  single?: boolean;
+};
 
 /**
  * Records the query chain instead of talking to Postgres. The service role
@@ -16,7 +24,7 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["order", "lte", "single", "limit", "gte"]) {
+    for (const method of ["order", "single", "limit"]) {
       builder[method] = () => builder;
     }
     builder.maybeSingle = () => {
@@ -31,10 +39,16 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       call.filters.push([column, value]);
       return builder;
     };
-    builder.gte = (column: string, value: unknown) => {
-      call.filters.push([column, value]);
-      return builder;
-    };
+    // Range filters decide which rows a mutation may touch, so the operator is
+    // recorded as well as the operands: `updated_at >= incoming` and
+    // `updated_at <= incoming` are opposite last-write-wins rules.
+    for (const method of ["gte", "lte"] as const) {
+      builder[method] = (column: string, value: unknown) => {
+        call.filters.push([column, value]);
+        call.comparisons = [...(call.comparisons ?? []), { op: method, column, value }];
+        return builder;
+      };
+    }
     for (const method of ["in", "contains"] as const) {
       builder[method] = (column: string, value: unknown) => {
         call.filters.push([column, value]);
@@ -63,7 +77,9 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
           return chain(call);
         },
         update: () => chain(record(table, "update")),
-        insert: () => chain(record(table, "insert"))
+        insert: () => chain(record(table, "insert")),
+        upsert: () => chain(record(table, "upsert")),
+        delete: () => chain(record(table, "delete"))
       };
     },
     rpc: (name: string, params: Record<string, unknown>) => {
@@ -104,8 +120,15 @@ test("getReviewItems scopes due pending and snoozed items to the user", async ()
 test("markMastered cannot complete another user's review item", async () => {
   const { client, calls } = stubClient();
   await createDirectContext(client, USER).markMastered("review-owned-by-someone-else");
-  assert.equal(calls[0]?.verb, "update");
-  assert.ok(calls[0]?.filters.some(([column, value]) => column === "user_id" && value === USER));
+  // The current interval is read before it is rescheduled, so the write is not
+  // the first call any more.
+  const update = calls.find((call) => call.verb === "update");
+  assert.ok(update, "markMastered must issue an update");
+  assert.ok(update.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.ok(
+    update.filters.some(([column, value]) => column === "id" && value === "review-owned-by-someone-else"),
+    "the update must be scoped to the requested review id"
+  );
 });
 
 test("no read hands the internal search column to a client", async () => {
