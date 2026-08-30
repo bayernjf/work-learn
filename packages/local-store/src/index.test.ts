@@ -463,11 +463,13 @@ test("deleting a material records tombstones for push", () => {
       originalText: "this will be removed",
       usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
     }) as { id: string };
-    const reviewId = (store.getReviewItems()[0] as { review_id: string }).review_id;
     store.deleteMaterial(material.id);
     const batch = store.unsynced();
     assert.ok(batch.tombstones.some((t) => t.entity === "material" && t.id === material.id));
-    assert.ok(batch.tombstones.some((t) => t.entity === "review" && t.id === reviewId));
+    assert.ok(
+      batch.tombstones.some((t) => t.entity === "review" && t.id === material.id),
+      "the review tombstone is keyed by material id, the stable key that survives review id drift"
+    );
     assert.equal(batch.materials.length, 0);
   });
 });
