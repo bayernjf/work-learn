@@ -288,7 +288,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 
 ### P2 — 中
 
-- **review id 漂移**：两端各自生成随机 uuid，按 `material_id` 匹配翻转（`local-store:1039`、`direct.ts:856`），翻转后按 id 的 tombstone 删除落空 → 幽灵行。
+- **review id 漂移**：两端各自生成随机 uuid，按 `material_id` 匹配翻转（`local-store:1039`、`direct.ts:856`），翻转后按 id 的 tombstone 删除落空 → 幽灵行。（→ 已修，commit `fbd3f6a`，见下「续六」。）
 - **`updated_at` 可信度**：`012:44-62` 只为 4 表建 trigger；`intents/saved_expressions/user_settings/practice_records` 没有。`reuse_events` 无 `updated_at` 却被 `applyCloudTombstones` `.lte("updated_at")`（`direct.ts:1162`）→ 推其 tombstone 必 500。（后半条已在 P0-2 修复；前半条：`intents`/`saved_expressions`/`user_settings` 三表已由迁移 `018` 补齐触发器，`practice_records`/`reuse_events` 为追加写、无 `updated_at` 列，刻意不动。）
 - **过滤注入**：`direct.ts:772` `q` 直接插值进 PostgREST `.or()`，含 `,`/`)` 可注入额外条件；外层 `eq(user_id)` 挡跨用户但可绕过搜索语义。
 - **`/register` 可被刷**：`routes/oauth.ts:44-58` 无认证、无限流、不校验 `redirect_uris`；`client_name` 全由攻击者控制并渲染进同意页（钓鱼面）。
@@ -462,3 +462,18 @@ P1 同步类缺陷的最后一项已修。**成因**：`pushChanges` 先 `unsync
 **验证**：`local-store` 新增 2 条回归（往返期编辑的行必须保持 unsynced 且新内容存活、之后推新版本才能标记成功；tombstone 与行同事务标记）。**本机仍跑不了 better-sqlite3，这两条等 CI 验证**（与 P0-2 的处理一致）。cli 与 local-store `tsc --noEmit` 干净，mcp-server 30/30 不受影响。
 
 **本机注意**：这台机器 `node_modules` 里的 workspace 包是安装时的**真实目录副本**（hoisted 副本，非软链），改了包源码后必须把新源码复制进 `apps/cli/node_modules/@work-learn/local-store/src/` 等副本目录，否则下游包的 `tsc` 会对着旧签名报错——本轮已同步 local-store 副本。
+
+## 2026-08-30 续六：review tombstone 改按 material_id 键（commit `fbd3f6a`）
+
+P2 的「review id 漂移 → 幽灵行」已修。**成因**：review 行的 id 由两端各自随机生成（同一条 review 在本机是 `R_local`、云端是 `R_cloud`），内容靠 `material_id` 匹配翻转收敛，但 id 永不收敛——删除传播时 tombstone 里带的是「删除方自己的 review 行 id」，另一端按 id 删除必然落空，review 成幽灵行。
+
+**修复**：review 与 material 严格 1:1（云端本就有 `material_id` 唯一索引，所有同步路径也都按 `material_id` 匹配 review），所以 **review tombstone 的 `id` 语义改为「material_id」**，即稳定键：
+
+- 本地 `deleteMaterial`：`recordTombstone("review", materialId, …)`（原来记 review 行 id）；
+- 云端 `deleteCloudMaterial`：存在 review 时记一条 `{ id: materialId, entity: "review" }`（原来按云端 review id 逐条记）；
+- 云端 `applyCloudTombstones`：entity 为 review 时 `DELETE … WHERE material_id = tombstone.id`（其余实体仍按 id）；
+- 本地 `applyRemoteBatch`：`deleteReview` 同样改按 `material_id` 删（保留 `updated_at` 守卫）。
+
+**兼容性**：修复前已记录的 review tombstone（id 是 review 行 id）在重放时按 `material_id` 匹配不到任何行，静默 no-op，无害；它们遗留的幽灵行由 material tombstone 级联或人工清理，不在本次范围。
+
+**验证**：mcp-server 31/31（新增 1 条按键断言 + 1 条既有用例按新语义更新：tombstone 记录的必须是 material_id）；`local-store` 新增 2 条（本地删除记录的 review tombstone 必须带 material_id、pull 到 material 键的 review tombstone 必须删掉本地不同 id 的 review 行），**本机跑不了 better-sqlite3，等 CI 验证**。三处 `tsc --noEmit` 干净，local-store 副本已同步。
