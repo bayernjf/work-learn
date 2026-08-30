@@ -284,7 +284,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - **OAuth code 兑换 / refresh 轮换非原子**：`lib/oauth.ts:143-151,170-192`，先查再更新，并发可双重兑换；旧 refresh 重放不触发家族撤销。应改单条条件 `UPDATE` 判成功。
 - **毒丸批次**：云端 `UNIQUE(user_id,text_norm)`（`015:32`）vs 本地 `UNIQUE(text_norm)`（`local-store:265`）。本地 id 撞云端已有 norm 时 `upsertWithLww` 的 insert 永久报错且无事务（`direct.ts:977-984` 串行 HTTP）→ sync 卡死。（→ 已修，commit `13a5670`，见下「续四」。）
 - **markSynced 竞态**：`apps/cli/src/index.ts:272-297` 快照批次 → 网络往返期间并发写入的行被无脑标 `synced`，新编辑永丢；tombstone 标记写在 `tx()` 之外（`local-store:1147-1156`）。（→ 已修，commit `53fd03a`，见下「续五」。）
-- **FK 级联两端分叉**：`materials/questions/practice_records` 关联云端 `SET NULL`、本地 `CASCADE`。云端 SET NULL 后 `normalizeMaterial` 把 `String(null)` 推成 `'null'`（`direct.ts:659`）→ 本地 FK 违反 → 整个 pull 事务回滚。
+- **FK 级联两端分叉**：实测核对后真实分歧只有 `learning_materials.session_id`（云端 `001:23` 可空 SET NULL vs 本地 NOT NULL CASCADE）与 `question_translations.session_id`（云端 `010:11` 同）——`review_items.material_id` 两端都是 NOT NULL CASCADE，`saved_expressions`/`practice_records` 两端都是可空 SET NULL，一致。云端 SET NULL 后 `normalizeMaterial` 把 `String(null)` 推成 `'null'`（`direct.ts:659`）→ 本地 FK 违反 → 整个 pull 事务回滚。（→ 已修，commit `2cd088a`：快照源头过滤父为 NULL 的行 + `applyRemoteBatch` 对父缺失的行逐行跳过，不再整批回滚。**遗留**：两端删除语义仍不一致——云端删会话保料、本地级联删料；且孤儿行静默丢弃不计入返回计数。）
 
 ### P2 — 中
 
@@ -509,3 +509,21 @@ pnpm --filter @work-learn/shared-schema test
 恢复后注意：`apps/cli/node_modules/@work-learn/local-store` 会是 hoisted 副本，后续改 local-store 源码时不再需要手动复制（hoisted 模式装的就是当前源码副本，改完要重装一次 pnpm install 才同步到副本）。
 
 **清债剩余**：收敛 `direct.ts` 与 `local-store` 双实现、拆 `apps/web/src/main.tsx`（1786 行）——都属重活，另立专题。
+
+## 2026-08-30 续八：FK 孤儿跳过（commit `2cd088a`）
+
+评审 P2 的「FK 级联两端分叉」落地成「孤儿跳过」，且实测修正了评审对分歧范围的描述：
+
+**核对结论（与评审不一致处）**：云端只有 `learning_materials.session_id` 与 `question_translations.session_id` 是「可空 + SET NULL」（`001:23`、`010:11`）；`review_items.material_id` 两端都是 NOT NULL CASCADE；`saved_expressions` 与 `practice_records` 的父引用两端都是可空 SET NULL。所以真实分歧就是那两个 session_id 列。
+
+**危害**：云端删会话后，其 material/question 的 `session_id` 被 SET NULL；另一设备 pull 时 `normalizeMaterial` 把 `String(null)` 变成字面量 `"null"`，本地 `session_id` 是 NOT NULL FK → 违约 → **整个 pull 事务回滚**（一批数据全丢，只因为一行孤儿）。
+
+**修复**：
+- 云端 `fetchSyncSnapshot`：material/question 查询加 `.not("session_id", "is", null)`，孤儿不出快照；
+- 本地 `applyRemoteBatch`：先收集「本地已有 + 本批将写入」的 session/material id 集合，material/question/review 的父不在集合里的**逐行跳过**（不计数），与 practice_records/reuse_events 既有的孤儿跳过策略一致；整批回滚变成单行丢弃。
+
+**遗留**：两端删除语义仍未统一（云端删会话保料、本地级联删料）——这是 schema 级统一，需本地表迁移（重建表改 FK），另立专题；孤儿行静默丢弃、不计入返回计数的问题也仍在。
+
+**验证**：mcp-server 新增 1 条（快照对 material/question 过滤 session_id IS NULL、review 不过滤）、`local-store` 新增 1 条（父缺失的 material/question/review 跳过且不落库）。**本机 node_modules 彻底不可用（见下），全部等 CI**。
+
+**本机环境进一步恶化**：上一轮失败的 hoisted 安装把根 `node_modules/typescript` 也清掉了，本地连语法检查都做不了（`transpileModule` 无法加载 typescript 库）。恢复步骤不变（删全部 node_modules → `pnpm install --ignore-scripts`），执行完一切本地验证恢复；在此之前一律以 CI 为准。
