@@ -28,6 +28,51 @@ export const isOAuthAccessToken = (token: string): boolean => token.startsWith(O
 
 export const randomToken = (bytes = 32): string => randomBytes(bytes).toString("base64url");
 
+export type RedirectUriCheck =
+  | { ok: true; uris: string[] }
+  | { ok: false; error: "invalid_redirect_uri" };
+
+const isLoopback = (hostname: string): boolean =>
+  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+
+/**
+ * Validate OAuth redirect_uris (RFC 6749 3.1.2 + OAuth Security BCP).
+ *
+ * Rejects anything that could become an open redirect or leak the authorization
+ * code: non-absolute values, fragments, wildcards, and non-https schemes except
+ * http on loopback (allowed for local clients). Duplicates collapse.
+ */
+export const validateRedirectUris = (input: unknown): RedirectUriCheck => {
+  if (!Array.isArray(input) || input.length === 0) {
+    return { ok: false, error: "invalid_redirect_uri" };
+  }
+  const seen = new Set<string>();
+  const uris: string[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string" || raw.length === 0) {
+      return { ok: false, error: "invalid_redirect_uri" };
+    }
+    let url: URL;
+    try {
+      url = new URL(raw);
+    } catch {
+      return { ok: false, error: "invalid_redirect_uri" };
+    }
+    if (url.hash !== "" || url.href.includes("*")) {
+      return { ok: false, error: "invalid_redirect_uri" };
+    }
+    const loopback = isLoopback(url.hostname);
+    if (url.protocol !== "https:" && !(url.protocol === "http:" && loopback)) {
+      return { ok: false, error: "invalid_redirect_uri" };
+    }
+    if (!seen.has(url.href)) {
+      seen.add(url.href);
+      uris.push(url.href);
+    }
+  }
+  return { ok: true, uris };
+};
+
 /**
  * Opaque, not a signed JWT.
  *

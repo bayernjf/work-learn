@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX } from "./oauth.js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris } from "./oauth.js";
 
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -97,3 +97,38 @@ test("randomToken is long and unique", () => {
   assert.equal(a.length, 43); // 32 random bytes in base64url
   assert.notEqual(a, b);
 });
+
+test("validateRedirectUris accepts a single https uri", () => {
+  const check = validateRedirectUris(["https://app.example.com/callback"]);
+  assert.deepEqual(check, { ok: true, uris: ["https://app.example.com/callback"] });
+});
+
+test("validateRedirectUris allows http only on loopback", () => {
+  assert.deepEqual(validateRedirectUris(["http://localhost:3000/cb"]), {
+    ok: true,
+    uris: ["http://localhost:3000/cb"]
+  });
+  assert.deepEqual(validateRedirectUris(["http://127.0.0.1/cb"]), { ok: true, uris: ["http://127.0.0.1/cb"] });
+  // http on a public host is rejected (open redirect / plaintext token)
+  assert.equal(validateRedirectUris(["http://app.example.com/cb"]).ok, false);
+});
+
+test("validateRedirectUris rejects fragments, wildcards and non-urls", () => {
+  assert.equal(validateRedirectUris(["https://app.example.com/cb#frag"]).ok, false);
+  assert.equal(validateRedirectUris(["https://*.example.com/cb"]).ok, false);
+  assert.equal(validateRedirectUris(["not-a-url"]).ok, false);
+  assert.equal(validateRedirectUris([""]).ok, false);
+});
+
+test("validateRedirectUris rejects empty or non-array input", () => {
+  assert.equal(validateRedirectUris([]).ok, false);
+  assert.equal(validateRedirectUris("https://app.example.com/cb").ok, false);
+  assert.equal(validateRedirectUris([1, 2]).ok, false);
+});
+
+test("validateRedirectUris collapses duplicates", () => {
+  const check = validateRedirectUris(["https://app.example.com/cb", "https://app.example.com/cb"]);
+  assert.deepEqual(check, { ok: true, uris: ["https://app.example.com/cb"] });
+});
+
+
