@@ -289,7 +289,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 ### P2 — 中
 
 - **review id 漂移**：两端各自生成随机 uuid，按 `material_id` 匹配翻转（`local-store:1039`、`direct.ts:856`），翻转后按 id 的 tombstone 删除落空 → 幽灵行。
-- **`updated_at` 可信度**：`012:44-62` 只为 4 表建 trigger；`intents/saved_expressions/user_settings/practice_records` 没有。`reuse_events` 无 `updated_at` 却被 `applyCloudTombstones` `.lte("updated_at")`（`direct.ts:1162`）→ 推其 tombstone 必 500。
+- **`updated_at` 可信度**：`012:44-62` 只为 4 表建 trigger；`intents/saved_expressions/user_settings/practice_records` 没有。`reuse_events` 无 `updated_at` 却被 `applyCloudTombstones` `.lte("updated_at")`（`direct.ts:1162`）→ 推其 tombstone 必 500。（后半条已在 P0-2 修复；前半条：`intents`/`saved_expressions`/`user_settings` 三表已由迁移 `018` 补齐触发器，`practice_records`/`reuse_events` 为追加写、无 `updated_at` 列，刻意不动。）
 - **过滤注入**：`direct.ts:772` `q` 直接插值进 PostgREST `.or()`，含 `,`/`)` 可注入额外条件；外层 `eq(user_id)` 挡跨用户但可绕过搜索语义。
 - **`/register` 可被刷**：`routes/oauth.ts:44-58` 无认证、无限流、不校验 `redirect_uris`；`client_name` 全由攻击者控制并渲染进同意页（钓鱼面）。
 - **CI 不跑测试**：`.github/workflows/ci.yml:20-23` 只有 typecheck+build，111 个测试一个都不拦回归——与"方法路由 405 没人发现"同根：**验证没进流水线**。
@@ -312,7 +312,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [ ] P1：code 兑换 / refresh 轮换改原子（单条条件 `UPDATE` 判成功，防并发双重兑换与旧 refresh 重放家族撤销）。
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
   - [ ] 补 `scheduleNextReview`（现零测试）、`markSynced` 往返、`apps/api` 用 `app.request()` 的进程内路由测试；
-  - [ ] CI 加一条「测试数为 0 即失败」的护栏：本轮的根因是测试跑了个寂寞却返回 0，光有 `pnpm test` 挡不住下一次静默退化。
+  - [x] CI 加一条「测试数为 0 即失败」的护栏（commit `d1aa84c`，详见下方「零测试护栏」）。
 - [ ] 清债（可最后）：删两个空壳包、收敛双实现、拆 `main.tsx`。
 
 ## 测试此前从未真正运行（2026-08-30）
@@ -396,4 +396,26 @@ node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
   - 现默认 `read`，未显式请求更多 scope 的客户端只拿只读；合规客户端（含 Web consent 透传 `scope=read write`、MCP 客户端请求 `read write`）不受影响，无生产回归。
   - 遗留 PAT 的 `undefined=全权限` 是刻意向后兼容（注释明说），本轮未动。
 
-**仍开着**：`/register` 无频控（`client_name` 仍由攻击者控制并渲染进同意页，钓鱼面）、code 兑换/refresh 轮换非原子（并发可双重兑换）、以及 CI「测试数为 0 即失败」护栏、毒丸批次、markSynced 竞态、review id 漂移、过滤注入、FK 级联分叉、清债项。
+**仍开着**：`/register` 无频控（`client_name` 仍由攻击者控制并渲染进同意页，钓鱼面）、code 兑换/refresh 轮换非原子（并发可双重兑换）、毒丸批次、markSynced 竞态、review id 漂移、过滤注入、FK 级联分叉、清债项。
+
+## 2026-08-30 续二：零测试护栏 + `updated_at` 触发器补齐
+
+### 零测试护栏（commit `d1aa84c`）
+
+评审里「测试跑了个寂寞却返回 0」的根因有两个入口：glob 依赖 shell 展开、以及任何路径改名/包失去测试后静默匹配零个文件。新增共享运行器 `scripts/run-tests.mjs`，5 个包的 `test` 脚本统一改为 `node ../../scripts/run-tests.mjs "<glob>"`：
+
+- **自己用 `node:fs` 展开 glob**，不再依赖 shell——POSIX/Windows 行为一致；
+- **零文件匹配 → 退出 1**，并打印匹配失败的 glob；
+- 跑完后解析 TAP 尾部 `# tests N`，**N 为 0 或读不到 → 退出 1**（输出仍原样透传，测试失败时透传子进程退出码）。
+
+本机已验证：4 个可跑的包全绿（api 28 / shared-schema 39 / mcp-server 28 / setup 5），零匹配路径实测退出 1。`local-store` 仍只能靠 CI（better-sqlite3 原生构建，同前）。
+
+**实现时的一个坑（记录防复发）**：脚本两次报 `SyntaxError`，根因不是转义——是**块注释里写了 `**/` 字样（如 `"**/"`），第二个 `*/` 恰好把注释提前终止**，后面的说明文字变成了代码。已改为文字描述，全文件避开这一序列。
+
+### `updated_at` 触发器补齐（commit `e9d1bb1`，**迁移 `018` 需用户在云端执行**）
+
+`012` 只给最初 4 张同步表建了 `set_updated_at` 触发器；015/016 后加的表没有。这些表上任何非同步写入都会把 `updated_at` 留旧，之后 `learn sync` 推送按旧时间戳做 LWW，可能用旧数据盖掉新编辑。迁移 `018_updated_at_triggers.sql` 给 `intents` / `saved_expressions` / `user_settings` 三表补齐触发器（函数定义随迁移自带 `create or replace`，幂等）。
+
+`practice_records` / `reuse_events` 是追加写、无 `updated_at` 列（017/015），刻意不动——与 P0-2 确立的同步语义一致。
+
+**待办**：用户在云端 Supabase 执行 `018`；执行后普通 Web/CLI 写入的 `updated_at` 才真正可信。
