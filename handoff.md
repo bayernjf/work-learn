@@ -260,3 +260,97 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需在对应 App 内实际配置并验证）。
 
 远程 MCP 方案见：[docs/remote-mcp.md](docs/remote-mcp.md)（`POST /api/mcp` 已实现并上线）。
+
+## 2026-08-30 深度评审（安全 / 同步正确性 / 测试质量）
+
+对全仓做了一轮只读深度评审。**核心结论：承载产品核心承诺（追踪真实复用）的同步层是最薄弱的一环，存在会静默丢数据的缺陷；同时"测试不拦回归、文档勾选先于真实验证"让已交付功能的实际可靠度低于账面。**
+
+### 本轮已止血（已改、未提交）
+
+- [x] `apps/api/api/[[...route]].ts:6-7` 补 `PATCH` / `DELETE` 导出——Vercel 只放行入口文件显式导出的方法，缺了它们导致 `PATCH /api/materials/:id`、`DELETE /api/materials/:id`、`DELETE /api/question-translations/:id`、`PATCH /api/reuse/settings` 在生产直接 405，Hono 路由到不了；本地 dev 正常，属"本地绿、生产坏"。
+- [x] `.github/workflows/deploy-api.yml:40-49` 新增"方法路由冒烟"：部署后对生产发无鉴权 `DELETE`/`PATCH`，返回 405 即判定入口又漏了方法、CI 红。防同类故障复发。
+- [x] `apps/api/src/routes/mcp.ts:17` 注释 five → twenty（工具实际注册 20 个，见 `packages/mcp-server/src/tools.ts:39-219`）。
+- [ ] 删除死文件 `apps/api/api/index.ts`（全仓零引用，`vercel.json` 只构建 `api/[[...route]].js`）。
+
+### P0 — 数据丢失级
+
+- **LWW 方向写反**：`packages/mcp-server/src/direct.ts:850` 与 `:873` 用 `.gte("updated_at", 传入值)` 过滤 update。语义是"只在云端行**更新或相等**时才覆盖"，两个方向全错——云端更新时被旧数据覆盖、云端更旧时新数据被静默丢弃，且不查影响行数，CLI 照常 `markSynced`（`apps/cli/src/index.ts:288`）。正确应为 `.lte(...)`。影响所有同步表。
+- **practice_records 全链路缺席**：本地写入带 `sync_status`（`local-store/src/index.ts:293,642`），但 `unsynced()`（`:920-940`）、`markSynced`（`:1136`）、云端 `syncToCloud`/`fetchSyncSnapshot`（`direct.ts:897-997/784-828`）均不含。C1 练习闭环因此只在单机成立，Web 与 CLI 错题本是两个世界。
+- **删除/插入时序会复活已删数据**：`direct.ts:977` tombstone 先于 upsert，但 insert 路径（`:846-848`）不查 `sync_tombstones`；`importPortableData`（`:1036-1045`，`tombstones:[]`）直接把已删实体插回。
+
+### P1 — 高危
+
+- **空 scope = 全权限**：`apps/api/src/lib/auth.ts:53-54,63-64`。对遗留 PAT 是刻意向后兼容（注释明说），但同一逻辑泄漏进 OAuth：`routes/oauth.ts:38` `scopes_supported: []` → 所有 OAuth 令牌实际全量读写，同意页展示的 scope 无约束力，属误导性授权。
+- **OAuth code 兑换 / refresh 轮换非原子**：`lib/oauth.ts:143-151,170-192`，先查再更新，并发可双重兑换；旧 refresh 重放不触发家族撤销。应改单条条件 `UPDATE` 判成功。
+- **毒丸批次**：云端 `UNIQUE(user_id,text_norm)`（`015:32`）vs 本地 `UNIQUE(text_norm)`（`local-store:265`）。本地 id 撞云端已有 norm 时 `upsertWithLww` 的 insert 永久报错且无事务（`direct.ts:977-984` 串行 HTTP）→ sync 卡死。
+- **markSynced 竞态**：`apps/cli/src/index.ts:272-297` 快照批次 → 网络往返期间并发写入的行被无脑标 `synced`，新编辑永丢；tombstone 标记写在 `tx()` 之外（`local-store:1147-1156`）。
+- **FK 级联两端分叉**：`materials/questions/practice_records` 关联云端 `SET NULL`、本地 `CASCADE`。云端 SET NULL 后 `normalizeMaterial` 把 `String(null)` 推成 `'null'`（`direct.ts:659`）→ 本地 FK 违反 → 整个 pull 事务回滚。
+
+### P2 — 中
+
+- **review id 漂移**：两端各自生成随机 uuid，按 `material_id` 匹配翻转（`local-store:1039`、`direct.ts:856`），翻转后按 id 的 tombstone 删除落空 → 幽灵行。
+- **`updated_at` 可信度**：`012:44-62` 只为 4 表建 trigger；`intents/saved_expressions/user_settings/practice_records` 没有。`reuse_events` 无 `updated_at` 却被 `applyCloudTombstones` `.lte("updated_at")`（`direct.ts:1162`）→ 推其 tombstone 必 500。
+- **过滤注入**：`direct.ts:772` `q` 直接插值进 PostgREST `.or()`，含 `,`/`)` 可注入额外条件；外层 `eq(user_id)` 挡跨用户但可绕过搜索语义。
+- **`/register` 可被刷**：`routes/oauth.ts:44-58` 无认证、无限流、不校验 `redirect_uris`；`client_name` 全由攻击者控制并渲染进同意页（钓鱼面）。
+- **CI 不跑测试**：`.github/workflows/ci.yml:20-23` 只有 typecheck+build，111 个测试一个都不拦回归——与"方法路由 405 没人发现"同根：**验证没进流水线**。
+
+### 架构性结论
+
+1. **双实现是最大技术债**：`direct.ts`（云端）与 `local-store`（本地）是同一套业务逻辑的两份手写实现，FK 语义、唯一约束、tombstone CHECK、updated_at trigger 全在分叉，上面一半 P1 源于此。
+2. **"完成"定义偏松**：C1 因 practice_records 不同步而半残、Web 编辑/删除因方法没导出而生产 405、复用追踪真实验证项（上文 `75,96,221-225`）全未勾。账面进度 ≈ 工程完成度，产品有效度尚未被任何一次真实使用证实。
+3. **两个整包是空壳**：`packages/learning-skill`（零引用）、`packages/learning-core`（除 `redactSecrets` 外零引用，真算法在 `shared-schema`）；`mcp-server/src/index.ts` 的 17 项工具 HTTP 客户端已无人消费。持续误导读者。
+4. **前端单文件巨石**：`apps/web/src/main.tsx` 1786 行、40+ `useState`、无测试、`react-query` 装了没用、两处硬编码 origin（`public/_worker.js:1`、`main.tsx:650`）。
+
+### 修复优先级（待办）
+
+- [x] P0-1：`direct.ts` 的 `upsertWithLww`/`upsertReviewsWithLww` `.gte` 已改 `.lte` 并加 `.select("id")`（零行=云端更新、按预期跳过，不抛错）；`upsertWithLww` 与 `upsertReviewsWithLww` 推送前先查 `sync_tombstones` 跳过已删 id（review 按 `material_id` 判，避免重建孤儿复习项）；`direct.test.ts` 新增回归测试锁定比较方向为 `lte`。**已跑通：mcp-server 28/28、api 22/22、shared-schema 39/39、setup 5/5，全仓 typecheck 绿。**
+- [x] P0-2：insert 前查 tombstone（P0-1 已含）+ 按 id `onConflict`；practice_records 纳入同步批次。详见下方「P0-2：practice_records 同步」。
+  - [ ] 统一两端 FK 语义（`materials/questions/practice_records` 云端 `SET NULL` vs 本地 `CASCADE`）：现阶段以「跳过孤儿行」兜底，未改约束。
+- [ ] P1：OAuth 新令牌强制非空最小 scope；`/register` 限流 + `redirect_uri` 校验；code 兑换改原子。
+- [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
+  - [ ] 补 `scheduleNextReview`（现零测试）、`markSynced` 往返、`apps/api` 用 `app.request()` 的进程内路由测试；
+  - [ ] CI 加一条「测试数为 0 即失败」的护栏：本轮的根因是测试跑了个寂寞却返回 0，光有 `pnpm test` 挡不住下一次静默退化。
+- [ ] 清债（可最后）：删两个空壳包、收敛双实现、拆 `main.tsx`。
+
+## 测试此前从未真正运行（2026-08-30）
+
+跑 P0-1 回归测试时发现问题不在被测代码，而在**测试根本没被执行过**：
+
+1. **脚本依赖 shell 展开通配符**：5 个包的 `test` 都是 `tsx --test src/*.test.ts`。Linux/macOS 的 sh 会展开，Windows 的 cmd 不会——tsx 收到字面量 `src/*.test.ts`，找不到文件，**一个用例都不跑并退出 0**。
+2. **`tsx` 的 `.bin` 垫片在部分 Windows 环境下是坏的**：`pnpm exec tsx --version` 零输出退出 0，`tsx --test <显式文件>` 同样零输出退出 0。即使用显式路径也跑不出结果。
+3. **`markMastered cannot complete another user's review item` 一直是红的**：SRS 改造后 `markMastered` 先 `select` 读 `interval_days` 再 `update`，断言还停在 `calls[0].verb === "update"`，实际是 `"select"`。这条从 SRS 上线起就失败，因为测试从没跑过，无人知晓。
+4. **CI 只跑 typecheck + build**（`ci.yml:20-23`），111 个测试一个都不拦回归。
+
+**修复**：
+- 5 个包的 `test` 改为 `node --import tsx --test src/*.test.ts`（api 用 `src/**/*.test.ts`，其测试在 `src/lib/`）。**glob 不能加引号**：Node 的测试运行器要到 v21+ 才支持 glob，仓库与 CI 都钉在 Node 20，加引号会让 Linux 上从「shell 展开」退化成「Node 展开」从而跑零个。不带引号时 POSIX 由 shell 展开、Windows 由 Node 22 兜底，两头都成立。
+- `ci.yml` 在 typecheck 前加 `pnpm test`。
+- 测试桩 `stubClient` 现在记录 `gte`/`lte` 比较算子到 `call.comparisons`（此前 `lte` 是空实现，无法断言），新增的 LWW 回归测试复用共享桩。
+- 修掉上面第 3 条的陈旧断言，并补上 id 作用域断言。
+
+**已知未覆盖**：`packages/local-store` 的约 21 个测试在本机跑不了——`better-sqlite3` 需要原生模块，预编译包下载超时、本机无 MSVC 工具链。只能靠 CI（ubuntu + Node 20 可正常构建）覆盖。
+
+## P0-2：practice_records 同步（2026-08-30）
+
+C1 的练习闭环此前只在单机成立：本地写 `practice_records` 带 `sync_status`，但 `unsynced()` / `markSynced()` / `syncToCloud` / `fetchSyncSnapshot` 全都不含它，Web 与 CLI 的错题本是两个世界。现已打通双向。
+
+**数据形态**：云端 `017_practice_records.sql` 的 `practice_records` 只有 `created_at`（无 `updated_at`），RLS 也只有 select/insert/delete、没有 update 策略——它和 `reuse_events` 一样是**追加写（append-only）**。因此同步走 `upsertImmutableWithId`（`ON CONFLICT (id) DO NOTHING`），不做 LWW；pull 的增量游标用 `created_at`。
+
+**改动**：
+- `shared-schema`：`syncPracticeRecordSchema` + `syncBatchInputSchema.practiceRecords` + `syncPracticeRecordColumns`。
+- `local-store`：`unsynced()` / `markSynced()` / `stats()` 纳入 practice_records；`applyRemoteBatch` 新增 `upsertPracticeRecord`（`ON CONFLICT(id) DO NOTHING`，仅在实际插入时计数）。
+- `direct.ts`：`fetchSyncSnapshot` 拉 practice_records（按 `created_at` 增量）；`syncToCloud` 用 `upsertImmutableWithId` 推送并在返回计数里带上 `practiceRecords`。
+- CLI `pushChanges`：`total` 与 `markSynced` 带上 practiceRecords。
+
+**顺带修掉两个必炸的缺陷**：
+- `applyCloudTombstones` 对所有实体都加 `.lte("updated_at")`，而 `reuse_events` 根本没有 `updated_at` 列 → **推送任何 reuse_event 删除都是 500**。现改为仅对有 `updated_at` 的表加护栏（回归测试同时断言了正例：`material` 仍受护栏保护）。
+- 本地 `deleteReuseEvent` 语句是 `... WHERE id = ? AND ? >= ?`（3 个占位符），调用只传 2 个参数，且引用了 `reuse_events` 上不存在的 `updated_at` → pull 到 reuse_event tombstone 时 prepare 就抛错、整个事务回滚。改为按 id 直接删除。
+
+**按 id `onConflict`**：`upsertWithLww` / `upsertReviewsWithLww` 的 insert 分支改为 `upsert(..., { onConflict: "id" })`——探测存在与写入是两次独立 HTTP，中间无事务，并发推送会在两者之间插入同一行；`ON CONFLICT (id) DO UPDATE` 让重试变成幂等而不是永久的主键冲突。`upsertImmutableWithId` 改为 `upsert(..., { onConflict: "id", ignoreDuplicates: true })`，省掉一次往返且原子。
+
+**已知缺口（未修）**：
+- **毒丸批次（P1，见上）未处理**：云端 `UNIQUE(user_id,text_norm)` vs 本地 `UNIQUE(text_norm)`，本地 id 撞云端已有 norm 时 insert/update 永久失败且无事务，sync 仍会卡死。本轮只消除了竞态，没消除约束冲突。
+- **practice_record 没有 tombstone 实体**：本地 `sync_tombstones` 的 CHECK 只允许 `session/material/question/review/intent/expression/reuse_event`，加 `practice_record` 需要重建表。目前删除练习记录不会跨端传播（追加写语义下影响有限）。
+- **`LocalStore.recordPractice` 返回 `id: ""`**：插入了行但没回传 id，调用方只能反查 `getPracticeHistory`。属既有缺陷，与同步无关，未在本轮改动。
+- **孤儿行只跳过、不上报**：`applyRemoteBatch` 里父记录缺失时 `continue`，该行静默丢弃且不计入返回计数——仍是"静默丢数据"的形状，待统一 FK 语义时一并处理。
+
+**验证**：`direct.test.ts` 新增 4 个用例（pull 带 practice_records 且游标走 `created_at`、push 走幂等 upsert 且不预探测、tombstone 只对有 `updated_at` 的表加护栏并同时断言 `material` 正例、已 tombstone 的 id 不写回），mcp-server 28/28 全过。`local-store` 新增 3 个用例覆盖 practice_records 的推/拉/孤儿跳过，**本机跑不了**（同上），只能在 CI 上见分晓；其 SQL 已用 Node 内置的 `node:sqlite` 单独验证过语法、占位符数量、`ON CONFLICT DO NOTHING` 的重放行为与 FK 拒绝孤儿。
