@@ -840,7 +840,9 @@ const normalizeSyncSession = (row: Record<string, unknown>) => ({
   updatedAt: String(row.updated_at)
 });
 
-const tombstoneEntityForTable: Record<string, string> = {
+type SyncTable = "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions";
+
+const tombstoneEntityForTable: Record<SyncTable, string> = {
   sessions: "session",
   learning_materials: "material",
   question_translations: "question",
@@ -863,7 +865,7 @@ const loadTombstonedIds = async (supabase: SupabaseClient, userId: string, entit
 const upsertWithLww = async (
   supabase: SupabaseClient,
   userId: string,
-  table: "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions",
+  table: SyncTable,
   rows: Array<Record<string, unknown>>
 ) => {
   if (rows.length === 0) return;
