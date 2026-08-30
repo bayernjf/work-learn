@@ -283,7 +283,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - **空 scope = 全权限**：`apps/api/src/lib/auth.ts:53-54,63-64`。对遗留 PAT 是刻意向后兼容（注释明说），但同一逻辑泄漏进 OAuth：`routes/oauth.ts:38` `scopes_supported: []` → 所有 OAuth 令牌实际全量读写，同意页展示的 scope 无约束力，属误导性授权。
 - **OAuth code 兑换 / refresh 轮换非原子**：`lib/oauth.ts:143-151,170-192`，先查再更新，并发可双重兑换；旧 refresh 重放不触发家族撤销。应改单条条件 `UPDATE` 判成功。
 - **毒丸批次**：云端 `UNIQUE(user_id,text_norm)`（`015:32`）vs 本地 `UNIQUE(text_norm)`（`local-store:265`）。本地 id 撞云端已有 norm 时 `upsertWithLww` 的 insert 永久报错且无事务（`direct.ts:977-984` 串行 HTTP）→ sync 卡死。（→ 已修，commit `13a5670`，见下「续四」。）
-- **markSynced 竞态**：`apps/cli/src/index.ts:272-297` 快照批次 → 网络往返期间并发写入的行被无脑标 `synced`，新编辑永丢；tombstone 标记写在 `tx()` 之外（`local-store:1147-1156`）。
+- **markSynced 竞态**：`apps/cli/src/index.ts:272-297` 快照批次 → 网络往返期间并发写入的行被无脑标 `synced`，新编辑永丢；tombstone 标记写在 `tx()` 之外（`local-store:1147-1156`）。（→ 已修，commit `53fd03a`，见下「续五」。）
 - **FK 级联两端分叉**：`materials/questions/practice_records` 关联云端 `SET NULL`、本地 `CASCADE`。云端 SET NULL 后 `normalizeMaterial` 把 `String(null)` 推成 `'null'`（`direct.ts:659`）→ 本地 FK 违反 → 整个 pull 事务回滚。
 
 ### P2 — 中
@@ -448,3 +448,17 @@ node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
 **验证**：mcp-server 30/30（原 28 + 新 2：撞 norm 时必须认领而非插入、新 norm 仍走 onConflict 插入），`tsc -p packages/mcp-server/tsconfig.json --noEmit` 干净。测试桩顺带补了 `update/insert/upsert` 载荷记录与按 `text_norm` 探测的应答能力。
 
 **仍开着（同族问题）**：`reuse_events` 推送时若其 `expression_id` 在云端不存在（极端孤儿），仍会 FK 失败——`upsertImmutableWithId` 不探父。与「孤儿行只跳过、不上报」一并归入 FK 语义统一。
+
+## 2026-08-30 续五：markSynced 竞态修复（commit `53fd03a`）
+
+P1 同步类缺陷的最后一项已修。**成因**：`pushChanges` 先 `unsynced()` 快照 → POST 推送 → 对快照里的全部 id 无条件 `SET sync_status='synced'`。网络往返期间本地并发写入同一行（所有本地写路径都会把 `sync_status` 重置为 `'local_only'` 并前移 `updated_at`）会被这个无条件标记盖掉——**新编辑被盖成 synced，永远不会推送，静默丢失**。
+
+**修复**：
+- `markSynced` 的可变表（sessions/materials/questions/reviews/intents/saved_expressions）改为**按版本标记**：CLI 传入快照时每行的 `updated_at`，`UPDATE … WHERE id = ? AND updated_at = ?`——只有「被推送的那个版本」会被盖成 synced；往返期间被编辑的行时间戳已变，标记不命中，保持 unsynced，下轮 sync 自然补推。
+- `reuse_events` / `practice_records` 是追加写，行内容不可变，保持按纯 id 标记。
+- tombstone 的标记从事务外挪进同一个 `db.transaction`（原先它与行标记并发跑，事务保护形同虚设）。
+- CLI 的 questions 行 `updatedAt` 做了 `as string` 断言：读模型类型（`QuestionTranslation`）把它标为可选，但列自迁移 `012` 起 NOT NULL，纯类型痕迹。
+
+**验证**：`local-store` 新增 2 条回归（往返期编辑的行必须保持 unsynced 且新内容存活、之后推新版本才能标记成功；tombstone 与行同事务标记）。**本机仍跑不了 better-sqlite3，这两条等 CI 验证**（与 P0-2 的处理一致）。cli 与 local-store `tsc --noEmit` 干净，mcp-server 30/30 不受影响。
+
+**本机注意**：这台机器 `node_modules` 里的 workspace 包是安装时的**真实目录副本**（hoisted 副本，非软链），改了包源码后必须把新源码复制进 `apps/cli/node_modules/@work-learn/local-store/src/` 等副本目录，否则下游包的 `tsc` 会对着旧签名报错——本轮已同步 local-store 副本。
