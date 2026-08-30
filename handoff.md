@@ -366,3 +366,13 @@ C1 的练习闭环此前只在单机成立：本地写 `practice_records` 带 `s
 **结论印证了评审里的判断**：账面完成度不等于产品有效度。间隔重复是 2026-08-26 那轮上线的主要功能，本地实现从那天起就是坏的，四天里没有任何信号——因为测试从未运行。同理，这次也说明把验证搬进 CI 不是形式主义：它用一次运行就还清了一部分欠账。
 
 **CI 现状**：`local-store` 25/25、mcp-server 28/28、shared-schema 39/39、api 22/22、setup 5/5；typecheck 与 build 均通过。
+
+**本机验证的一个陷阱（重要）**：这台机器上 pnpm 的目录链接（junction）不可遍历，为了让测试能跑起来，`node_modules` 是用 `node-linker=hoisted` 重装、并把 workspace 包换成真实目录副本的。代价是 **`.bin` 下的垫片是空文件（0 字节）**：`pnpm typecheck`、`pnpm build`、`pnpm exec <bin>` 全部**静默什么都不做并返回 0**。
+
+因此在本机要真正验证类型，必须绕过垫片直接调用：
+
+```bash
+node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
+```
+
+`pnpm test` 不受影响——上一步已经把测试脚本改成 `node --import tsx --test`，它不经过 `.bin`。测试的绿是可信的；`pnpm typecheck` / `pnpm build` 的绿在本机不可信，一律以 CI 为准。这轮就是这么踩的：本地 `pnpm typecheck` 报绿，CI 一跑就抓出 `direct.ts:872` 的类型错误。
