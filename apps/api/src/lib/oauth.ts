@@ -28,6 +28,19 @@ export const isOAuthAccessToken = (token: string): boolean => token.startsWith(O
 
 export const randomToken = (bytes = 32): string => randomBytes(bytes).toString("base64url");
 
+/**
+ * The least scope a freshly issued OAuth token carries. A client that requests
+ * nothing must not fall through to "unrestricted" -- an empty scope used to be
+ * treated as full access, which leaked write to any client that skipped the
+ * scope parameter. Every real operation requires at least `read`, so `read` is
+ * the safe floor.
+ */
+export const DEFAULT_OAUTH_SCOPE = "read";
+
+/** Resolve the scope stored on a token row into what the issued token carries. */
+export const resolveIssuedScope = (scope: string | null | undefined): string =>
+  scope && scope.trim().length > 0 ? scope : DEFAULT_OAUTH_SCOPE;
+
 export type RedirectUriCheck =
   | { ok: true; uris: string[] }
   | { ok: false; error: "invalid_redirect_uri" };
@@ -204,12 +217,12 @@ export const exchangeAuthorizationCode = async (input: {
     refresh_token_hash: sha256Hex(refreshToken),
     client_id: input.clientId,
     user_id: data.user_id as string,
-    scope: data.scope ?? null,
+    scope: resolveIssuedScope(data.scope),
     access_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString()
   });
 
-  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: (data.scope as string) ?? "" };
+  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(data.scope) };
 };
 
 export const rotateRefreshToken = async (input: {
@@ -240,10 +253,10 @@ export const rotateRefreshToken = async (input: {
     refresh_token_hash: sha256Hex(refreshToken),
     client_id: input.clientId,
     user_id: data.user_id,
-    scope: data.scope ?? null,
+    scope: resolveIssuedScope(data.scope),
     access_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString()
   });
 
-  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: (data.scope as string) ?? "" };
+  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(data.scope) };
 };

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris } from "./oauth.js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, resolveIssuedScope, DEFAULT_OAUTH_SCOPE } from "./oauth.js";
 
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -96,6 +96,13 @@ test("randomToken is long and unique", () => {
   const b = randomToken();
   assert.equal(a.length, 43); // 32 random bytes in base64url
   assert.notEqual(a, b);
+});
+
+test("resolveIssuedScope falls back to the minimal scope for empty input", () => {
+  assert.equal(resolveIssuedScope(null), DEFAULT_OAUTH_SCOPE);
+  assert.equal(resolveIssuedScope(""), DEFAULT_OAUTH_SCOPE);
+  assert.equal(resolveIssuedScope("   "), DEFAULT_OAUTH_SCOPE);
+  assert.equal(resolveIssuedScope("read write"), "read write");
 });
 
 test("validateRedirectUris accepts a single https uri", () => {
