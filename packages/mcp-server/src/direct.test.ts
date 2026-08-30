@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, syncToCloud } from "./direct.js";
 
 type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
 type Call = {
@@ -267,4 +267,47 @@ test("no scopes keeps the legacy full-access behavior", async () => {
   await ctx.createSession({ source: "claude", topic: "Review" });
   await ctx.searchCorpus(undefined);
   assert.equal(calls.length, 2);
+});
+
+test("syncToCloud last-write-wins keeps a fresher cloud row (lte, not gte)", async () => {
+  // `latestUpdatedAt` makes the existence probe report a row, so the upsert
+  // takes the update branch -- the branch whose range filter is the whole point.
+  const { client, calls } = stubClient({ latestUpdatedAt: "2026-08-30T10:00:00.000Z" });
+  const incomingUpdatedAt = "2026-08-30T12:00:00.000Z";
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [
+      {
+        id: "material-1",
+        sessionId: "session-1",
+        source: "claude",
+        topic: "Sync",
+        originalText: "original",
+        usefulExpressions: [],
+        corrections: [],
+        vocabulary: [],
+        practicePrompts: [],
+        tags: [],
+        createdAt: "2026-08-30T11:00:00.000Z",
+        updatedAt: incomingUpdatedAt
+      }
+    ],
+    questions: []
+  });
+
+  const update = calls.find((call) => call.table === "learning_materials" && call.verb === "update");
+  assert.ok(update, "an existing cloud material must be pushed as an update");
+  const materialLww = update.comparisons?.find((comparison) => comparison.column === "updated_at");
+  assert.ok(materialLww, "the material update must run a last-write-wins comparison");
+  assert.equal(materialLww.value, incomingUpdatedAt);
+  assert.equal(
+    materialLww.op,
+    "lte",
+    "must overwrite only when the cloud row is not newer; gte would clobber fresher cloud data"
+  );
+  assert.equal(
+    update.columns,
+    "id",
+    "the update must select its rows so a zero-row result (fresher cloud row) is an observable skip"
+  );
 });

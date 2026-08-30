@@ -847,7 +847,16 @@ const upsertWithLww = async (
       const insert = await supabase.from(table).insert({ user_id: userId, ...row });
       if (insert.error) throw new Error(insert.error.message);
     } else {
-      const updated = await supabase.from(table).update(row).eq("user_id", userId).eq("id", row.id).gte("updated_at", String(row.updated_at));
+      // Last-write-wins: overwrite only when the cloud copy is not newer than the
+      // row being pushed. `.lte` (cloud.updated_at <= incoming) keeps a fresher
+      // cloud row untouched; a zero-row result is that intended skip, not an error.
+      const updated = await supabase
+        .from(table)
+        .update(row)
+        .eq("user_id", userId)
+        .eq("id", row.id)
+        .lte("updated_at", String(row.updated_at))
+        .select("id");
       if (updated.error) throw new Error(updated.error.message);
     }
   }
@@ -865,12 +874,14 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
       const insert = await supabase.from("review_items").insert({ user_id: userId, ...row });
       if (insert.error) throw new Error(insert.error.message);
     } else {
+      // Same last-write-wins rule as upsertWithLww: keep a fresher cloud row.
       const updated = await supabase
         .from("review_items")
         .update(row)
         .eq("user_id", userId)
         .eq("material_id", row.material_id)
-        .gte("updated_at", String(row.updated_at));
+        .lte("updated_at", String(row.updated_at))
+        .select("id");
       if (updated.error) throw new Error(updated.error.message);
     }
   }
