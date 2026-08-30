@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, syncToCloud } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, searchQuestionTranslations, syncToCloud } from "./direct.js";
 
 type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
 type Call = {
@@ -48,6 +48,10 @@ function stubClient(options?: {
     };
     builder.eq = (column: string, value: unknown) => {
       call.filters.push([column, value]);
+      return builder;
+    };
+    builder.or = (expression: string) => {
+      call.filters.push(["or", expression]);
       return builder;
     };
     // Range filters decide which rows a mutation may touch, so the operator is
@@ -429,6 +433,26 @@ test("tombstones only guard on updated_at for tables that have one", async () =>
   // reuse_events has no updated_at column at all, so any comparison is a 500.
   assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
   assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
+});
+
+test("a search term cannot inject conditions into the or filter", async () => {
+  const { client, calls } = stubClient();
+  await searchQuestionTranslations(client, USER, 'migration", deploy) or (id.neq.x');
+
+  const orFilter = calls.flatMap((call) => call.filters).find(([column]) => column === "or")?.[1] as string | undefined;
+  assert.ok(orFilter, "searching must issue an or filter");
+  assert.ok(
+    orFilter.includes('"%migration, deploy) or (id.neq.x%"'),
+    "the delimiters must sit inert inside a quoted value, and the quote that would have closed it early must be gone"
+  );
+});
+
+test("a plain search still ors across question, translation and topic", async () => {
+  const { client, calls } = stubClient();
+  await searchQuestionTranslations(client, USER, "roll out");
+
+  const orFilter = calls.flatMap((call) => call.filters).find(([column]) => column === "or")?.[1] as string | undefined;
+  assert.equal(orFilter, 'question.ilike."%roll out%",translation.ilike."%roll out%",topic.ilike."%roll out%"');
 });
 
 test("a review tombstone deletes by material_id, the key that survives id drift", async () => {

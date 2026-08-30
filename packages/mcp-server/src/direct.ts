@@ -763,6 +763,16 @@ const ensureCloudExpressions = async (
  * `WorkLearnContext` because listing these is a read-only endpoint concern, not
  * one of the five MCP tools.
  */
+/**
+ * Quote a search term for use inside a PostgREST `.or()` logical expression.
+ * Commas and parentheses delimit conditions there, so an unquoted term
+ * containing them would append attacker-chosen conditions to the query --
+ * still scoped to the caller's user_id, but able to change which rows match.
+ * Double quotes are dropped rather than escaped: a term can no longer contain
+ * a literal quote, which is the price for unambiguous parsing.
+ */
+const orSearchTerm = (term: string): string => `"${term.replace(/"/g, "")}"`;
+
 export const searchQuestionTranslations = async (supabase: SupabaseClient, userId: string, query?: string, source?: string) => {
   const trimmed = query?.trim();
   let statement = supabase
@@ -770,7 +780,10 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
     .select(questionTranslationColumns)
     .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  if (trimmed) statement = statement.or(`question.ilike.%${trimmed}%,translation.ilike.%${trimmed}%,topic.ilike.%${trimmed}%`);
+  if (trimmed) {
+    const pattern = orSearchTerm(`%${trimmed}%`);
+    statement = statement.or(`question.ilike.${pattern},translation.ilike.${pattern},topic.ilike.${pattern}`);
+  }
   if (source) statement = statement.eq("source", source);
   const result = await statement;
   return ok(result) ?? [];
