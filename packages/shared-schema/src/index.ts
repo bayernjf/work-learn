@@ -479,6 +479,22 @@ export const syncReuseEventSchema = z.object({
   createdAt: z.string().datetime()
 });
 
+// A practice attempt is immutable once written, exactly like a reuse event:
+// there is no updated_at to arbitrate on, so the sync treats it as insert-only
+// and never resurrects or rewrites one.
+export const syncPracticeRecordSchema = z.object({
+  id: z.string().min(1),
+  materialId: z.string().min(1).nullable(),
+  questionId: z.string().min(1).nullable(),
+  exerciseType: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
+  focus: z.string().max(500).default(""),
+  prompt: z.string().max(5000).default(""),
+  userAnswer: z.string().max(50_000).default(""),
+  isCorrect: z.boolean().nullable(),
+  status: z.enum(["pending", "remembered", "practice_again"]),
+  createdAt: z.string().datetime()
+});
+
 export const recordReuseInputSchema = z.object({
   text: z.string().min(1).max(10_000),
   sessionId: z.string().min(1).optional(),
@@ -583,6 +599,7 @@ export const syncBatchInputSchema = z.object({
   intents: z.array(syncIntentSchema).optional().default([]),
   expressions: z.array(syncSavedExpressionSchema).optional().default([]),
   reuseEvents: z.array(syncReuseEventSchema).optional().default([]),
+  practiceRecords: z.array(syncPracticeRecordSchema).optional().default([]),
   tombstones: z.array(syncTombstoneSchema).optional().default([])
 });
 
@@ -608,6 +625,7 @@ export const syncSavedExpressionColumns =
   "id,material_id,intent_id,text,text_norm,register,scene,note,reuse_count,first_reused_at,last_reused_at,created_at,updated_at";
 export const syncReuseEventColumns =
   "id,expression_id,session_id,source,matched_text,context_snippet,match_kind,confidence,created_at";
+export const syncPracticeRecordColumns = practiceRecordColumns;
 
 
 // The columns the API returns for a material. Explicit rather than "*", because

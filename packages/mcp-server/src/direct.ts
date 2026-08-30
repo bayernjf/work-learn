@@ -31,6 +31,7 @@ import {
   suggestReuse,
   suggestReuseInputSchema,
   syncIntentColumns,
+  syncPracticeRecordColumns,
   syncReuseEventColumns,
   syncSavedExpressionColumns,
   summarizeReuse,
@@ -790,6 +791,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
   let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
   let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);
   let reuseEventsQuery = supabase.from("reuse_events").select(syncReuseEventColumns).eq("user_id", userId);
+  let practiceRecordsQuery = supabase.from("practice_records").select(syncPracticeRecordColumns).eq("user_id", userId);
   let tombstonesQuery = supabase.from("sync_tombstones").select(syncTombstoneColumns).eq("user_id", userId);
   if (trimmed) {
     sessionsQuery = sessionsQuery.gte("updated_at", trimmed);
@@ -798,9 +800,10 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     reviewsQuery = reviewsQuery.gte("updated_at", trimmed);
     intentsQuery = intentsQuery.gte("updated_at", trimmed);
     expressionsQuery = expressionsQuery.gte("updated_at", trimmed);
+    practiceRecordsQuery = practiceRecordsQuery.gte("created_at", trimmed);
     tombstonesQuery = tombstonesQuery.gte("deleted_at", trimmed);
   }
-  const [sessions, materials, questions, reviews, intents, expressions, reuseEvents, tombstones] = await Promise.all([
+  const [sessions, materials, questions, reviews, intents, expressions, reuseEvents, practiceRecords, tombstones] = await Promise.all([
     sessionsQuery.order("updated_at", { ascending: true }),
     materialsQuery.order("updated_at", { ascending: true }),
     questionsQuery.order("updated_at", { ascending: true }),
@@ -808,6 +811,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     intentsQuery.order("updated_at", { ascending: true }),
     expressionsQuery.order("updated_at", { ascending: true }),
     reuseEventsQuery.order("created_at", { ascending: true }),
+    practiceRecordsQuery.order("created_at", { ascending: true }),
     tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
   return {
@@ -818,6 +822,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     intents: (ok(intents) as Record<string, unknown>[]).map(normalizeIntent),
     expressions: (ok(expressions) as Record<string, unknown>[]).map(normalizeSavedExpression),
     reuseEvents: (ok(reuseEvents) as Record<string, unknown>[]).map(normalizeReuseEvent),
+    practiceRecords: (ok(practiceRecords) as Record<string, unknown>[]).map(toPracticeRecord),
     tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id),
       entity: String(row.entity),
@@ -835,26 +840,77 @@ const normalizeSyncSession = (row: Record<string, unknown>) => ({
   updatedAt: String(row.updated_at)
 });
 
+type SyncTable = "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions";
+
+const tombstoneEntityForTable: Record<SyncTable, string> = {
+  sessions: "session",
+  learning_materials: "material",
+  question_translations: "question",
+  intents: "intent",
+  saved_expressions: "expression"
+};
+
+const loadTombstonedIds = async (supabase: SupabaseClient, userId: string, entity: string, ids: string[]) => {
+  if (ids.length === 0) return new Set<string>();
+  const { data, error } = await supabase
+    .from("sync_tombstones")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("entity", entity)
+    .in("id", ids);
+  if (error) throw new Error(error.message);
+  return new Set(((data ?? []) as Array<{ id: string }>).map((row) => String(row.id)));
+};
+
 const upsertWithLww = async (
   supabase: SupabaseClient,
   userId: string,
-  table: "sessions" | "learning_materials" | "question_translations" | "intents" | "saved_expressions",
+  table: SyncTable,
   rows: Array<Record<string, unknown>>
 ) => {
+  if (rows.length === 0) return;
+  // A row the cloud has tombstoned is deleted; pushing a stale local copy must
+  // not resurrect it, so skip those ids entirely.
+  const tombstoned = await loadTombstonedIds(supabase, userId, tombstoneEntityForTable[table], rows.map((row) => String(row.id)));
   for (const row of rows) {
+    if (tombstoned.has(String(row.id))) continue;
     const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
     if (!existing) {
-      const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+      // `onConflict: id` rather than a bare insert: the probe above and this
+      // write are separate HTTP calls with no transaction between them, so a
+      // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
+      // makes the retry a no-op instead of a permanent duplicate-key failure.
+      const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
       if (insert.error) throw new Error(insert.error.message);
     } else {
-      const updated = await supabase.from(table).update(row).eq("user_id", userId).eq("id", row.id).gte("updated_at", String(row.updated_at));
+      // Last-write-wins: overwrite only when the cloud copy is not newer than the
+      // row being pushed. `.lte` (cloud.updated_at <= incoming) keeps a fresher
+      // cloud row untouched; a zero-row result is that intended skip, not an error.
+      const updated = await supabase
+        .from(table)
+        .update(row)
+        .eq("user_id", userId)
+        .eq("id", row.id)
+        .lte("updated_at", String(row.updated_at))
+        .select("id");
       if (updated.error) throw new Error(updated.error.message);
     }
   }
 };
 
 const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, rows: Array<Record<string, unknown>>) => {
+  if (rows.length === 0) return;
+  // Reviews are keyed by material_id in the cloud. If the parent material was
+  // deleted (tombstoned), its review went with it; re-pushing must not recreate
+  // an orphan review. Review ids drift between ends, so gate on the material.
+  const deletedMaterials = await loadTombstonedIds(
+    supabase,
+    userId,
+    "material",
+    [...new Set(rows.map((row) => String(row.material_id)))]
+  );
   for (const row of rows) {
+    if (deletedMaterials.has(String(row.material_id))) continue;
     const { data: existing } = await supabase
       .from("review_items")
       .select("id")
@@ -862,15 +918,17 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
       .eq("material_id", row.material_id)
       .maybeSingle();
     if (!existing) {
-      const insert = await supabase.from("review_items").insert({ user_id: userId, ...row });
+      const insert = await supabase.from("review_items").upsert({ user_id: userId, ...row }, { onConflict: "id" });
       if (insert.error) throw new Error(insert.error.message);
     } else {
+      // Same last-write-wins rule as upsertWithLww: keep a fresher cloud row.
       const updated = await supabase
         .from("review_items")
         .update(row)
         .eq("user_id", userId)
         .eq("material_id", row.material_id)
-        .gte("updated_at", String(row.updated_at));
+        .lte("updated_at", String(row.updated_at))
+        .select("id");
       if (updated.error) throw new Error(updated.error.message);
     }
   }
@@ -879,13 +937,14 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
 const upsertImmutableWithId = async (
   supabase: SupabaseClient,
   userId: string,
-  table: "reuse_events",
+  table: "reuse_events" | "practice_records",
   rows: Array<Record<string, unknown>>
 ) => {
+  // These tables are append-only: a replayed or concurrent push must not rewrite
+  // a row and must not fail. ON CONFLICT (id) DO NOTHING is both idempotent and
+  // atomic, which the previous select-then-insert pair was not.
   for (const row of rows) {
-    const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
-    if (existing) continue;
-    const insert = await supabase.from(table).insert({ user_id: userId, ...row });
+    const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id", ignoreDuplicates: true });
     if (insert.error) throw new Error(insert.error.message);
   }
 };
@@ -973,6 +1032,18 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     confidence: event.confidence,
     created_at: event.createdAt
   }));
+  const practiceRecordRows = parsed.practiceRecords.map((record) => ({
+    id: record.id,
+    material_id: record.materialId,
+    question_id: record.questionId,
+    exercise_type: record.exerciseType,
+    focus: record.focus,
+    prompt: record.prompt,
+    user_answer: record.userAnswer,
+    is_correct: record.isCorrect,
+    status: record.status,
+    created_at: record.createdAt
+  }));
 
   await applyCloudTombstones(supabase, userId, parsed.tombstones);
   await upsertWithLww(supabase, userId, "sessions", sessionRows);
@@ -982,6 +1053,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
   await upsertWithLww(supabase, userId, "intents", intentRows);
   await upsertWithLww(supabase, userId, "saved_expressions", expressionRows);
   await upsertImmutableWithId(supabase, userId, "reuse_events", reuseEventRows);
+  await upsertImmutableWithId(supabase, userId, "practice_records", practiceRecordRows);
 
   return {
     sessions: sessionRows.length,
@@ -991,6 +1063,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     intents: intentRows.length,
     expressions: expressionRows.length,
     reuseEvents: reuseEventRows.length,
+    practiceRecords: practiceRecordRows.length,
     tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
   };
@@ -1159,7 +1232,11 @@ const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, to
   for (const t of tombstones) {
     const table = cloudTableForEntity[t.entity];
     if (!table) continue;
-    const deleted = await supabase.from(table).delete().eq("user_id", userId).eq("id", t.id).lte("updated_at", t.deletedAt);
+    // reuse_events is append-only and has no updated_at at all; comparing one
+    // made every deletion of a reuse event a 500.
+    const guarded = t.entity !== "reuse_event";
+    const query = supabase.from(table).delete().eq("user_id", userId).eq("id", t.id);
+    const deleted = await (guarded ? query.lte("updated_at", t.deletedAt) : query);
     if (deleted.error) throw new Error(deleted.error.message);
     const upserted = await supabase
       .from("sync_tombstones")

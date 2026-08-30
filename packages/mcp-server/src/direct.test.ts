@@ -2,21 +2,29 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, syncToCloud } from "./direct.js";
 
-type Call = { table: string; verb: string; filters: Array<[string, unknown]>; columns?: string; single?: boolean };
+type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
+type Call = {
+  table: string;
+  verb: string;
+  filters: Array<[string, unknown]>;
+  comparisons?: Comparison[];
+  columns?: string;
+  single?: boolean;
+};
 
 /**
  * Records the query chain instead of talking to Postgres. The service role
  * bypasses RLS, so what these tests assert is that the filters are present at
  * all -- a missing user_id here is a cross-user read, not a failed query.
  */
-function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null }) {
+function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null; tombstoned?: string[] }) {
   const calls: Call[] = [];
 
   const chain = (call: Call) => {
     const builder: Record<string, unknown> = {};
-    for (const method of ["order", "lte", "single", "limit", "gte"]) {
+    for (const method of ["order", "single", "limit"]) {
       builder[method] = () => builder;
     }
     builder.maybeSingle = () => {
@@ -31,10 +39,16 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       call.filters.push([column, value]);
       return builder;
     };
-    builder.gte = (column: string, value: unknown) => {
-      call.filters.push([column, value]);
-      return builder;
-    };
+    // Range filters decide which rows a mutation may touch, so the operator is
+    // recorded as well as the operands: `updated_at >= incoming` and
+    // `updated_at <= incoming` are opposite last-write-wins rules.
+    for (const method of ["gte", "lte"] as const) {
+      builder[method] = (column: string, value: unknown) => {
+        call.filters.push([column, value]);
+        call.comparisons = [...(call.comparisons ?? []), { op: method, column, value }];
+        return builder;
+      };
+    }
     for (const method of ["in", "contains"] as const) {
       builder[method] = (column: string, value: unknown) => {
         call.filters.push([column, value]);
@@ -43,6 +57,9 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
     }
     builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
       if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      if (call.table === "sync_tombstones" && options?.tombstoned) {
+        return Promise.resolve(resolve({ data: options.tombstoned.map((id) => ({ id })), error: null }));
+      }
       return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
     };
     return builder;
@@ -63,7 +80,9 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
           return chain(call);
         },
         update: () => chain(record(table, "update")),
-        insert: () => chain(record(table, "insert"))
+        insert: () => chain(record(table, "insert")),
+        upsert: () => chain(record(table, "upsert")),
+        delete: () => chain(record(table, "delete"))
       };
     },
     rpc: (name: string, params: Record<string, unknown>) => {
@@ -104,8 +123,15 @@ test("getReviewItems scopes due pending and snoozed items to the user", async ()
 test("markMastered cannot complete another user's review item", async () => {
   const { client, calls } = stubClient();
   await createDirectContext(client, USER).markMastered("review-owned-by-someone-else");
-  assert.equal(calls[0]?.verb, "update");
-  assert.ok(calls[0]?.filters.some(([column, value]) => column === "user_id" && value === USER));
+  // The current interval is read before it is rescheduled, so the write is not
+  // the first call any more.
+  const update = calls.find((call) => call.verb === "update");
+  assert.ok(update, "markMastered must issue an update");
+  assert.ok(update.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.ok(
+    update.filters.some(([column, value]) => column === "id" && value === "review-owned-by-someone-else"),
+    "the update must be scoped to the requested review id"
+  );
 });
 
 test("no read hands the internal search column to a client", async () => {
@@ -244,4 +270,133 @@ test("no scopes keeps the legacy full-access behavior", async () => {
   await ctx.createSession({ source: "claude", topic: "Review" });
   await ctx.searchCorpus(undefined);
   assert.equal(calls.length, 2);
+});
+
+test("syncToCloud last-write-wins keeps a fresher cloud row (lte, not gte)", async () => {
+  // `latestUpdatedAt` makes the existence probe report a row, so the upsert
+  // takes the update branch -- the branch whose range filter is the whole point.
+  const { client, calls } = stubClient({ latestUpdatedAt: "2026-08-30T10:00:00.000Z" });
+  const incomingUpdatedAt = "2026-08-30T12:00:00.000Z";
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [
+      {
+        id: "material-1",
+        sessionId: "session-1",
+        source: "claude",
+        topic: "Sync",
+        originalText: "original",
+        usefulExpressions: [],
+        corrections: [],
+        vocabulary: [],
+        practicePrompts: [],
+        tags: [],
+        createdAt: "2026-08-30T11:00:00.000Z",
+        updatedAt: incomingUpdatedAt
+      }
+    ],
+    questions: []
+  });
+
+  const update = calls.find((call) => call.table === "learning_materials" && call.verb === "update");
+  assert.ok(update, "an existing cloud material must be pushed as an update");
+  const materialLww = update.comparisons?.find((comparison) => comparison.column === "updated_at");
+  assert.ok(materialLww, "the material update must run a last-write-wins comparison");
+  assert.equal(materialLww.value, incomingUpdatedAt);
+  assert.equal(
+    materialLww.op,
+    "lte",
+    "must overwrite only when the cloud row is not newer; gte would clobber fresher cloud data"
+  );
+  assert.equal(
+    update.columns,
+    "id",
+    "the update must select its rows so a zero-row result (fresher cloud row) is an observable skip"
+  );
+});
+
+const PRACTICE_RECORD = {
+  id: "practice-1",
+  materialId: null,
+  questionId: null,
+  exerciseType: "recall" as const,
+  focus: "",
+  prompt: "How do you say it?",
+  userAnswer: "roll out",
+  isCorrect: false,
+  status: "practice_again" as const,
+  createdAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("fetchSyncSnapshot pulls practice records scoped to the user", async () => {
+  const { client, calls } = stubClient();
+  await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
+
+  const practice = calls.find((call) => call.table === "practice_records");
+  assert.ok(practice, "practice records must be in the pull, or the mistake book stays local-only");
+  assert.ok(practice.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.ok(
+    practice.filters.some(([column]) => column === "created_at"),
+    "practice_records has no updated_at; the incremental cursor has to run on created_at"
+  );
+});
+
+test("syncToCloud pushes practice records as idempotent upserts", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], practiceRecords: [PRACTICE_RECORD] });
+
+  assert.equal(calls.filter((call) => call.table === "practice_records" && call.verb === "upsert").length, 1);
+  assert.equal(
+    calls.some((call) => call.table === "practice_records" && call.verb === "select"),
+    false,
+    "a select-then-insert pair is two HTTP calls with no transaction between them; ON CONFLICT is atomic"
+  );
+});
+
+const MATERIAL_FIXTURE = {
+  id: "material-1",
+  sessionId: "session-1",
+  source: "claude" as const,
+  topic: "Sync",
+  originalText: "original",
+  usefulExpressions: [],
+  corrections: [],
+  vocabulary: [],
+  practicePrompts: [],
+  tags: [],
+  createdAt: "2026-08-30T11:00:00.000Z",
+  updatedAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("syncToCloud does not write back a row the cloud has deleted", async () => {
+  const { client, calls } = stubClient({ tombstoned: ["material-1"] });
+  await syncToCloud(client, USER, { sessions: [], materials: [MATERIAL_FIXTURE], questions: [] });
+
+  const writes = calls.filter(
+    (call) => call.table === "learning_materials" && ["insert", "update", "upsert"].includes(call.verb)
+  );
+  assert.deepEqual(writes, [], "a tombstoned id must not be written back -- that resurrects a deleted row");
+});
+
+test("tombstones only guard on updated_at for tables that have one", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    tombstones: [
+      { id: "event-1", entity: "reuse_event", deletedAt: "2026-08-30T12:00:00.000Z" },
+      { id: "material-1", entity: "material", deletedAt: "2026-08-30T12:00:00.000Z" }
+    ]
+  });
+
+  const guarded = (table: string) => {
+    const call = calls.find((entry) => entry.table === table && entry.verb === "delete");
+    assert.ok(call, `expected a delete on ${table}`);
+    return call.comparisons?.some((comparison) => comparison.column === "updated_at") ?? false;
+  };
+
+  // reuse_events has no updated_at column at all, so any comparison is a 500.
+  assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
+  assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
 });

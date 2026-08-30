@@ -422,7 +422,7 @@ test("bidirectional sync keeps newer local writes", () => {
   });
 });
 
-test("unsynced includes local review completion", () => {
+test("unsynced includes a locally rescheduled review", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "review sync" });
     const material = store.saveMaterial({
@@ -434,11 +434,21 @@ test("unsynced includes local review completion", () => {
     }) as { id: string; createdAt: string };
     const review = store.getReviewItems()[0] as { review_id: string };
     assert.equal(store.unsynced().reviews.length, 1);
-    store.markMastered(review.review_id);
+
+    const graded = store.markMastered(review.review_id);
     const batch = store.unsynced();
     assert.equal(batch.reviews.length, 1);
-    assert.equal(batch.reviews[0]?.status, "completed");
     assert.equal(batch.materials[0]?.id, material.id);
+
+    // Grading reschedules rather than completing: the item stays in the queue
+    // but drops out of it until the new due date, and that new date has to be
+    // persisted or the review is due again immediately.
+    assert.equal(batch.reviews[0]?.status, "pending");
+    assert.ok((batch.reviews[0]?.intervalDays ?? 0) > 0);
+    assert.ok(batch.reviews[0]?.dueAt, "the reschedule must be pushed, not just returned");
+    assert.ok(batch.reviews[0]!.dueAt > new Date().toISOString());
+    assert.equal(store.getReviewItems().length, 0, "a rescheduled review is not due yet");
+    assert.equal(batch.reviews[0]?.dueAt, graded.dueAt);
   });
 });
 
@@ -478,6 +488,96 @@ test("a remote tombstone deletes the local row and is not re-pushed", () => {
     });
     assert.equal(store.searchCorpus().materials.length, 0);
     assert.equal(store.unsynced().tombstones.length, 0);
+  });
+});
+
+const practiceFixture = (overrides: Record<string, unknown> = {}) => ({
+  id: "practice-remote-1",
+  materialId: null,
+  questionId: null,
+  exerciseType: "mcq",
+  focus: "roll out",
+  prompt: "pick the best option",
+  userAnswer: "roll out",
+  isCorrect: true,
+  status: "remembered",
+  createdAt: new Date().toISOString(),
+  ...overrides
+});
+
+test("a recorded practice attempt is pushed and can be marked synced", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "practice sync" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "practice sync",
+      originalText: "we should roll it out",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    store.recordPractice({
+      materialId: material.id,
+      exerciseType: "recall",
+      focus: "roll out",
+      prompt: "How do you say it?",
+      userAnswer: "roll it out",
+      isCorrect: false,
+      status: "practice_again"
+    });
+
+    const pending = store.unsynced();
+    assert.equal(pending.practiceRecords.length, 1);
+    const [record] = pending.practiceRecords;
+    assert.ok(record);
+    assert.equal(record.materialId, material.id);
+    assert.equal(record.isCorrect, false);
+    assert.equal(record.status, "practice_again");
+
+    store.markSynced({ practiceRecords: [record.id] });
+    assert.equal(store.unsynced().practiceRecords.length, 0);
+  });
+});
+
+test("a pulled practice attempt lands locally and a replay does not duplicate it", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "pull practice" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "pull practice",
+      originalText: "we rolled it out",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const batch = {
+      sessions: [],
+      materials: [],
+      questions: [],
+      reviews: [],
+      practiceRecords: [practiceFixture({ materialId: material.id })]
+    };
+
+    assert.equal(store.applyRemoteBatch(batch).practiceRecords, 1);
+    assert.equal(store.applyRemoteBatch(batch).practiceRecords, 0, "a replayed pull must not duplicate rows");
+    assert.ok(store.getPracticeHistory({}).some((row) => row.id === "practice-remote-1" && row.isCorrect === true));
+    // A pulled row is already in sync, so it must not be pushed straight back.
+    assert.equal(store.unsynced().practiceRecords.length, 0);
+  });
+});
+
+test("a pulled practice attempt whose parent is missing is skipped, not fatal", () => {
+  withStore((store) => {
+    // The cloud sets the parent to NULL on delete while SQLite cascades, so the
+    // two stores genuinely disagree about whether an orphan can exist.
+    const applied = store.applyRemoteBatch({
+      sessions: [],
+      materials: [],
+      questions: [],
+      reviews: [],
+      practiceRecords: [practiceFixture({ id: "orphan", materialId: "missing-material", isCorrect: null, status: "pending" })]
+    });
+    assert.equal(applied.practiceRecords, 0);
   });
 });
 
