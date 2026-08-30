@@ -286,13 +286,18 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
     throw new Error(body.details ?? body.error ?? `Push failed with ${response.status}`);
   }
 
+  // Each mutable row is stamped with the exact version that was pushed: a row
+  // edited while the request was in flight keeps its unsynced status and is
+  // picked up by the next sync instead of losing the newer edit.
   store.markSynced({
-    sessions: batch.sessions.map((row) => row.id),
-    materials: batch.materials.map((row) => row.id),
-    questions: batch.questions.map((row) => row.id),
-    reviews: batch.reviews.map((row) => row.id),
-    intents: batch.intents.map((row) => row.id),
-    expressions: batch.expressions.map((row) => row.id),
+    sessions: batch.sessions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+    materials: batch.materials.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+    // The read-model type marks updatedAt optional, but the column is NOT NULL
+    // since migration 012, so the version is always present in practice.
+    questions: batch.questions.map((row) => ({ id: row.id, updatedAt: row.updatedAt as string })),
+    reviews: batch.reviews.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+    intents: batch.intents.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+    expressions: batch.expressions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
     reuseEvents: batch.reuseEvents.map((row) => row.id),
     practiceRecords: batch.practiceRecords.map((row) => row.id),
     tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))

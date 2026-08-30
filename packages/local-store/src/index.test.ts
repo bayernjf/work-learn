@@ -539,6 +539,61 @@ test("a recorded practice attempt is pushed and can be marked synced", () => {
   });
 });
 
+test("markSynced only stamps the pushed version of a row", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "mark synced race" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "mark synced race",
+      originalText: "we should roll it out",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const [snapshot] = store.unsynced().materials;
+    assert.ok(snapshot);
+
+    // The batch is in flight when the user edits the same row: a newer
+    // updated_at and sync_status back to local_only. LocalStore keeps `db`
+    // private and exposes no material-edit method, so the test reaches in
+    // through a structural cast.
+    (store as unknown as { db: { prepare(sql: string): { run(...args: unknown[]): unknown } } })
+      .db.prepare("UPDATE learning_materials SET original_text = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ?")
+      .run("we should roll it out today", "2026-08-30T23:59:00.000Z", material.id);
+
+    // Stamping with the snapshot's version must not swallow the newer edit.
+    store.markSynced({ materials: [{ id: material.id, updatedAt: snapshot.updatedAt }] });
+    const stillPending = store.unsynced().materials.find((row) => row.id === material.id);
+    assert.ok(stillPending, "a row edited while the batch was in flight must stay unsynced");
+    assert.equal(stillPending.originalText, "we should roll it out today", "the newer edit must survive the stamp");
+
+    // Pushing the newer version does stamp it.
+    const [current] = store.unsynced().materials;
+    assert.ok(current);
+    store.markSynced({ materials: [{ id: material.id, updatedAt: current.updatedAt }] });
+    assert.equal(store.unsynced().materials.length, 0);
+  });
+});
+
+test("markSynced stamps tombstones in the same transaction as the rows", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "tombstone stamp" });
+    const material = store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "tombstone stamp",
+      originalText: "to be deleted",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const deleted = store.deleteMaterial(material.id) as { id: string; deletedAt: string };
+    assert.equal(store.unsynced().tombstones.length, 1);
+
+    store.markSynced({ tombstones: [{ id: deleted.id, entity: "material" }] });
+    assert.equal(store.unsynced().tombstones.length, 0, "the tombstone must be stamped after a successful push");
+  });
+});
+
 test("a pulled practice attempt lands locally and a replay does not duplicate it", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "pull practice" });

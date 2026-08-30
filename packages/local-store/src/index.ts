@@ -1161,28 +1161,50 @@ export class LocalStore {
     return counts;
   }
 
-  /** Mark rows as synced after a successful push. */
-  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[]; intents?: string[]; expressions?: string[]; reuseEvents?: string[]; practiceRecords?: string[]; tombstones?: Array<{ id: string; entity: string }> }) {
+  /**
+   * Mark rows as synced after a successful push.
+   *
+   * The mutable tables only stamp the exact `updated_at` that was in the pushed
+   * batch: a row edited while the batch was in flight has a newer timestamp and
+   * must stay unsynced, or the stamp would silently swallow the newer edit.
+   * reuse_events and practice_records are append-only, so their ids carry no
+   * version. Tombstones are stamped inside the same transaction instead of
+   * racing it.
+   */
+  markSynced(rows: {
+    sessions?: Array<{ id: string; updatedAt: string }>;
+    materials?: Array<{ id: string; updatedAt: string }>;
+    questions?: Array<{ id: string; updatedAt: string }>;
+    reviews?: Array<{ id: string; updatedAt: string }>;
+    intents?: Array<{ id: string; updatedAt: string }>;
+    expressions?: Array<{ id: string; updatedAt: string }>;
+    reuseEvents?: string[];
+    practiceRecords?: string[];
+    tombstones?: Array<{ id: string; entity: string }>;
+  }) {
     const now = new Date().toISOString();
-    const statements: Array<[string, string[]]> = [
-      ["sessions", ids.sessions ?? []],
-      ["learning_materials", ids.materials ?? []],
-      ["question_translations", ids.questions ?? []],
-      ["review_items", ids.reviews ?? []],
-      ["intents", ids.intents ?? []],
-      ["saved_expressions", ids.expressions ?? []],
-      ["reuse_events", ids.reuseEvents ?? []],
-      ["practice_records", ids.practiceRecords ?? []]
+    const versioned: Array<[string, Array<{ id: string; updatedAt: string }>]> = [
+      ["sessions", rows.sessions ?? []],
+      ["learning_materials", rows.materials ?? []],
+      ["question_translations", rows.questions ?? []],
+      ["review_items", rows.reviews ?? []],
+      ["intents", rows.intents ?? []],
+      ["saved_expressions", rows.expressions ?? []]
     ];
-    const tombstoneIds = ids.tombstones ?? [];
     const tx = this.db.transaction(() => {
-      for (const [table, ids] of statements) {
+      for (const [table, entries] of versioned) {
+        const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ? AND updated_at = ?`);
+        for (const entry of entries) stmt.run(now, entry.id, entry.updatedAt);
+      }
+      const stamp = (table: string, ids: string[]) => {
         const stmt = this.db.prepare(`UPDATE ${table} SET sync_status = 'synced', synced_at = ? WHERE id = ?`);
         for (const id of ids) stmt.run(now, id);
-      }
+      };
+      stamp("reuse_events", rows.reuseEvents ?? []);
+      stamp("practice_records", rows.practiceRecords ?? []);
+      const markTombstone = this.db.prepare("UPDATE sync_tombstones SET sync_status = 'synced', synced_at = ? WHERE id = ? AND entity = ?");
+      for (const t of rows.tombstones ?? []) markTombstone.run(now, t.id, t.entity);
     });
-    const markTombstone = this.db.prepare("UPDATE sync_tombstones SET sync_status = 'synced', synced_at = ? WHERE id = ? AND entity = ?");
-    for (const t of tombstoneIds) markTombstone.run(now, t.id, t.entity);
     tx();
   }
 
