@@ -339,3 +339,26 @@ test("syncToCloud does not write back a row the cloud has deleted", async () => 
   );
   assert.deepEqual(writes, [], "a tombstoned id must not be written back -- that resurrects a deleted row");
 });
+
+test("tombstones only guard on updated_at for tables that have one", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    tombstones: [
+      { id: "event-1", entity: "reuse_event", deletedAt: "2026-08-30T12:00:00.000Z" },
+      { id: "material-1", entity: "material", deletedAt: "2026-08-30T12:00:00.000Z" }
+    ]
+  });
+
+  const guarded = (table: string) => {
+    const call = calls.find((entry) => entry.table === table && entry.verb === "delete");
+    assert.ok(call, `expected a delete on ${table}`);
+    return call.comparisons?.some((comparison) => comparison.column === "updated_at") ?? false;
+  };
+
+  // reuse_events has no updated_at column at all, so any comparison is a 500.
+  assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
+  assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
+});

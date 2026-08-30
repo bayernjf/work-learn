@@ -1206,7 +1206,11 @@ const applyCloudTombstones = async (supabase: SupabaseClient, userId: string, to
   for (const t of tombstones) {
     const table = cloudTableForEntity[t.entity];
     if (!table) continue;
-    const deleted = await supabase.from(table).delete().eq("user_id", userId).eq("id", t.id).lte("updated_at", t.deletedAt);
+    // reuse_events is append-only and has no updated_at at all; comparing one
+    // made every deletion of a reuse event a 500.
+    const guarded = t.entity !== "reuse_event";
+    const query = supabase.from(table).delete().eq("user_id", userId).eq("id", t.id);
+    const deleted = await (guarded ? query.lte("updated_at", t.deletedAt) : query);
     if (deleted.error) throw new Error(deleted.error.message);
     const upserted = await supabase
       .from("sync_tombstones")
