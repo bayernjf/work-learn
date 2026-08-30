@@ -1,9 +1,0 @@
-{
-  "name": "@work-learn/learning-skill",
-  "private": true,
-  "type": "module",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "build": "tsc -p tsconfig.json", "typecheck": "tsc -p tsconfig.json --noEmit", "lint": "tsc -p tsconfig.json --noEmit" },
-  "dependencies": { "@work-learn/shared-schema": "workspace:*" },
-  "devDependencies": { "typescript": "^5.7.2" }
-}
