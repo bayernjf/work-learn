@@ -282,7 +282,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 
 - **空 scope = 全权限**：`apps/api/src/lib/auth.ts:53-54,63-64`。对遗留 PAT 是刻意向后兼容（注释明说），但同一逻辑泄漏进 OAuth：`routes/oauth.ts:38` `scopes_supported: []` → 所有 OAuth 令牌实际全量读写，同意页展示的 scope 无约束力，属误导性授权。
 - **OAuth code 兑换 / refresh 轮换非原子**：`lib/oauth.ts:143-151,170-192`，先查再更新，并发可双重兑换；旧 refresh 重放不触发家族撤销。应改单条条件 `UPDATE` 判成功。
-- **毒丸批次**：云端 `UNIQUE(user_id,text_norm)`（`015:32`）vs 本地 `UNIQUE(text_norm)`（`local-store:265`）。本地 id 撞云端已有 norm 时 `upsertWithLww` 的 insert 永久报错且无事务（`direct.ts:977-984` 串行 HTTP）→ sync 卡死。
+- **毒丸批次**：云端 `UNIQUE(user_id,text_norm)`（`015:32`）vs 本地 `UNIQUE(text_norm)`（`local-store:265`）。本地 id 撞云端已有 norm 时 `upsertWithLww` 的 insert 永久报错且无事务（`direct.ts:977-984` 串行 HTTP）→ sync 卡死。（→ 已修，commit `13a5670`，见下「续四」。）
 - **markSynced 竞态**：`apps/cli/src/index.ts:272-297` 快照批次 → 网络往返期间并发写入的行被无脑标 `synced`，新编辑永丢；tombstone 标记写在 `tx()` 之外（`local-store:1147-1156`）。
 - **FK 级联两端分叉**：`materials/questions/practice_records` 关联云端 `SET NULL`、本地 `CASCADE`。云端 SET NULL 后 `normalizeMaterial` 把 `String(null)` 推成 `'null'`（`direct.ts:659`）→ 本地 FK 违反 → 整个 pull 事务回滚。
 
@@ -351,7 +351,7 @@ C1 的练习闭环此前只在单机成立：本地写 `practice_records` 带 `s
 **按 id `onConflict`**：`upsertWithLww` / `upsertReviewsWithLww` 的 insert 分支改为 `upsert(..., { onConflict: "id" })`——探测存在与写入是两次独立 HTTP，中间无事务，并发推送会在两者之间插入同一行；`ON CONFLICT (id) DO UPDATE` 让重试变成幂等而不是永久的主键冲突。`upsertImmutableWithId` 改为 `upsert(..., { onConflict: "id", ignoreDuplicates: true })`，省掉一次往返且原子。
 
 **已知缺口（未修）**：
-- **毒丸批次（P1，见上）未处理**：云端 `UNIQUE(user_id,text_norm)` vs 本地 `UNIQUE(text_norm)`，本地 id 撞云端已有 norm 时 insert/update 永久失败且无事务，sync 仍会卡死。本轮只消除了竞态，没消除约束冲突。
+- ~~**毒丸批次（P1，见上）未处理**~~：已由 commit `13a5670` 处理（push 方向按 `text_norm` 预探测并认领云端行；pull 方向本地本就按 norm 跳过）。
 - **practice_record 没有 tombstone 实体**：本地 `sync_tombstones` 的 CHECK 只允许 `session/material/question/review/intent/expression/reuse_event`，加 `practice_record` 需要重建表。目前删除练习记录不会跨端传播（追加写语义下影响有限）。
 - **`LocalStore.recordPractice` 返回 `id: ""`**：插入了行但没回传 id，调用方只能反查 `getPracticeHistory`。属既有缺陷，与同步无关，未在本轮改动。
 - **孤儿行只跳过、不上报**：`applyRemoteBatch` 里父记录缺失时 `continue`，该行静默丢弃且不计入返回计数——仍是"静默丢数据"的形状，待统一 FK 语义时一并处理。
@@ -432,3 +432,19 @@ node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
 **验证**：api 35/35（原 28 + 新 7），`tsc -p apps/api/tsconfig.json --noEmit` 干净。
 
 **仍开着**：refresh 重放时的**家族撤销**（revoke 整条 token 链）需要给 `oauth_tokens` 加 family 标识列，属 schema 变更；现阶段重放只会被拒绝、不会殃及同族其他设备，风险可接受。
+
+## 2026-08-30 续四：毒丸批次修复（commit `13a5670`）
+
+两端唯一约束分叉导致的 sync 卡死已修。**成因**：云端 `saved_expressions` 的唯一键是 `(user_id, text_norm)`，本地（每台设备）只有 `UNIQUE(text_norm)`——同一句话在两台设备上各自入库时 id 不同。后推的那台设备在云端 insert 必然撞 23505；推送批次没有事务，这一行失败就废掉整批，CLI 永远不会把它标成 synced，于是**每次 sync 都重试、每次都失败**，同步从此卡死。
+
+**修复（push 方向，`direct.ts` 的 `upsertWithLww` 插入分支）**：
+- 插入前按 `text_norm` 预探测（仅 `saved_expressions`，其它表不多花这一次查询）；
+- 云端已有同 norm 不同 id 的行 → **认领该云端行**：把推送内容按普通 LWW 规则（`.lte updated_at` 守卫）合并进云端行，**保留云端 id**——`reuse_events.expression_id` 引用的正是它；
+- 云端没有同 norm 行 → 原路径插入（`onConflict: id`）不变。
+- pull 方向无需改动：本地 `applyRemoteBatch` 本就按 norm 查重跳过（`local-store:1114-1118`）。
+
+**语义代价（记录在案）**：设备保留自己的本地 id，云端保留先到者的 id，内容按 LWW 收敛；本地后续对该行的编辑每次推送都走「认领-合并」路径，行为稳定。这是不引入 id 重映射迁移的前提下，能同时做到「不丢内容」与「不卡死」的最小方案。
+
+**验证**：mcp-server 30/30（原 28 + 新 2：撞 norm 时必须认领而非插入、新 norm 仍走 onConflict 插入），`tsc -p packages/mcp-server/tsconfig.json --noEmit` 干净。测试桩顺带补了 `update/insert/upsert` 载荷记录与按 `text_norm` 探测的应答能力。
+
+**仍开着（同族问题）**：`reuse_events` 推送时若其 `expression_id` 在云端不存在（极端孤儿），仍会 FK 失败——`upsertImmutableWithId` 不探父。与「孤儿行只跳过、不上报」一并归入 FK 语义统一。
