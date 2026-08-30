@@ -306,7 +306,10 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [x] P0-1：`direct.ts` 的 `upsertWithLww`/`upsertReviewsWithLww` `.gte` 已改 `.lte` 并加 `.select("id")`（零行=云端更新、按预期跳过，不抛错）；`upsertWithLww` 与 `upsertReviewsWithLww` 推送前先查 `sync_tombstones` 跳过已删 id（review 按 `material_id` 判，避免重建孤儿复习项）；`direct.test.ts` 新增回归测试锁定比较方向为 `lte`。**已跑通：mcp-server 28/28、api 22/22、shared-schema 39/39、setup 5/5，全仓 typecheck 绿。**
 - [x] P0-2：insert 前查 tombstone（P0-1 已含）+ 按 id `onConflict`；practice_records 纳入同步批次。详见下方「P0-2：practice_records 同步」。
   - [ ] 统一两端 FK 语义（`materials/questions/practice_records` 云端 `SET NULL` vs 本地 `CASCADE`）：现阶段以「跳过孤儿行」兜底，未改约束。
-- [ ] P1：OAuth 新令牌强制非空最小 scope；`/register` 限流 + `redirect_uri` 校验；code 兑换改原子。
+- [x] P1：OAuth 新令牌强制非空最小 scope（commit `39baff2`）——空 scope 不再被当作全权限，新令牌默认 `read`，未请求 scope 的客户端只拿到只读；
+- [x] P1：`/register` 的 `redirect_uri` 校验（commit `51f8235`）——拒绝非 https、非 loopback 的 http、带 fragment、含通配符的值，消除开放重定向拿授权码的漏洞；
+- [ ] P1：`/register` 限流（serverless 无共享存储，需落库或网关层，待决策）；`client_name` 仍由攻击者控制并渲染进同意页（钓鱼面）；
+- [ ] P1：code 兑换 / refresh 轮换改原子（单条条件 `UPDATE` 判成功，防并发双重兑换与旧 refresh 重放家族撤销）。
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
   - [ ] 补 `scheduleNextReview`（现零测试）、`markSynced` 往返、`apps/api` 用 `app.request()` 的进程内路由测试；
   - [ ] CI 加一条「测试数为 0 即失败」的护栏：本轮的根因是测试跑了个寂寞却返回 0，光有 `pnpm test` 挡不住下一次静默退化。
@@ -376,3 +379,21 @@ node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
 ```
 
 `pnpm test` 不受影响——上一步已经把测试脚本改成 `node --import tsx --test`，它不经过 `.bin`。测试的绿是可信的；`pnpm typecheck` / `pnpm build` 的绿在本机不可信，一律以 CI 为准。这轮就是这么踩的：本地 `pnpm typecheck` 报绿，CI 一跑就抓出 `direct.ts:872` 的类型错误。
+
+## 2026-08-30 续：OAuth 注册与令牌 scope 加固
+
+继续推进深度评审的 P1 安全项，两项已提交到 `dev`（未 push），两个原子提交、各带单测，28 个 api 测试全过：
+
+- **`51f8235` fix(oauth): validate redirect_uri on dynamic client registration**
+  - 新增纯函数 `validateRedirectUris`（`apps/api/src/lib/oauth.ts`）：校验每个 `redirect_uri` 必须是绝对 URL、scheme 为 `https`（或 loopback 上的 `http`）、不含 fragment、不含通配符，并去重。
+  - `routes/oauth.ts` 的 `POST /register`（OAuth 动态客户端注册 RFC 7591）先做校验，非法即 `400 invalid_redirect_uri`。
+  - 之前任何 `redirect_uri` 都接受，攻击者可注册 `https://evil.example.com` 之类的回调，把授权码/令牌引到自己的端点（开放重定向）。
+  - 单测 5 条覆盖 https / loopback http / 公网 http 拒绝 / fragment 与通配符拒绝 / 空与非数组拒绝 / 去重。
+
+- **`39baff2` fix(oauth): issue new tokens with a non-empty minimal scope**
+  - 新增 `DEFAULT_OAUTH_SCOPE = "read"` 与 `resolveIssuedScope(scope)`；`exchangeAuthorizationCode` 与 `rotateRefreshToken` 发放令牌时改用它。
+  - 之前 OAuth 令牌若协商到的 scope 为空，会在 `lib/auth.ts` 被解析成 `undefined`，而鉴权层把 `undefined` 视为「无限制」——即跳过 scope 参数的客户端静默获得读写全权限（与 `routes/oauth.ts:38` 的 `scopes_supported: []` 叠加，同意页展示的 scope 毫无约束力）。
+  - 现默认 `read`，未显式请求更多 scope 的客户端只拿只读；合规客户端（含 Web consent 透传 `scope=read write`、MCP 客户端请求 `read write`）不受影响，无生产回归。
+  - 遗留 PAT 的 `undefined=全权限` 是刻意向后兼容（注释明说），本轮未动。
+
+**仍开着**：`/register` 无频控（`client_name` 仍由攻击者控制并渲染进同意页，钓鱼面）、code 兑换/refresh 轮换非原子（并发可双重兑换）、以及 CI「测试数为 0 即失败」护栏、毒丸批次、markSynced 竞态、review id 漂移、过滤注入、FK 级联分叉、清债项。
