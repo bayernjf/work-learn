@@ -861,7 +861,9 @@ export class LocalStore {
           ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
           : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
       )
-      .run(new Date().toISOString(), intervalDays, new Date().toISOString(), reviewId);
+      // dueAt comes from the scheduler; writing the current time here reschedules
+      // the item to be due immediately, which defeats spaced repetition entirely.
+      .run(dueAt, intervalDays, new Date().toISOString(), reviewId);
     if (result.changes === 0) throw new Error("Review item not found or already completed");
     return { id: reviewId, status: mastered ? ("completed" as const) : ("pending" as const), dueAt, intervalDays };
   }
