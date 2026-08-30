@@ -354,3 +354,15 @@ C1 的练习闭环此前只在单机成立：本地写 `practice_records` 带 `s
 - **孤儿行只跳过、不上报**：`applyRemoteBatch` 里父记录缺失时 `continue`，该行静默丢弃且不计入返回计数——仍是"静默丢数据"的形状，待统一 FK 语义时一并处理。
 
 **验证**：`direct.test.ts` 新增 4 个用例（pull 带 practice_records 且游标走 `created_at`、push 走幂等 upsert 且不预探测、tombstone 只对有 `updated_at` 的表加护栏并同时断言 `material` 正例、已 tombstone 的 id 不写回），mcp-server 28/28 全过。`local-store` 新增 3 个用例覆盖 practice_records 的推/拉/孤儿跳过，**本机跑不了**（同上），只能在 CI 上见分晓；其 SQL 已用 Node 内置的 `node:sqlite` 单独验证过语法、占位符数量、`ON CONFLICT DO NOTHING` 的重放行为与 FK 拒绝孤儿。
+
+## 测试一进 CI 就抓到的东西（2026-08-30）
+
+`pnpm test` 进 CI 后第一次运行，`local-store` 25 个用例里红了 2 个，两个都不是新写的：
+
+1. **`LocalStore.markMastered` 把重排后的到期时间写丢了**（真 bug，非测试问题）。非"已掌握"分支的 UPDATE 是 `SET due_at = ?, interval_days = ?, updated_at = ? WHERE id = ?`，但 `.run()` 第一个参数传的是 `new Date().toISOString()` 而不是算出的 `dueAt`。结果：本地给一条复习打分后，它**立刻又到期**，间隔重复在本地完全没生效——`interval_days` 存了，`due_at` 没存。云端 `direct.ts` 传的是 `dueAt`，只有本地这份写错。已修。
+   - 这条是**既有用例 `material save feeds the review queue and can be marked mastered` 抓到的**——它断言打分后队列为空，断言本身一直是对的，只是从没被执行过。
+2. **`unsynced includes local review completion` 断言的是 SRS 之前的语义**：打分后期望 `status === "completed"`，而现在打分是重排（status 保持 `pending`，`due_at` 后移）。与上面 `direct.test.ts` 那条 `markMastered` 是同一类陈旧断言。已按 SRS 语义重写，并补上"重排的日期必须落库、不能只是返回"这一条。
+
+**结论印证了评审里的判断**：账面完成度不等于产品有效度。间隔重复是 2026-08-26 那轮上线的主要功能，本地实现从那天起就是坏的，四天里没有任何信号——因为测试从未运行。同理，这次也说明把验证搬进 CI 不是形式主义：它用一次运行就还清了一部分欠账。
+
+**CI 现状**：`local-store` 25/25、mcp-server 28/28、shared-schema 39/39、api 22/22、setup 5/5；typecheck 与 build 均通过。
