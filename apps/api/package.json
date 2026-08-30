@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.1",
-    "@work-learn/learning-core": "workspace:*",
     "@work-learn/mcp-server": "workspace:*",
     "@work-learn/shared-schema": "workspace:*",
     "hono": "^4.7.2",
