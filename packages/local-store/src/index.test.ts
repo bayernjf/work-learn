@@ -422,7 +422,7 @@ test("bidirectional sync keeps newer local writes", () => {
   });
 });
 
-test("unsynced includes local review completion", () => {
+test("unsynced includes a locally rescheduled review", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "review sync" });
     const material = store.saveMaterial({
@@ -434,11 +434,21 @@ test("unsynced includes local review completion", () => {
     }) as { id: string; createdAt: string };
     const review = store.getReviewItems()[0] as { review_id: string };
     assert.equal(store.unsynced().reviews.length, 1);
-    store.markMastered(review.review_id);
+
+    const graded = store.markMastered(review.review_id);
     const batch = store.unsynced();
     assert.equal(batch.reviews.length, 1);
-    assert.equal(batch.reviews[0]?.status, "completed");
     assert.equal(batch.materials[0]?.id, material.id);
+
+    // Grading reschedules rather than completing: the item stays in the queue
+    // but drops out of it until the new due date, and that new date has to be
+    // persisted or the review is due again immediately.
+    assert.equal(batch.reviews[0]?.status, "pending");
+    assert.ok((batch.reviews[0]?.intervalDays ?? 0) > 0);
+    assert.ok(batch.reviews[0]?.dueAt, "the reschedule must be pushed, not just returned");
+    assert.ok(batch.reviews[0]!.dueAt > new Date().toISOString());
+    assert.equal(store.getReviewItems().length, 0, "a rescheduled review is not due yet");
+    assert.equal(batch.reviews[0]?.dueAt, graded.dueAt);
   });
 });
 
