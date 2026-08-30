@@ -1092,20 +1092,30 @@ export class LocalStore {
     const practiceMaterialExists = this.db.prepare("SELECT id FROM learning_materials WHERE id = ?");
     const practiceQuestionExists = this.db.prepare("SELECT id FROM question_translations WHERE id = ?");
     const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 };
+    // Parent ids that exist locally or arrive in this batch. The cloud keeps a
+    // material or question alive after its session is deleted (SET NULL); the
+    // local FK is NOT NULL, so such an orphan must be skipped, not written.
+    const knownSessionIds = new Set((this.db.prepare("SELECT id FROM sessions").all() as Array<{ id: string }>).map((row) => row.id));
+    const knownMaterialIds = new Set((this.db.prepare("SELECT id FROM learning_materials").all() as Array<{ id: string }>).map((row) => row.id));
+    for (const row of parsed.sessions) knownSessionIds.add(row.id);
+    for (const row of parsed.materials) knownMaterialIds.add(row.id);
     const tx = this.db.transaction(() => {
       for (const row of parsed.sessions) {
         upsertSession.run({ ...row, now });
         counts.sessions++;
       }
       for (const row of parsed.materials) {
+        if (!knownSessionIds.has(row.sessionId)) continue;
         upsertMaterial.run({ ...row, usefulExpressions: JSON.stringify(row.usefulExpressions), corrections: JSON.stringify(row.corrections), vocabulary: JSON.stringify(row.vocabulary), practicePrompts: JSON.stringify(row.practicePrompts), tags: JSON.stringify(row.tags), now });
         counts.materials++;
       }
       for (const row of parsed.questions) {
+        if (!knownSessionIds.has(row.sessionId)) continue;
         upsertQuestion.run({ ...row, questionNorm: normalizeQuestion(row.question), now });
         counts.questions++;
       }
       for (const row of parsed.reviews) {
+        if (!knownMaterialIds.has(row.materialId)) continue;
         const existing = findReviewByMaterial.get(row.materialId) as { id: string; updated_at: string } | undefined;
         if (existing) updateReviewByMaterial.run({ ...row, now });
         else insertReview.run({ ...row, now });

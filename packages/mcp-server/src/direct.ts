@@ -798,8 +798,13 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
 export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string) => {
   const trimmed = since?.trim();
   let sessionsQuery = supabase.from("sessions").select("id,source,topic,created_at,updated_at").eq("user_id", userId);
-  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
-  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
+  // The cloud keeps materials and questions alive when their session is
+  // deleted (session_id SET NULL). The local store's FK for both is NOT NULL,
+  // so a pulled row with a null session would fail the whole batch. Skip the
+  // orphans at the source; a device whose session is gone has no parent to
+  // attach them to.
+  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId).not("session_id", "is", null);
+  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId).not("session_id", "is", null);
   let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
   let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
   let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);

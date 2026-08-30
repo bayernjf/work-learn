@@ -615,6 +615,62 @@ test("a local material deletion keys its review tombstone by material id", () =>
   });
 });
 
+test("a pulled material, question or review whose parent is missing is skipped, not fatal", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "orphan pull" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "orphan pull",
+      originalText: "keep me",
+      usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: []
+    }) as { id: string };
+
+    const result = store.applyRemoteBatch({
+      sessions: [],
+      materials: [{
+        id: "orphan-material",
+        sessionId: "no-such-session",
+        source: "codex",
+        topic: "t",
+        originalText: "orphan",
+        explanation: "",
+        usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: [],
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      questions: [{
+        id: "orphan-question",
+        sessionId: "no-such-session",
+        source: "codex",
+        question: "how do I say it?",
+        translation: "translation",
+        topic: null,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      reviews: [{
+        id: "orphan-review",
+        materialId: "no-such-material",
+        status: "pending",
+        dueAt: "2026-08-31T12:00:00.000Z",
+        intervalDays: 0,
+        completedAt: null,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }]
+    });
+
+    assert.equal(result.materials, 0, "the orphan material must not be written");
+    assert.equal(result.questions, 0, "same for the orphan question");
+    assert.equal(result.reviews, 0, "same for the orphan review");
+    const orphan = (store as unknown as { db: { prepare(sql: string): { all(...args: unknown[]): unknown[] } } })
+      .db.prepare("SELECT id FROM learning_materials WHERE id = ?")
+      .all("orphan-material");
+    assert.equal(orphan.length, 0, "the row must not exist after the pull");
+  });
+});
+
 test("a pulled review tombstone deletes the local review by material_id", () => {
   withStore((store) => {
     const session = store.createSession({ source: "codex", topic: "review drift pull" });

@@ -54,6 +54,10 @@ function stubClient(options?: {
       call.filters.push(["or", expression]);
       return builder;
     };
+    builder.not = (column: string, operator: string, value: unknown) => {
+      call.filters.push(["not", [column, operator, value]]);
+      return builder;
+    };
     // Range filters decide which rows a mutation may touch, so the operator is
     // recorded as well as the operands: `updated_at >= incoming` and
     // `updated_at <= incoming` are opposite last-write-wins rules.
@@ -361,6 +365,27 @@ const PRACTICE_RECORD = {
   status: "practice_again" as const,
   createdAt: "2026-08-30T12:00:00.000Z"
 };
+
+test("fetchSyncSnapshot skips materials and questions orphaned by a deleted session", async () => {
+  const { client, calls } = stubClient();
+  await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
+
+  const material = calls.find((call) => call.table === "learning_materials");
+  const question = calls.find((call) => call.table === "question_translations");
+  const review = calls.find((call) => call.table === "review_items");
+  assert.ok(material, "materials must be pulled");
+  assert.ok(question, "questions must be pulled");
+  assert.ok(review, "reviews must be pulled");
+  const excludesOrphans = (call: Call) =>
+    call.filters.some(([column, value]) => column === "not" && Array.isArray(value) && value[0] === "session_id");
+  assert.ok(excludesOrphans(material), "a material whose session was deleted must not reach a device with no such session");
+  assert.ok(excludesOrphans(question), "same for questions");
+  assert.equal(
+    review.filters.some(([column]) => column === "not"),
+    false,
+    "review_items.material_id is NOT NULL and cascades; there is nothing to skip"
+  );
+});
 
 test("fetchSyncSnapshot pulls practice records scoped to the user", async () => {
   const { client, calls } = stubClient();
