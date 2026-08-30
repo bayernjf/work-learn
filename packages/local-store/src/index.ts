@@ -1110,7 +1110,9 @@ export class LocalStore {
       const deleteReview = this.db.prepare("DELETE FROM review_items WHERE id = ? AND ? >= updated_at");
       const deleteIntent = this.db.prepare("DELETE FROM intents WHERE id = ? AND ? >= updated_at");
       const deleteExpression = this.db.prepare("DELETE FROM saved_expressions WHERE id = ? AND ? >= updated_at");
-      const deleteReuseEvent = this.db.prepare("DELETE FROM reuse_events WHERE id = ? AND ? >= ?");
+      // reuse_events carries no updated_at -- it is append-only -- so a tombstone
+      // can only ever mean "gone", not "superseded".
+      const deleteReuseEvent = this.db.prepare("DELETE FROM reuse_events WHERE id = ?");
       const upsertTombstone = this.db.prepare(`
         INSERT INTO sync_tombstones (id, entity, deleted_at, sync_status, synced_at)
         VALUES (?, ?, ?, 'synced', ?)
@@ -1123,7 +1125,7 @@ export class LocalStore {
         else if (t.entity === "review") deleteReview.run(t.id, t.deletedAt);
         else if (t.entity === "intent") deleteIntent.run(t.id, t.deletedAt);
         else if (t.entity === "expression") deleteExpression.run(t.id, t.deletedAt);
-        else if (t.entity === "reuse_event") deleteReuseEvent.run(t.id, t.deletedAt);
+        else if (t.entity === "reuse_event") deleteReuseEvent.run(t.id);
         upsertTombstone.run(t.id, t.entity, t.deletedAt, now);
         counts.tombstones++;
       }
