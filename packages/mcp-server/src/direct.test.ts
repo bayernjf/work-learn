@@ -12,6 +12,7 @@ type Call = {
   comparisons?: Comparison[];
   columns?: string;
   single?: boolean;
+  payload?: unknown;
 };
 
 /**
@@ -19,7 +20,13 @@ type Call = {
  * bypasses RLS, so what these tests assert is that the filters are present at
  * all -- a missing user_id here is a cross-user read, not a failed query.
  */
-function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt?: string | null; tombstoned?: string[] }) {
+function stubClient(options?: {
+  counts?: Record<string, number>;
+  latestUpdatedAt?: string | null;
+  tombstoned?: string[];
+  /** Answer for a `.eq("text_norm", ...).maybeSingle()` probe: the cloud row already holding that norm. */
+  existingByNorm?: { id: string; updated_at: string } | null;
+}) {
   const calls: Call[] = [];
 
   const chain = (call: Call) => {
@@ -29,6 +36,10 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
     }
     builder.maybeSingle = () => {
       call.single = true;
+      return builder;
+    };
+    builder.is = (column: string, value: unknown) => {
+      call.filters.push([column, value]);
       return builder;
     };
     builder.select = (columns?: string) => {
@@ -56,7 +67,11 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
       };
     }
     builder.then = (resolve: (result: { data: unknown; count?: number; error: null }) => unknown) => {
-      if (call.single) return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      if (call.single) {
+        const normProbe = options?.existingByNorm !== undefined && call.filters.some(([column]) => column === "text_norm");
+        if (normProbe) return Promise.resolve(resolve({ data: options?.existingByNorm ?? null, error: null }));
+        return Promise.resolve(resolve({ data: options?.latestUpdatedAt === undefined ? null : { updated_at: options.latestUpdatedAt }, error: null }));
+      }
       if (call.table === "sync_tombstones" && options?.tombstoned) {
         return Promise.resolve(resolve({ data: options.tombstoned.map((id) => ({ id })), error: null }));
       }
@@ -79,9 +94,21 @@ function stubClient(options?: { counts?: Record<string, number>; latestUpdatedAt
           call.columns = columns;
           return chain(call);
         },
-        update: () => chain(record(table, "update")),
-        insert: () => chain(record(table, "insert")),
-        upsert: () => chain(record(table, "upsert")),
+        update: (payload?: unknown) => {
+          const call = record(table, "update");
+          call.payload = payload;
+          return chain(call);
+        },
+        insert: (payload?: unknown) => {
+          const call = record(table, "insert");
+          call.payload = payload;
+          return chain(call);
+        },
+        upsert: (payload?: unknown) => {
+          const call = record(table, "upsert");
+          call.payload = payload;
+          return chain(call);
+        },
         delete: () => chain(record(table, "delete"))
       };
     },
@@ -399,4 +426,51 @@ test("tombstones only guard on updated_at for tables that have one", async () =>
   // reuse_events has no updated_at column at all, so any comparison is a 500.
   assert.equal(guarded("reuse_events"), false, "reuse_events has no updated_at; guarding on it fails every deletion");
   assert.equal(guarded("learning_materials"), true, "a row edited after the deletion must survive the tombstone");
+});
+
+const EXPRESSION_FIXTURE = {
+  id: "local-expr-1",
+  materialId: null,
+  intentId: null,
+  text: "roll out a migration",
+  textNorm: "roll out a migration",
+  register: null,
+  scene: null,
+  note: null,
+  reuseCount: 0,
+  firstReusedAt: null,
+  lastReusedAt: null,
+  createdAt: "2026-08-30T11:00:00.000Z",
+  updatedAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("an expression whose norm the cloud already holds is adopted, not inserted", async () => {
+  const { client, calls } = stubClient({
+    existingByNorm: { id: "cloud-expr-1", updated_at: "2026-08-30T10:00:00.000Z" }
+  });
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], expressions: [EXPRESSION_FIXTURE] });
+
+  assert.equal(
+    calls.some((call) => call.table === "saved_expressions" && call.verb === "upsert"),
+    false,
+    "inserting would violate UNIQUE(user_id, text_norm) and poison the batch forever"
+  );
+  const adopt = calls.find((call) => call.table === "saved_expressions" && call.verb === "update");
+  assert.ok(adopt, "the incoming content must merge into the cloud row the norm already maps to");
+  assert.ok(adopt.filters.some(([column, value]) => column === "id" && value === "cloud-expr-1"),
+    "the update must target the cloud row, not the local id");
+  assert.ok(
+    adopt.comparisons?.some((comparison) => comparison.op === "lte" && comparison.column === "updated_at"),
+    "adoption must follow the same last-write-wins rule as a plain update"
+  );
+  const payload = adopt.payload as Record<string, unknown> | undefined;
+  assert.ok(payload && !("id" in payload), "the cloud row keeps its id; the local id must not overwrite it");
+});
+
+test("an expression the cloud has never seen is still inserted with onConflict id", async () => {
+  const { client, calls } = stubClient({ existingByNorm: null });
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], expressions: [EXPRESSION_FIXTURE] });
+
+  const insert = calls.find((call) => call.table === "saved_expressions" && call.verb === "upsert");
+  assert.ok(insert, "a genuinely new expression must be pushed");
 });

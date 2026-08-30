@@ -876,12 +876,44 @@ const upsertWithLww = async (
     if (tombstoned.has(String(row.id))) continue;
     const { data: existing } = await supabase.from(table).select("id").eq("user_id", userId).eq("id", row.id).maybeSingle();
     if (!existing) {
-      // `onConflict: id` rather than a bare insert: the probe above and this
-      // write are separate HTTP calls with no transaction between them, so a
-      // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
-      // makes the retry a no-op instead of a permanent duplicate-key failure.
-      const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
-      if (insert.error) throw new Error(insert.error.message);
+      // Cloud uniqueness for expressions is (user_id, text_norm), not id: a
+      // sibling device may have saved the same normalized text under a
+      // different id. A plain insert would violate that constraint, and since
+      // the batch has no transaction the CLI would never mark the row synced
+      // and would retry it on every sync -- a poison pill that wedges the
+      // whole sync. Probe by norm and adopt the cloud row instead, applying
+      // the same last-write-wins rule as the update path below.
+      let adoptId: string | null = null;
+      if (table === "saved_expressions") {
+        const { data: byNorm, error: normError } = await supabase
+          .from(table)
+          .select("id,updated_at")
+          .eq("user_id", userId)
+          .eq("text_norm", String(row.text_norm))
+          .maybeSingle();
+        if (normError) throw new Error(normError.message);
+        if (byNorm && String(byNorm.id) !== String(row.id)) adoptId = String(byNorm.id);
+      }
+      if (adoptId) {
+        // Keep the cloud row's id -- it is the one reuse_events reference.
+        // The `.lte` guard makes a fresher cloud copy win by matching zero rows.
+        const { id: _localId, ...payload } = row;
+        const updated = await supabase
+          .from(table)
+          .update({ user_id: userId, ...payload })
+          .eq("user_id", userId)
+          .eq("id", adoptId)
+          .lte("updated_at", String(row.updated_at))
+          .select("id");
+        if (updated.error) throw new Error(updated.error.message);
+      } else {
+        // `onConflict: id` rather than a bare insert: the probe above and this
+        // write are separate HTTP calls with no transaction between them, so a
+        // concurrent push can create the row in between. ON CONFLICT (id) DO UPDATE
+        // makes the retry a no-op instead of a permanent duplicate-key failure.
+        const insert = await supabase.from(table).upsert({ user_id: userId, ...row }, { onConflict: "id" });
+        if (insert.error) throw new Error(insert.error.message);
+      }
     } else {
       // Last-write-wins: overwrite only when the cloud copy is not newer than the
       // row being pushed. `.lte` (cloud.updated_at <= incoming) keeps a fresher
