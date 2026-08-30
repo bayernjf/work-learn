@@ -315,6 +315,44 @@ test("syncToCloud last-write-wins keeps a fresher cloud row (lte, not gte)", asy
   );
 });
 
+const PRACTICE_RECORD = {
+  id: "practice-1",
+  materialId: null,
+  questionId: null,
+  exerciseType: "recall" as const,
+  focus: "",
+  prompt: "How do you say it?",
+  userAnswer: "roll out",
+  isCorrect: false,
+  status: "practice_again" as const,
+  createdAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("fetchSyncSnapshot pulls practice records scoped to the user", async () => {
+  const { client, calls } = stubClient();
+  await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
+
+  const practice = calls.find((call) => call.table === "practice_records");
+  assert.ok(practice, "practice records must be in the pull, or the mistake book stays local-only");
+  assert.ok(practice.filters.some(([column, value]) => column === "user_id" && value === USER));
+  assert.ok(
+    practice.filters.some(([column]) => column === "created_at"),
+    "practice_records has no updated_at; the incremental cursor has to run on created_at"
+  );
+});
+
+test("syncToCloud pushes practice records as idempotent upserts", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, { sessions: [], materials: [], questions: [], practiceRecords: [PRACTICE_RECORD] });
+
+  assert.equal(calls.filter((call) => call.table === "practice_records" && call.verb === "upsert").length, 1);
+  assert.equal(
+    calls.some((call) => call.table === "practice_records" && call.verb === "select"),
+    false,
+    "a select-then-insert pair is two HTTP calls with no transaction between them; ON CONFLICT is atomic"
+  );
+});
+
 const MATERIAL_FIXTURE = {
   id: "material-1",
   sessionId: "session-1",

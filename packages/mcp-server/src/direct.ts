@@ -31,6 +31,7 @@ import {
   suggestReuse,
   suggestReuseInputSchema,
   syncIntentColumns,
+  syncPracticeRecordColumns,
   syncReuseEventColumns,
   syncSavedExpressionColumns,
   summarizeReuse,
@@ -790,6 +791,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
   let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
   let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);
   let reuseEventsQuery = supabase.from("reuse_events").select(syncReuseEventColumns).eq("user_id", userId);
+  let practiceRecordsQuery = supabase.from("practice_records").select(syncPracticeRecordColumns).eq("user_id", userId);
   let tombstonesQuery = supabase.from("sync_tombstones").select(syncTombstoneColumns).eq("user_id", userId);
   if (trimmed) {
     sessionsQuery = sessionsQuery.gte("updated_at", trimmed);
@@ -798,9 +800,10 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     reviewsQuery = reviewsQuery.gte("updated_at", trimmed);
     intentsQuery = intentsQuery.gte("updated_at", trimmed);
     expressionsQuery = expressionsQuery.gte("updated_at", trimmed);
+    practiceRecordsQuery = practiceRecordsQuery.gte("created_at", trimmed);
     tombstonesQuery = tombstonesQuery.gte("deleted_at", trimmed);
   }
-  const [sessions, materials, questions, reviews, intents, expressions, reuseEvents, tombstones] = await Promise.all([
+  const [sessions, materials, questions, reviews, intents, expressions, reuseEvents, practiceRecords, tombstones] = await Promise.all([
     sessionsQuery.order("updated_at", { ascending: true }),
     materialsQuery.order("updated_at", { ascending: true }),
     questionsQuery.order("updated_at", { ascending: true }),
@@ -808,6 +811,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     intentsQuery.order("updated_at", { ascending: true }),
     expressionsQuery.order("updated_at", { ascending: true }),
     reuseEventsQuery.order("created_at", { ascending: true }),
+    practiceRecordsQuery.order("created_at", { ascending: true }),
     tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
   return {
@@ -818,6 +822,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     intents: (ok(intents) as Record<string, unknown>[]).map(normalizeIntent),
     expressions: (ok(expressions) as Record<string, unknown>[]).map(normalizeSavedExpression),
     reuseEvents: (ok(reuseEvents) as Record<string, unknown>[]).map(normalizeReuseEvent),
+    practiceRecords: (ok(practiceRecords) as Record<string, unknown>[]).map(toPracticeRecord),
     tombstones: (ok(tombstones) as Record<string, unknown>[]).map((row) => ({
       id: String(row.id),
       entity: String(row.entity),
@@ -930,7 +935,7 @@ const upsertReviewsWithLww = async (supabase: SupabaseClient, userId: string, ro
 const upsertImmutableWithId = async (
   supabase: SupabaseClient,
   userId: string,
-  table: "reuse_events",
+  table: "reuse_events" | "practice_records",
   rows: Array<Record<string, unknown>>
 ) => {
   // These tables are append-only: a replayed or concurrent push must not rewrite
@@ -1025,6 +1030,18 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     confidence: event.confidence,
     created_at: event.createdAt
   }));
+  const practiceRecordRows = parsed.practiceRecords.map((record) => ({
+    id: record.id,
+    material_id: record.materialId,
+    question_id: record.questionId,
+    exercise_type: record.exerciseType,
+    focus: record.focus,
+    prompt: record.prompt,
+    user_answer: record.userAnswer,
+    is_correct: record.isCorrect,
+    status: record.status,
+    created_at: record.createdAt
+  }));
 
   await applyCloudTombstones(supabase, userId, parsed.tombstones);
   await upsertWithLww(supabase, userId, "sessions", sessionRows);
@@ -1034,6 +1051,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
   await upsertWithLww(supabase, userId, "intents", intentRows);
   await upsertWithLww(supabase, userId, "saved_expressions", expressionRows);
   await upsertImmutableWithId(supabase, userId, "reuse_events", reuseEventRows);
+  await upsertImmutableWithId(supabase, userId, "practice_records", practiceRecordRows);
 
   return {
     sessions: sessionRows.length,
@@ -1043,6 +1061,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     intents: intentRows.length,
     expressions: expressionRows.length,
     reuseEvents: reuseEventRows.length,
+    practiceRecords: practiceRecordRows.length,
     tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
   };

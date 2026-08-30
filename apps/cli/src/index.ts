@@ -272,8 +272,9 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
   const batch = store.unsynced();
   const total =
     batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length +
-    batch.intents.length + batch.expressions.length + batch.reuseEvents.length + batch.tombstones.length;
-  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, tombstones: 0 } };
+    batch.intents.length + batch.expressions.length + batch.reuseEvents.length + batch.practiceRecords.length +
+    batch.tombstones.length;
+  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 } };
 
   const response = await fetch(`${apiUrl}/api/sync`, {
     method: "POST",
@@ -293,10 +294,11 @@ async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
     intents: batch.intents.map((row) => row.id),
     expressions: batch.expressions.map((row) => row.id),
     reuseEvents: batch.reuseEvents.map((row) => row.id),
+    practiceRecords: batch.practiceRecords.map((row) => row.id),
     tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
   });
 
-  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; tombstones: number } };
+  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; practiceRecords: number; tombstones: number } };
   return { pushed: result.data };
 }
 

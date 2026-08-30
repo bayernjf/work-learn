@@ -925,6 +925,7 @@ export class LocalStore {
     const intents = this.db.prepare("SELECT * FROM intents WHERE sync_status = 'local_only' ORDER BY created_at").all() as IntentRow[];
     const expressions = this.db.prepare("SELECT * FROM saved_expressions WHERE sync_status = 'local_only' ORDER BY created_at").all() as SavedExpressionRow[];
     const reuseEvents = this.db.prepare("SELECT * FROM reuse_events WHERE sync_status = 'local_only' ORDER BY created_at").all() as ReuseEventRow[];
+    const practiceRecords = this.db.prepare("SELECT * FROM practice_records WHERE sync_status = 'local_only' ORDER BY created_at").all() as PracticeRecordRow[];
     const tombstones = (this.db.prepare("SELECT * FROM sync_tombstones WHERE sync_status = 'local_only'").all() as Array<{ id: string; entity: string; deleted_at: string }>)
       .map((row) => ({ id: row.id, entity: row.entity, deletedAt: row.deleted_at }));
     return {
@@ -935,6 +936,7 @@ export class LocalStore {
       intents: intents.map(toIntent),
       expressions: expressions.map(toSavedExpression),
       reuseEvents: reuseEvents.map(toReuseEvent),
+      practiceRecords: practiceRecords.map(toPracticeRecordRow),
       tombstones
     };
   }
@@ -977,6 +979,7 @@ export class LocalStore {
         intents: count("intents"),
         expressions: count("saved_expressions"),
         reuseEvents: count("reuse_events"),
+        practiceRecords: count("practice_records"),
         tombstones: count("sync_tombstones")
       },
       pending: {
@@ -987,6 +990,7 @@ export class LocalStore {
         intents: batch.intents.length,
         expressions: batch.expressions.length,
         reuseEvents: batch.reuseEvents.length,
+        practiceRecords: batch.practiceRecords.length,
         tombstones: batch.tombstones.length
       },
       latestUpdatedAt: max("learning_materials")
@@ -1070,7 +1074,18 @@ export class LocalStore {
       VALUES (@id, @expressionId, @sessionId, @source, @matchedText, @contextSnippet, @matchKind, @confidence, @createdAt, 'synced', @now)
       ON CONFLICT(id) DO NOTHING
     `);
-    const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, tombstones: 0 };
+    const upsertPracticeRecord = this.db.prepare(`
+      INSERT INTO practice_records
+        (id, material_id, question_id, exercise_type, focus, prompt, user_answer, is_correct, status, created_at, sync_status, synced_at)
+      VALUES (@id, @materialId, @questionId, @exerciseType, @focus, @prompt, @userAnswer, @isCorrect, @status, @createdAt, 'synced', @now)
+      ON CONFLICT(id) DO NOTHING
+    `);
+    // practice_records has NOT NULL-less FKs declared ON DELETE CASCADE here but
+    // SET NULL in the cloud, so a record can outlive its parent in one store and
+    // not the other. Skip orphans instead of failing the whole batch.
+    const practiceMaterialExists = this.db.prepare("SELECT id FROM learning_materials WHERE id = ?");
+    const practiceQuestionExists = this.db.prepare("SELECT id FROM question_translations WHERE id = ?");
+    const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 };
     const tx = this.db.transaction(() => {
       for (const row of parsed.sessions) {
         upsertSession.run({ ...row, now });
@@ -1104,6 +1119,16 @@ export class LocalStore {
         if (expressionExists) upsertReuseEvent.run({ ...row, now });
         counts.reuseEvents++;
       }
+      for (const row of parsed.practiceRecords) {
+        if (row.materialId && !practiceMaterialExists.get(row.materialId)) continue;
+        if (row.questionId && !practiceQuestionExists.get(row.questionId)) continue;
+        const inserted = upsertPracticeRecord.run({
+          ...row,
+          isCorrect: row.isCorrect === null ? null : row.isCorrect ? 1 : 0,
+          now
+        });
+        if (inserted.changes > 0) counts.practiceRecords++;
+      }
       const deleteSession = this.db.prepare("DELETE FROM sessions WHERE id = ? AND ? >= updated_at");
       const deleteMaterial = this.db.prepare("DELETE FROM learning_materials WHERE id = ? AND ? >= updated_at");
       const deleteQuestion = this.db.prepare("DELETE FROM question_translations WHERE id = ? AND ? >= updated_at");
@@ -1135,7 +1160,7 @@ export class LocalStore {
   }
 
   /** Mark rows as synced after a successful push. */
-  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[]; intents?: string[]; expressions?: string[]; reuseEvents?: string[]; tombstones?: Array<{ id: string; entity: string }> }) {
+  markSynced(ids: { sessions?: string[]; materials?: string[]; questions?: string[]; reviews?: string[]; intents?: string[]; expressions?: string[]; reuseEvents?: string[]; practiceRecords?: string[]; tombstones?: Array<{ id: string; entity: string }> }) {
     const now = new Date().toISOString();
     const statements: Array<[string, string[]]> = [
       ["sessions", ids.sessions ?? []],
@@ -1144,7 +1169,8 @@ export class LocalStore {
       ["review_items", ids.reviews ?? []],
       ["intents", ids.intents ?? []],
       ["saved_expressions", ids.expressions ?? []],
-      ["reuse_events", ids.reuseEvents ?? []]
+      ["reuse_events", ids.reuseEvents ?? []],
+      ["practice_records", ids.practiceRecords ?? []]
     ];
     const tombstoneIds = ids.tombstones ?? [];
     const tx = this.db.transaction(() => {
