@@ -184,29 +184,41 @@ export const createAuthorizationCode = async (input: {
   return code;
 };
 
-export const exchangeAuthorizationCode = async (input: {
-  clientId: string;
-  code: string;
-  codeVerifier?: string;
-  redirectUri?: string;
-}): Promise<{ access_token: string; refresh_token: string; expires_in: number; token_type: "Bearer"; scope: string }> => {
-  const admin = service();
+export const exchangeAuthorizationCode = async (
+  input: {
+    clientId: string;
+    code: string;
+    codeVerifier?: string;
+    redirectUri?: string;
+  },
+  adminOverride?: SupabaseClient
+): Promise<{ access_token: string; refresh_token: string; expires_in: number; token_type: "Bearer"; scope: string }> => {
+  const admin = adminOverride ?? service();
+
+  // Claim the code atomically. The conditional UPDATE only matches a row that
+  // is still unconsumed, and Postgres re-evaluates the predicate under row
+  // locks, so two concurrent exchanges cannot both win: the loser updates zero
+  // rows and is rejected instead of minting a second token pair. The claim
+  // also covers the unknown-code case -- nothing matches, nothing to issue.
+  // Validating after the claim means a wrong PKCE verifier burns the code; the
+  // OAuth 2.1 BCP prefers that, since it prevents verifier brute-forcing.
   const { data } = await admin
     .from("oauth_authorization_codes")
-    .select("*")
+    .update({ consumed_at: new Date().toISOString() })
     .eq("code", input.code)
     .eq("client_id", input.clientId)
-    .maybeSingle();
+    .is("consumed_at", null)
+    .select("*");
 
-  if (!data) throw new Error("invalid_grant");
-  if (data.consumed_at) throw new Error("invalid_grant");
-  if (new Date(data.expires_at as string).getTime() < Date.now()) throw new Error("invalid_grant");
-  if (input.redirectUri && data.redirect_uri !== input.redirectUri) throw new Error("invalid_grant");
-  if (!input.codeVerifier || sha256Base64Url(input.codeVerifier) !== (data.code_challenge as string)) {
+  const claimed = (data ?? []) as Array<Record<string, unknown>>;
+  const code = claimed[0];
+  if (!code || claimed.length !== 1) throw new Error("invalid_grant");
+
+  if (new Date(code.expires_at as string).getTime() < Date.now()) throw new Error("invalid_grant");
+  if (input.redirectUri && code.redirect_uri !== input.redirectUri) throw new Error("invalid_grant");
+  if (!input.codeVerifier || sha256Base64Url(input.codeVerifier) !== (code.code_challenge as string)) {
     throw new Error("invalid_grant");
   }
-
-  await admin.from("oauth_authorization_codes").update({ consumed_at: new Date().toISOString() }).eq("code", input.code);
 
   const expiresIn = 3600;
   const refreshToken = randomToken(48);
@@ -216,30 +228,43 @@ export const exchangeAuthorizationCode = async (input: {
     access_token_hash: sha256Hex(accessToken),
     refresh_token_hash: sha256Hex(refreshToken),
     client_id: input.clientId,
-    user_id: data.user_id as string,
-    scope: resolveIssuedScope(data.scope),
+    user_id: code.user_id as string,
+    scope: resolveIssuedScope(code.scope as string | null),
     access_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString()
   });
 
-  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(data.scope) };
+  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(code.scope as string | null) };
 };
 
-export const rotateRefreshToken = async (input: {
-  clientId: string;
-  refreshToken: string;
-}): Promise<{ access_token: string; refresh_token: string; expires_in: number; token_type: "Bearer"; scope: string }> => {
-  const admin = service();
+export const rotateRefreshToken = async (
+  input: {
+    clientId: string;
+    refreshToken: string;
+  },
+  adminOverride?: SupabaseClient
+): Promise<{ access_token: string; refresh_token: string; expires_in: number; token_type: "Bearer"; scope: string }> => {
+  const admin = adminOverride ?? service();
   const refreshHash = sha256Hex(input.refreshToken);
+
+  // Same atomic claim as the code exchange: only a token that is not yet
+  // revoked can be rotated, so replaying an old refresh token after a
+  // successful rotation loses the race and is rejected instead of forking the
+  // token family. Revoking the matched row itself (rather than by its access
+  // hash, as before) is what makes the claim and the revocation one statement.
   const { data } = await admin
     .from("oauth_tokens")
-    .select("*")
+    .update({ revoked_at: new Date().toISOString() })
     .eq("refresh_token_hash", refreshHash)
     .eq("client_id", input.clientId)
-    .maybeSingle();
+    .is("revoked_at", null)
+    .select("*");
 
-  if (!data || data.revoked_at) throw new Error("invalid_grant");
-  if (!data.refresh_expires_at || new Date(data.refresh_expires_at as string).getTime() < Date.now()) {
+  const claimed = (data ?? []) as Array<Record<string, unknown>>;
+  const previous = claimed[0];
+  if (!previous || claimed.length !== 1) throw new Error("invalid_grant");
+
+  if (!previous.refresh_expires_at || new Date(previous.refresh_expires_at as string).getTime() < Date.now()) {
     throw new Error("invalid_grant");
   }
 
@@ -247,16 +272,15 @@ export const rotateRefreshToken = async (input: {
   const refreshToken = randomToken(48);
   const accessToken = `${OAUTH_ACCESS_PREFIX}${randomToken(32)}`;
 
-  await admin.from("oauth_tokens").update({ revoked_at: new Date().toISOString() }).eq("access_token_hash", data.access_token_hash as string);
   await admin.from("oauth_tokens").insert({
     access_token_hash: sha256Hex(accessToken),
     refresh_token_hash: sha256Hex(refreshToken),
     client_id: input.clientId,
-    user_id: data.user_id,
-    scope: resolveIssuedScope(data.scope),
+    user_id: previous.user_id as string,
+    scope: resolveIssuedScope(previous.scope as string | null),
     access_expires_at: new Date(Date.now() + expiresIn * 1000).toISOString(),
     refresh_expires_at: new Date(Date.now() + 30 * 86_400_000).toISOString()
   });
 
-  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(data.scope) };
+  return { access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, token_type: "Bearer", scope: resolveIssuedScope(previous.scope as string | null) };
 };
