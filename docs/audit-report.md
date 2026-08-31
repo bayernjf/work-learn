@@ -116,7 +116,7 @@
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
 | 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 的状态与处理器已抽成 6 个 hooks（`useAuth`/`useCorpus`/`useSyncStatus`/`usePatterns`/`useReuse`/`useImportExport`，`main.tsx` 只剩组合与 JSX） |
-| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | 🟢 已清理 `@tanstack/react-query`（源码零引用，纯依赖声明，已随 lockfile 移除）；硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端仍 ⬜ 未处理 |
+| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | 🟢 三项全部清理：`@tanstack/react-query`（源码零引用，已随 lockfile 移除）；硬编码 origin（`/api/config` 派生 `apiUrl` + Pages `API_ORIGIN` env，fallback 保留）；`mcp-server` 遗留 HTTP 客户端（`index.ts` 拆为 `http-client.ts`，删死代码 `toolInputSchemas`/`McpToolName`/`createMcpEndpoint`） |
 
 ## 测试质量欠账
 
@@ -136,5 +136,5 @@
 ## 结论与建议
 
 1. 数据安全类缺陷（P0 全部 + P1 全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：全部 P0/P1 已闭环，无剩余高危项。评审列举的三项低优先级清债（`App` 状态抽 hooks、`react-query` 清理、`reuse_events` 极端孤儿探父）已全部完成；剩余为硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端。
+2. 推进顺序建议：全部 P0/P1 已闭环，无剩余高危项。评审列举的低优先级清债已全部完成：`App` 状态抽 hooks、`react-query` 清理、`reuse_events` 极端孤儿探父、硬编码 origin、`mcp-server` 遗留 HTTP 客户端。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

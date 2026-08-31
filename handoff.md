@@ -625,3 +625,21 @@ pnpm --filter @work-learn/shared-schema test
 **未做的（已记）**：`/api/config` 的 `apiUrl` 与 `routes/{oauth,mcp}.ts` 里的 `apiBase`/`publicBase` 仍各自 inline 同一条三元表达式，未来可抽 `apps/api/src/lib/public-url.ts` 统一。本次不抽，保持单次改动只动一处。
 
 **待办**（部署侧，需人工）：Cloudflare Pages 控制台 → `work-learn` → Settings → Environment variables 新增 `API_ORIGIN = https://work-learn-api.vercel.app`（或在新增部署 / 自定义域名时改为对应的 origin），然后 `env.API_ORIGIN` 真正生效、fallback 即可删。fallback 保留期间行为等价，不影响生产。
+
+## 2026-08-31 续十五：mcp-server 遗留 HTTP 客户端清债（未提交）
+
+审计剩的最后一项清债落地。`packages/mcp-server/src/index.ts` 顶着包主入口（exports `.`）的名字，实际只是 `server.ts` 的 HTTP 客户端模块，还夹着零引用的死代码。
+
+**改动**：
+- 新增 `packages/mcp-server/src/http-client.ts`：17 个工具函数（`createSession` 等）+ `createHttpContext` 原样搬入，文件职责与名字一致。
+- 删除 `packages/mcp-server/src/index.ts` 及其死代码 `toolInputSchemas`、`McpToolName`（全仓零引用，已核）；`createMcpEndpoint` 一并删——它只被 `server.ts` 消费且只用 `.config` 字段，`tools` 数组字段无人读。
+- `server.ts`：`import { createHttpContext } from "./http-client.js"`，直接 `createHttpContext({ apiUrl, accessToken })`。
+- `package.json`：exports `"."` 从 `./src/index.ts` 改指 `./src/http-client.ts`（`. /http`、`. /direct`、`. /tools`、`. /server` 不变）。
+- `http.test.ts`：import 从 `./index.js` 改到 `./http-client.js`（内容未动）。
+- hoisted 副本 `apps/api/node_modules/@work-learn/mcp-server` 已 `robocopy /MIR` 同步（旧 `index.ts` 随之删除）。
+
+**验证**：mcp-server 36/36、api 51/51（确认 hoisted 副本无破坏）、8 包 `tsc --noEmit` 全绿、`pnpm build` 正常。CI workflow 无 `index.ts` 引用。
+
+**提交规划**：按原子分 2 个 commit——① `refactor(mcp): move the HTTP client out of index.ts into http-client.ts`（新建 http-client.ts + 删 index.ts + server.ts + package.json + http.test.ts）；② `docs: record mcp-server http client debt clearance`（handoff + audit-report）。
+
+**遗留说明**：`packages/learning-skill`（零引用）、`packages/learning-core`（除 `redactSecrets` 外零引用）两个空壳包未动，属于包级重构，超出本次清债范围。
