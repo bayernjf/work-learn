@@ -310,10 +310,10 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
   - [ ] 统一两端 FK 语义（`materials/questions/practice_records` 云端 `SET NULL` vs 本地 `CASCADE`）：现阶段以「跳过孤儿行」兜底，未改约束。
 - [x] P1：OAuth 新令牌强制非空最小 scope（commit `39baff2`）——空 scope 不再被当作全权限，新令牌默认 `read`，未请求 scope 的客户端只拿到只读；
 - [x] P1：`/register` 的 `redirect_uri` 校验（commit `51f8235`）——拒绝非 https、非 loopback 的 http、带 fragment、含通配符的值，消除开放重定向拿授权码的漏洞；
-- [ ] P1：`/register` 限流（serverless 无共享存储，需落库或网关层，待决策）；`client_name` 仍由攻击者控制并渲染进同意页（钓鱼面）；
+- [ ] P1：`/register` 限流（serverless 无共享存储，需落库或网关层，待决策）；~~`client_name` 钓鱼面~~（已修，commit `3849bde`：trim + ≤100 字符 + 拒绝控制字符）；
 - [x] P1：code 兑换 / refresh 轮换改原子（commit `64456fb`）——两处「先查再改」改为单条条件 `UPDATE`（`.is consumed_at/revoked_at null`）认领，命中行数即胜负，并发只有一方能发令牌，重放的旧 refresh 直接 `invalid_grant`；错误 PKCE verifier 按 OAuth 2.1 BCP 烧掉 code。**仍开着**：重放时的家族撤销（需要 token family 标识列，属 schema 变更，未做）。
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
-  - [ ] 补 `scheduleNextReview`（现零测试）、`markSynced` 往返、`apps/api` 用 `app.request()` 的进程内路由测试；
+  - [x] 补 `scheduleNextReview`（commit `4b396d7`）、`markSynced` 往返（`53fd03a`）、`apps/api` 进程内路由测试（`2cb04d0`）；
   - [x] CI 加一条「测试数为 0 即失败」的护栏（commit `d1aa84c`，详见下方「零测试护栏」）。
 - [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、~~拆 `main.tsx`~~（叶子组件已按域拆分，commit `6cc1ef0`，`App` 的状态/处理器抽 hooks 仍可做）、收敛双实现。
 
