@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runSync } from "./sync.js";
+import { syncBatchInputSchema } from "./index.js";
 import type { CloudSyncClient, LocalSyncStore, MarkSyncedInput, SyncBatchInput, SyncPushCounts, SyncSnapshot } from "./index.js";
 
 const pushCounts = (batch: SyncBatchInput): SyncPushCounts => ({
@@ -122,4 +123,46 @@ test("runSync skips the push when nothing is pending", async () => {
   assert.equal(cloud.calls.length, 2);
   assert.equal(local.state.marked, null);
   assert.equal(report.pushed.sessions, 0);
+});
+
+test("sync schemas accept a null sessionId for an orphan kept after its session was deleted", () => {
+  const now = "2026-01-01T00:00:00.000Z";
+  const batch: SyncBatchInput = {
+    sessions: [],
+    materials: [{
+      id: "m-orphan",
+      sessionId: null,
+      source: "codex",
+      topic: "t",
+      originalText: "x",
+      explanation: "",
+      usefulExpressions: [],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: [],
+      createdAt: now,
+      updatedAt: now
+    }],
+    questions: [{
+      id: "q-orphan",
+      sessionId: null,
+      source: "codex",
+      question: "Q",
+      translation: "T",
+      topic: null,
+      createdAt: now,
+      updatedAt: now
+    }],
+    reviews: [],
+    intents: [],
+    expressions: [],
+    reuseEvents: [],
+    practiceRecords: [],
+    tombstones: []
+  };
+
+  const parsed = syncBatchInputSchema.parse(batch);
+  assert.equal(parsed.materials[0]?.sessionId, null);
+  assert.equal(parsed.questions[0]?.sessionId, null);
 });

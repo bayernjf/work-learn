@@ -404,9 +404,11 @@ export const syncSessionSchema = z.object({
 });
 
 // A learning material as synced from a local store, id included for idempotency.
+// sessionId is nullable: the cloud keeps a material alive after its session is
+// deleted (ON DELETE SET NULL), and both ends agree on that orphan semantics.
 export const syncMaterialSchema = z.object({
   id: z.string().min(1),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).nullable(),
   source: sourceSchema,
   topic: z.string().min(1),
   originalText: z.string().min(1),
@@ -421,9 +423,10 @@ export const syncMaterialSchema = z.object({
 });
 
 // A question/translation pair as synced from a local store, id included.
+// sessionId is nullable for the same orphan semantics as syncMaterialSchema.
 export const syncQuestionTranslationSchema = z.object({
   id: z.string().min(1),
-  sessionId: z.string().min(1),
+  sessionId: z.string().min(1).nullable(),
   source: sourceSchema,
   question: z.string().min(1),
   translation: z.string().min(1),

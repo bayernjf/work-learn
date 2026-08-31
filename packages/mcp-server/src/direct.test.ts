@@ -366,7 +366,7 @@ const PRACTICE_RECORD = {
   createdAt: "2026-08-30T12:00:00.000Z"
 };
 
-test("fetchSyncSnapshot skips materials and questions orphaned by a deleted session", async () => {
+test("fetchSyncSnapshot pulls materials and questions even when their session was deleted", async () => {
   const { client, calls } = stubClient();
   await fetchSyncSnapshot(client, USER, "2026-01-01T00:00:00.000Z");
 
@@ -376,15 +376,14 @@ test("fetchSyncSnapshot skips materials and questions orphaned by a deleted sess
   assert.ok(material, "materials must be pulled");
   assert.ok(question, "questions must be pulled");
   assert.ok(review, "reviews must be pulled");
-  const excludesOrphans = (call: Call) =>
+  const filtersOrphans = (call: Call) =>
     call.filters.some(([column, value]) => column === "not" && Array.isArray(value) && value[0] === "session_id");
-  assert.ok(excludesOrphans(material), "a material whose session was deleted must not reach a device with no such session");
-  assert.ok(excludesOrphans(question), "same for questions");
   assert.equal(
-    review.filters.some(([column]) => column === "not"),
+    filtersOrphans(material),
     false,
-    "review_items.material_id is NOT NULL and cascades; there is nothing to skip"
+    "a session-less orphan material must still be synced: both ends now keep it (SET NULL) instead of cascading"
   );
+  assert.equal(filtersOrphans(question), false, "same for questions");
 });
 
 test("fetchSyncSnapshot pulls practice records scoped to the user", async () => {
