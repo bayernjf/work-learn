@@ -62,3 +62,68 @@ test("an unknown route is a json 404", async () => {
   assert.equal(res.status, 404);
   assert.deepEqual(await res.json(), { error: "Not found" });
 });
+
+test("/api/config returns supabase keys plus an apiUrl that defaults to the request origin", async () => {
+  const previousSupabaseUrl = process.env.SUPABASE_URL;
+  const previousSupabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  const previousApiUrl = process.env.WORK_LEARN_PUBLIC_API_URL;
+  process.env.SUPABASE_URL = "https://supabase.example.com";
+  process.env.SUPABASE_ANON_KEY = "anon-key";
+  delete process.env.WORK_LEARN_PUBLIC_API_URL;
+  try {
+    const res = await app.request("/api/config");
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      data: {
+        supabaseUrl: "https://supabase.example.com",
+        supabaseAnonKey: "anon-key",
+        apiUrl: "http://localhost"
+      }
+    });
+  } finally {
+    if (previousSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousSupabaseUrl;
+    if (previousSupabaseAnonKey === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = previousSupabaseAnonKey;
+    if (previousApiUrl === undefined) delete process.env.WORK_LEARN_PUBLIC_API_URL;
+    else process.env.WORK_LEARN_PUBLIC_API_URL = previousApiUrl;
+  }
+});
+
+test("/api/config honors WORK_LEARN_PUBLIC_API_URL when set", async () => {
+  const previousSupabaseUrl = process.env.SUPABASE_URL;
+  const previousSupabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  const previousApiUrl = process.env.WORK_LEARN_PUBLIC_API_URL;
+  process.env.SUPABASE_URL = "https://supabase.example.com";
+  process.env.SUPABASE_ANON_KEY = "anon-key";
+  process.env.WORK_LEARN_PUBLIC_API_URL = "https://work-learn-api.vercel.app";
+  try {
+    const res = await app.request("/api/config");
+    assert.equal(res.status, 200);
+    const body = (await res.json()) as { data: { apiUrl: string } };
+    assert.equal(body.data.apiUrl, "https://work-learn-api.vercel.app");
+  } finally {
+    if (previousSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousSupabaseUrl;
+    if (previousSupabaseAnonKey === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = previousSupabaseAnonKey;
+    if (previousApiUrl === undefined) delete process.env.WORK_LEARN_PUBLIC_API_URL;
+    else process.env.WORK_LEARN_PUBLIC_API_URL = previousApiUrl;
+  }
+});
+
+test("/api/config returns 500 when supabase keys are missing", async () => {
+  const previousSupabaseUrl = process.env.SUPABASE_URL;
+  const previousSupabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+  delete process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_ANON_KEY;
+  try {
+    const res = await app.request("/api/config");
+    assert.equal(res.status, 500);
+  } finally {
+    if (previousSupabaseUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousSupabaseUrl;
+    if (previousSupabaseAnonKey === undefined) delete process.env.SUPABASE_ANON_KEY;
+    else process.env.SUPABASE_ANON_KEY = previousSupabaseAnonKey;
+  }
+});
