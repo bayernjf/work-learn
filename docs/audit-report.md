@@ -66,8 +66,9 @@
 ### P1-5 `/register`（OAuth 动态客户端注册）滥用
 - **发现**：无鉴权、无限流、`redirect_uri` 完全不校验（开放重定向，攻击者可拿授权码）；`client_name` 由攻击者控制并渲染进同意页（钓鱼面）。
 - **修复**（`51f8235`）：`redirect_uri` 严格校验——必须是绝对 https（loopback 的 http 例外）、无 fragment、无通配符，非法即 400。
-- **剩余**：**限流**（serverless 无共享存储，需落库计数或网关层，待决策）；`client_name` 钓鱼面未处理。
-- **状态**：🟡 部分修复（校验已做，限流待决策）。
+- **修复**（`3849bde`）：`client_name` 校验——trim、上限 100 字符、拒绝空值与控制字符，非法即 400，不再把原始文本渲染进同意页。
+- **剩余**：**限流**（serverless 无共享存储，需落库计数或网关层，待决策）。
+- **状态**：🟡 校验面已闭环，仅剩限流待决策。
 
 ### P1-6 FK 级联两端分叉（pull 整批回滚）
 - **发现**：实测核对后真实分歧仅 `learning_materials.session_id` 与 `question_translations.session_id`（云端可空 SET NULL vs 本地 NOT NULL CASCADE）。云端删会话后父被 SET NULL，`normalizeMaterial` 把 `String(null)` 推成 `'null'` → 本地 FK 违反 → 整个 pull 事务回滚。
@@ -110,7 +111,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | ⬜ 未开始（重活，另立专题） |
+| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟡 接口已收敛（`d3bfca7`：`WorkLearnContext` 下沉 shared-schema，三端 context 编译期结构互检）；剩余：同步面接口化 + 本地表迁移统一 FK 语义（重活，另立专题） |
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
 | 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 状态抽 hooks 仍可做 |
@@ -120,13 +121,13 @@
 
 | 项 | 状态 |
 |----|------|
-| `scheduleNextReview` 零测试 | ⬜ |
-| `apps/api` 用 `app.request()` 的进程内路由测试 | ⬜ |
+| `scheduleNextReview` 零测试 | ✅ 已补（`4b396d7`，6 条：again 立即重排、各级别间隔缩放、下限 1 天、easy 掌握判定、到期日） |
+| `apps/api` 用 `app.request()` 的进程内路由测试 | ✅ 已补（`2cb04d0`：health、全路由 401 扫、oauth 注册非法输入 400、404） |
 | `markSynced` 往返测试 | ✅ 已补（`53fd03a`） |
 
 ## 验证证据
 
-- 本地（环境修复后，2026-08-31）：mcp-server 34/34、api 35/35、shared-schema 39/39、setup 5/5；api/cli/mcp-server/shared-schema/setup/web 六处 `tsc --noEmit` 全绿。
+- 本地（环境修复后，2026-08-31）：mcp-server 34/34、api 42/42、shared-schema 45/45、setup 5/5；api/cli/mcp-server/shared-schema/setup/web 六处 `tsc --noEmit` 全绿。
 - `local-store` 测试依赖 better-sqlite3 原生模块，本机无法运行，以 CI 为准。
 - CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**。
 - **待办**：push `dev` 触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018`。
@@ -134,5 +135,5 @@
 ## 结论与建议
 
 1. 数据安全类缺陷（P0 全部 + P1 同步全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：`/register` 限流（安全面，需决策）→ FK 语义统一（需本地表迁移）→ 双实现收敛（架构，重活）。
+2. 推进顺序建议：`/register` 限流（安全面，需决策）→ FK 语义统一（需本地表迁移）→ 双实现收尾（同步面接口化，架构）。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken, validateRedirectUris } from "../lib/oauth.js";
+import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 
 /**
@@ -45,10 +45,14 @@ oauthRoute.post("/register", async (c) => {
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
   const check = validateRedirectUris(body.redirect_uris);
   if (!check.ok) return c.json({ error: check.error }, 400);
+  // The client_name is rendered into the consent page, so it has to be short,
+  // trimmed and free of control characters rather than passing raw markup.
+  const name = validateClientName(body.client_name);
+  if (!name.ok) return c.json({ error: name.error }, 400);
 
   const client = await registerClient({
     redirect_uris: check.uris,
-    client_name: typeof body.client_name === "string" ? body.client_name : undefined,
+    client_name: name.value,
     client_uri: typeof body.client_uri === "string" ? body.client_uri : undefined,
     logo_uri: typeof body.logo_uri === "string" ? body.logo_uri : undefined,
     scope: typeof body.scope === "string" ? body.scope : undefined,

@@ -52,7 +52,8 @@ import {
   type SplitIntentInput,
   type SuggestReuseInput,
   type UpdateReuseNudgeSettings,
-  type SaveQuestionTranslationInput
+  type SaveQuestionTranslationInput,
+  type WorkLearnContext
 } from "@work-learn/shared-schema";
 
 /**
@@ -1392,11 +1393,11 @@ function toSession(row: SessionRow) {
 }
 
 /**
- * A context shaped exactly like `WorkLearnContext` from `@work-learn/mcp-server`,
- * so the stdio MCP server can run offline against this local store instead of
- * calling the HTTP API.
+ * The offline context for the stdio MCP server: structurally checked against
+ * the shared `WorkLearnContext` contract at compile time, so a method added
+ * to the cloud or HTTP context without this one fails the build.
  */
-export const createLocalContext = (store: LocalStore) => ({
+export const createLocalContext = (store: LocalStore): WorkLearnContext => ({
   createSession: (input: unknown) => store.createSession(input),
   saveMaterial: (input: unknown) => store.saveMaterial(input),
   saveQuestionTranslation: (input: unknown) => store.saveQuestionTranslation(input),

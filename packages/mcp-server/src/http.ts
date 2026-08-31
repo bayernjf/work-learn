@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import type { WorkLearnContext } from "./tools.js";
+import type { WorkLearnContext } from "@work-learn/shared-schema";
 import { registerTools } from "./tools.js";
 
 export const MCP_SERVER_NAME = "work-learn";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasScope, saveMaterialInputSchema } from "./index.js";
+import { hasScope, saveMaterialInputSchema, scheduleNextReview } from "./index.js";
 
 const base = {
   sessionId: "sess_1",
@@ -103,4 +103,42 @@ test("the env var name the installer actually writes is redacted", () => {
     originalText: '"WORK_LEARN_ACCESS_TOKEN": "wlpat_short"',
   });
   assert.ok(!parsed.originalText.includes("wlpat_short"));
+});
+
+test("again reschedules immediately with a zero interval", () => {
+  const now = new Date("2026-08-30T12:00:00.000Z");
+  const next = scheduleNextReview(10, "again", now);
+  assert.equal(next.intervalDays, 0);
+  assert.equal(next.dueAt, now.toISOString());
+  assert.equal(next.mastered, false);
+});
+
+test("grades scale a fresh review from a base interval of one day", () => {
+  const now = new Date("2026-08-30T12:00:00.000Z");
+  assert.equal(scheduleNextReview(0, "hard", now).intervalDays, 1);  // round(1 * 1.3)
+  assert.equal(scheduleNextReview(0, "good", now).intervalDays, 2);  // round(1 * 2.1)
+  assert.equal(scheduleNextReview(0, "easy", now).intervalDays, 3);  // round(1 * 3.2)
+});
+
+test("grades scale from the previous interval", () => {
+  assert.equal(scheduleNextReview(10, "hard", new Date()).intervalDays, 13); // round(10 * 1.3)
+  assert.equal(scheduleNextReview(10, "good", new Date()).intervalDays, 21); // round(10 * 2.1)
+  assert.equal(scheduleNextReview(10, "easy", new Date()).intervalDays, 32); // round(10 * 3.2)
+});
+
+test("an interval is never rounded down below one day", () => {
+  assert.equal(scheduleNextReview(1, "hard", new Date()).intervalDays, 1); // round(1.3) stays 1
+});
+
+test("easy marks a long-standing interval as mastered, others do not", () => {
+  const now = new Date("2026-08-30T12:00:00.000Z");
+  assert.equal(scheduleNextReview(21, "easy", now).mastered, true);
+  assert.equal(scheduleNextReview(10, "easy", now).mastered, false);
+  assert.equal(scheduleNextReview(21, "good", now).mastered, false);
+});
+
+test("the due date lands now plus the new interval in days", () => {
+  const now = new Date("2026-08-30T12:00:00.000Z");
+  const next = scheduleNextReview(10, "good", now);
+  assert.equal(next.dueAt, new Date(now.getTime() + 21 * 86_400_000).toISOString());
 });

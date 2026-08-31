@@ -1005,3 +1005,7 @@ export const summarizeReuse = (
     recentEvents
   };
 };
+
+// The single domain contract implemented by the cloud (direct.ts), local
+// (local-store) and HTTP (stdio) contexts. See context.ts.
+export type { WorkLearnContext } from "./context.js";

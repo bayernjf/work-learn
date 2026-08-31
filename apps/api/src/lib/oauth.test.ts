@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken } from "./oauth.js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, validateClientName, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken } from "./oauth.js";
 
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -96,6 +96,18 @@ test("randomToken is long and unique", () => {
   const b = randomToken();
   assert.equal(a.length, 43); // 32 random bytes in base64url
   assert.notEqual(a, b);
+});
+
+test("validateClientName accepts an absent or normal name and trims it", () => {
+  assert.deepEqual(validateClientName(undefined), { ok: true, value: undefined });
+  assert.deepEqual(validateClientName("  My Agent  "), { ok: true, value: "My Agent" });
+});
+
+test("validateClientName rejects empty, oversized and control-character names", () => {
+  assert.equal(validateClientName("   ").ok, false);
+  assert.equal(validateClientName("x".repeat(101)).ok, false);
+  assert.equal(validateClientName("bad\u0000name").ok, false);
+  assert.equal(validateClientName(42).ok, false);
 });
 
 test("resolveIssuedScope falls back to the minimal scope for empty input", () => {
