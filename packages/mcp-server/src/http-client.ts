@@ -1,26 +1,24 @@
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getPracticeHistoryInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, listIntentsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema } from "@work-learn/shared-schema";
+import {
+  createSessionInputSchema,
+  generatePracticeInputSchema,
+  generateAdaptivePracticeInputSchema,
+  getPracticeHistoryInputSchema,
+  getUserPatternsInputSchema,
+  recordPracticeInputSchema,
+  recordReuseInputSchema,
+  saveMaterialInputSchema,
+  saveQuestionTranslationInputSchema,
+  suggestReuseInputSchema,
+  updateReuseNudgeSettingsSchema,
+  listExpressionsInputSchema,
+  listIntentsInputSchema,
+  clusterIntentsInputSchema,
+  mergeIntentsInputSchema,
+  splitIntentInputSchema
+} from "@work-learn/shared-schema";
 
-export type McpToolName =
-  | "create_session"
-  | "save_material"
-  | "save_question_translation"
-  | "search_corpus"
-  | "get_review_items"
-  | "mark_mastered"
-  | "snooze_review"
-  | "generate_practice"
-  | "get_user_patterns"
-  | "get_reuse_summary"
-  | "record_reuse"
-  | "suggest_reuse"
-  | "configure_reuse_nudges"
-  | "list_expressions"
-  | "cluster_intents"
-  | "merge_intents"
-  | "split_intent";
-
-type McpConfig = {
+export type McpConfig = {
   apiUrl: string;
   /** A personal access token. Valid until revoked, so there is nothing to renew. */
   accessToken: string;
@@ -35,11 +33,6 @@ const json = async (config: McpConfig, path: string, init?: RequestInit) => {
   if (!response.ok) throw new Error(body.error ?? `Work Learn API returned ${response.status}`);
   return body.data;
 };
-
-export const createMcpEndpoint = (config: McpConfig) => ({
-  config,
-  tools: ["create_session", "save_material", "save_question_translation", "search_corpus", "get_review_items", "mark_mastered", "snooze_review", "generate_practice", "get_user_patterns", "get_reuse_summary", "record_reuse", "suggest_reuse", "configure_reuse_nudges", "list_expressions", "cluster_intents", "merge_intents", "split_intent"] as McpToolName[]
-});
 
 export const createSession = (config: McpConfig, input: unknown) => {
   const parsed = createSessionInputSchema.parse(input);
@@ -151,18 +144,13 @@ export const listIntents = (config: McpConfig, input: unknown) => {
   return json(config, `/intents?${params.toString()}`);
 };
 
-export const toolInputSchemas = {
-  create_session: createSessionInputSchema,
-  save_material: saveMaterialInputSchema,
-  save_question_translation: saveQuestionTranslationInputSchema,
-  search_corpus: z.object({ query: z.string().optional() })
-};
-
 import type { WorkLearnContext } from "@work-learn/shared-schema";
 
 /**
  * Context used by the stdio entry point: it calls the deployed Hono API over
- * HTTP and refreshes the Supabase access token when needed.
+ * HTTP and authenticates with a personal access token. The remote Streamable
+ * HTTP endpoint uses `createDirectContext` instead, so this client exists only
+ * for token-backed stdio servers.
  */
 export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   createSession: (input) => createSession(config, input),
