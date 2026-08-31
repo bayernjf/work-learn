@@ -6,12 +6,16 @@ import { DOCS_URL, LANDING_URL, SKILL_DIR_TABS, TOKEN_PLACEHOLDER } from "../lib
 import { TokenManager } from "./TokenManager";
 import { SyncStatusPanel } from "./ui";
 
-export function AgentConnect({ session, initialOpen, syncStatus, syncStatusLoading, syncStatusError, onRefreshSyncStatus }: { session: Session; initialOpen: boolean; syncStatus: SyncStatus | null; syncStatusLoading: boolean; syncStatusError: string; onRefreshSyncStatus: (session: Session) => void }) {
+export function AgentConnect({ session, apiUrl, initialOpen, syncStatus, syncStatusLoading, syncStatusError, onRefreshSyncStatus }: { session: Session; apiUrl: string; initialOpen: boolean; syncStatus: SyncStatus | null; syncStatusLoading: boolean; syncStatusError: string; onRefreshSyncStatus: (session: Session) => void }) {
   const { t } = useI18n();
   // Served by this app (see vite.config.ts) rather than raw.githubusercontent.com,
   // which is unreachable on the networks these commands get pasted into.
   const RAW_BASE = window.location.origin;
-  const API_URL = "https://work-learn-api.vercel.app";
+  // Public API origin surfaced to the user (e.g. for the remote MCP URL and the
+  // stdio WORK_LEARN_API_URL). Comes from /api/config so it tracks the server's
+  // deployment (production origin in prod, localhost in dev) instead of being
+  // baked into the bundle.
+  const API_URL = apiUrl;
   const [remoteToken, setRemoteToken] = useState<string | null>(null);
   const [activeTokens, setActiveTokens] = useState(0);
   // No fallback to session.access_token. That JWT also authenticates straight

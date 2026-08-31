@@ -1,8 +1,12 @@
-const API_ORIGIN = "https://work-learn-api.vercel.app";
+// Cloudflare Pages injects API_ORIGIN as a runtime env var; the fallback below
+// keeps existing deployments working until the env is wired up in the Pages
+// dashboard (Settings -> Environment variables).
+const DEFAULT_API_ORIGIN = "https://work-learn-api.vercel.app";
 
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+    const API_ORIGIN = env.API_ORIGIN || DEFAULT_API_ORIGIN;
 
     if (url.pathname.startsWith("/api/")) {
       const target = new URL(`${API_ORIGIN}${url.pathname}${url.search}`);
