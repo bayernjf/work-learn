@@ -307,7 +307,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 
 - [x] P0-1：`direct.ts` 的 `upsertWithLww`/`upsertReviewsWithLww` `.gte` 已改 `.lte` 并加 `.select("id")`（零行=云端更新、按预期跳过，不抛错）；`upsertWithLww` 与 `upsertReviewsWithLww` 推送前先查 `sync_tombstones` 跳过已删 id（review 按 `material_id` 判，避免重建孤儿复习项）；`direct.test.ts` 新增回归测试锁定比较方向为 `lte`。**已跑通：mcp-server 28/28、api 22/22、shared-schema 39/39、setup 5/5，全仓 typecheck 绿。**
 - [x] P0-2：insert 前查 tombstone（P0-1 已含）+ 按 id `onConflict`；practice_records 纳入同步批次。详见下方「P0-2：practice_records 同步」。
-  - [ ] 统一两端 FK 语义（`materials/questions/practice_records` 云端 `SET NULL` vs 本地 `CASCADE`）：现阶段以「跳过孤儿行」兜底，未改约束。
+  - [x] 统一两端 FK 语义（commit `9ceaa6e`）：`materials/questions` 的 `session_id` 统一为云端语义 **SET NULL + 可空**（本地表迁移重建 + 孤儿保留）；`practice_records` 两端本就可空且都有孤儿跳过。
 - [x] P1：OAuth 新令牌强制非空最小 scope（commit `39baff2`）——空 scope 不再被当作全权限，新令牌默认 `read`，未请求 scope 的客户端只拿到只读；
 - [x] P1：`/register` 的 `redirect_uri` 校验（commit `51f8235`）——拒绝非 https、非 loopback 的 http、带 fragment、含通配符的值，消除开放重定向拿授权码的漏洞；
 - [ ] P1：`/register` 限流（serverless 无共享存储，需落库或网关层，待决策）；~~`client_name` 钓鱼面~~（已修，commit `3849bde`：trim + ≤100 字符 + 拒绝控制字符）；
@@ -315,7 +315,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
   - [x] 补 `scheduleNextReview`（commit `4b396d7`）、`markSynced` 往返（`53fd03a`）、`apps/api` 进程内路由测试（`2cb04d0`）；
   - [x] CI 加一条「测试数为 0 即失败」的护栏（commit `d1aa84c`，详见下方「零测试护栏」）。
-- [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、~~拆 `main.tsx`~~（叶子组件已按域拆分，commit `6cc1ef0`，`App` 的状态/处理器抽 hooks 仍可做）、🟡 收敛双实现（接口锚点已落，commit `d3bfca7`；同步面接口化 + FK 语义统一另立专题）。
+- [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、~~拆 `main.tsx`~~（叶子组件已按域拆分，commit `6cc1ef0`，`App` 的状态/处理器抽 hooks 仍可做）、~~收敛双实现~~（✅ 全部收尾：`d3bfca7` context 锚点 + `f1d5728` 同步面协议化 + `9ceaa6e` FK 语义统一）。
 
 ## 测试此前从未真正运行（2026-08-30）
 
@@ -356,7 +356,7 @@ C1 的练习闭环此前只在单机成立：本地写 `practice_records` 带 `s
 - ~~**毒丸批次（P1，见上）未处理**~~：已由 commit `13a5670` 处理（push 方向按 `text_norm` 预探测并认领云端行；pull 方向本地本就按 norm 跳过）。
 - **practice_record 没有 tombstone 实体**：本地 `sync_tombstones` 的 CHECK 只允许 `session/material/question/review/intent/expression/reuse_event`，加 `practice_record` 需要重建表。目前删除练习记录不会跨端传播（追加写语义下影响有限）。
 - **`LocalStore.recordPractice` 返回 `id: ""`**：插入了行但没回传 id，调用方只能反查 `getPracticeHistory`。属既有缺陷，与同步无关，未在本轮改动。
-- **孤儿行只跳过、不上报**：`applyRemoteBatch` 里父记录缺失时 `continue`，该行静默丢弃且不计入返回计数——仍是"静默丢数据"的形状，待统一 FK 语义时一并处理。
+- **孤儿行只跳过、不上报**：`applyRemoteBatch` 里父记录缺失时 `continue`，该行静默丢弃且不计入返回计数——已随 FK 语义统一（`9ceaa6e`）修复：删会话导致的 null-session 孤儿现在保留；仅「非空父 id 两端都缺失」仍防御性跳过。
 
 **验证**：`direct.test.ts` 新增 4 个用例（pull 带 practice_records 且游标走 `created_at`、push 走幂等 upsert 且不预探测、tombstone 只对有 `updated_at` 的表加护栏并同时断言 `material` 正例、已 tombstone 的 id 不写回），mcp-server 28/28 全过。`local-store` 新增 3 个用例覆盖 practice_records 的推/拉/孤儿跳过，**本机跑不了**（同上），只能在 CI 上见分晓；其 SQL 已用 Node 内置的 `node:sqlite` 单独验证过语法、占位符数量、`ON CONFLICT DO NOTHING` 的重放行为与 FK 拒绝孤儿。
 
@@ -449,7 +449,7 @@ node node_modules/typescript/bin/tsc -p <package>/tsconfig.json --noEmit
 
 **验证**：mcp-server 30/30（原 28 + 新 2：撞 norm 时必须认领而非插入、新 norm 仍走 onConflict 插入），`tsc -p packages/mcp-server/tsconfig.json --noEmit` 干净。测试桩顺带补了 `update/insert/upsert` 载荷记录与按 `text_norm` 探测的应答能力。
 
-**仍开着（同族问题）**：`reuse_events` 推送时若其 `expression_id` 在云端不存在（极端孤儿），仍会 FK 失败——`upsertImmutableWithId` 不探父。与「孤儿行只跳过、不上报」一并归入 FK 语义统一。
+**仍开着（同族问题）**：`reuse_events` 推送时若其 `expression_id` 在云端不存在（极端孤儿），仍会 FK 失败——`upsertImmutableWithId` 不探父。FK 语义统一（`9ceaa6e`）只覆盖了 `session_id` 分叉，此条保留为已知小缺口（触发条件：本地 event 引用了一个在云端被另一设备删除的 expression）。
 
 ## 2026-08-30 续五：markSynced 竞态修复（commit `53fd03a`）
 
@@ -533,7 +533,7 @@ pnpm --filter @work-learn/shared-schema test
 
 **验证**：web `tsc --noEmit` 干净。**本机 vite build 起不来是既有环境问题**：`core.autocrlf=true` 使 `scripts/install-skill.sh` 检出为 CRLF，而 `vite.config.ts` 的 `AGENT_DIRS=\(\n` 正则只认 LF——与本次改动无关，CI（ubuntu/LF）不受影响。
 
-**双实现收敛进度**：接口锚点已落（`d3bfca7`，`WorkLearnContext` 下沉 shared-schema、三端 context 编译期互检）；剩余「同步面接口化」与「本地表迁移统一 FK 语义」仍属重活，另立专题。**环境注意**：本机 `node_modules/@work-learn/*` 是静态副本（junction 不可用），改 workspace 包源码后需重刷副本（`node -e "..."` 循环 `fs.cpSync('packages/<pkg>', 各消费方 node_modules/@work-learn/<pkg>)`），否则消费者 tsc 会看到旧导出。
+**双实现收敛进度**：✅ 全部收尾——接口锚点（`d3bfca7`）、同步面协议化（`f1d5728`，`runSync` 共享编排）、FK 语义统一（`9ceaa6e`）。**环境注意**：① 本机 `node_modules/@work-learn/*` 是静态副本（junction 不可用），改 workspace 包源码后需重刷副本（`robocopy <pkg>/src 各消费方 node_modules/@work-learn/<pkg>/src /MIR`，或 `fs.cpSync` 循环），否则消费者 tsc 会看到旧导出；② better-sqlite3 曾无编译 bindings（local-store 测试从未真正跑过），已用 `node-gyp rebuild` 修复；③ `pnpm install` 在本机被 pnpm ≥10 的 safe-delete 保护拦截（要删 ≥500 文件即报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，`.npmrc` 的 `safe-delete=false` 未生效），需人工确认或清出 `node_modules` 根下残留的 `*_tmp_20484` 临时目录。
 
 ## 2026-08-30 续八：FK 孤儿跳过（commit `2cd088a`）
 
@@ -552,3 +552,16 @@ pnpm --filter @work-learn/shared-schema test
 **验证**：mcp-server 新增 1 条（快照对 material/question 过滤 session_id IS NULL、review 不过滤）、`local-store` 新增 1 条（父缺失的 material/question/review 跳过且不落库）。**本机 node_modules 彻底不可用（见下），全部等 CI**。
 
 **本机环境进一步恶化**：上一轮失败的 hoisted 安装把根 `node_modules/typescript` 也清掉了，本地连语法检查都做不了（`transpileModule` 无法加载 typescript 库）。恢复步骤不变（删全部 node_modules → `pnpm install --ignore-scripts`），执行完一切本地验证恢复；在此之前一律以 CI 为准。
+
+## 2026-08-31 续十：FK 语义统一（commit `9ceaa6e`）
+
+**决策**：删会话语义统一为云端已有的 **SET NULL + 可空**（保料不删料）——比本地 CASCADE 更保守、云端零迁移，且让「孤儿材料被静默丢弃」从根上消失。
+
+**改动**：
+- shared-schema：`syncMaterialSchema` / `syncQuestionTranslationSchema` 的 `sessionId` 放宽为 `.nullable()`（同步协议允许孤儿）；
+- local-store：`session_id` 行类型可空、DDL 改 `REFERENCES sessions(id) ON DELETE SET NULL`、新增 `unifySessionFkSemantics()` 一次性重建迁移（NOT NULL → 可空 + SET NULL，数据原样保留，`foreign_key_check` 前后验证）；`applyRemoteBatch` 对 null-session 孤儿**保留**（仅「非空父 id 两端都缺失」仍防御性跳过）；
+- direct.ts：`fetchSyncSnapshot` 去掉 `.not("session_id", "is", null)` 源头过滤；`normalizeMaterial` / `normalizeQuestionRow` 的 `String(null)` 改真 null；`importPortableData` 跳过为孤儿合成 session。
+
+**验证**：local-store 32/32（新增：旧库迁移后 SET NULL 生效 + 孤儿保留）、shared-schema 48/48、mcp-server 34/34、api 42/42，五包 tsc 0。
+
+**环境修复（本机）**：① better-sqlite3 无编译 bindings（local-store 测试此前从未真正运行），`node-gyp rebuild --release` 修复；② workspace 副本用 `robocopy /MIR` 重刷（junction 不可用）；③ `node_modules/@types` 下 13 个 `*_tmp_20484` 垃圾目录（pnpm `--force` 中断残留，污染 typeRoots）移入 `%TEMP%\wl-tmp-cleanup`；根 `node_modules` 下仍有 `*_tmp_20484` 残留，`pnpm install` 因此仍被 safe-delete 拦截，待人工清理。

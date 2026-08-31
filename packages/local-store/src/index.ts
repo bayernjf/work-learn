@@ -53,7 +53,11 @@ import {
   type SuggestReuseInput,
   type UpdateReuseNudgeSettings,
   type SaveQuestionTranslationInput,
-  type WorkLearnContext
+  type WorkLearnContext,
+  type LocalSyncStore,
+  type SyncBatchInput,
+  type SyncPushCounts,
+  type MarkSyncedInput
 } from "@work-learn/shared-schema";
 
 /**
@@ -69,7 +73,7 @@ export type SyncStatus = "local_only" | "synced";
 
 type MaterialRow = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   source: string;
   topic: string;
   original_text: string;
@@ -87,7 +91,7 @@ type MaterialRow = {
 
 type QuestionRow = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   source: string;
   question: string;
   translation: string;
@@ -196,7 +200,9 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE TABLE IF NOT EXISTS learning_materials (
   id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  -- Nullable + ON DELETE SET NULL, matching the cloud: deleting a session keeps
+  -- its materials alive (they become orphans) instead of cascading the delete.
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
   source TEXT NOT NULL,
   topic TEXT NOT NULL,
   original_text TEXT NOT NULL,
@@ -213,7 +219,7 @@ CREATE TABLE IF NOT EXISTS learning_materials (
 );
 CREATE TABLE IF NOT EXISTS question_translations (
   id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
   source TEXT NOT NULL,
   question TEXT NOT NULL,
   question_norm TEXT NOT NULL,
@@ -323,7 +329,7 @@ export type LocalStoreOptions = {
   dbPath?: string;
 };
 
-export class LocalStore {
+export class LocalStore implements LocalSyncStore {
   private db: Database.Database;
 
   constructor(options: LocalStoreOptions = {}) {
@@ -364,6 +370,7 @@ export class LocalStore {
     );`);
     this.db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS review_material_unique_idx ON review_items(material_id);`);
     this.widenTombstoneEntities();
+    this.unifySessionFkSemantics();
   }
 
   private widenTombstoneEntities() {
@@ -389,6 +396,71 @@ export class LocalStore {
       COMMIT;
       PRAGMA foreign_keys = ON;
     `);
+  }
+
+  /**
+   * Rebuild learning_materials and question_translations so session_id is
+   * nullable with ON DELETE SET NULL, matching the cloud (a deleted session
+   * keeps its materials alive as orphans). SQLite cannot alter a column's
+   * nullability or FK action in place, so both tables are rebuilt when a
+   * legacy NOT NULL / CASCADE layout is detected. Data is preserved verbatim.
+   */
+  private unifySessionFkSemantics() {
+    const sessionColumn = (table: string) =>
+      (this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string; notnull: number }>).find((column) => column.name === "session_id");
+    const materialColumn = sessionColumn("learning_materials");
+    const questionColumn = sessionColumn("question_translations");
+    if (!materialColumn?.notnull && !questionColumn?.notnull) return;
+    const violations = this.db.prepare("PRAGMA foreign_key_check").all();
+    if (violations.length > 0) throw new Error("FK unification migration aborted: existing foreign key violations");
+    this.db.exec(`
+      PRAGMA foreign_keys = OFF;
+      BEGIN;
+      CREATE TABLE learning_materials_new (
+        id TEXT PRIMARY KEY,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        source TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        explanation TEXT NOT NULL DEFAULT '',
+        useful_expressions TEXT NOT NULL DEFAULT '[]',
+        corrections TEXT NOT NULL DEFAULT '[]',
+        vocabulary TEXT NOT NULL DEFAULT '[]',
+        practice_prompts TEXT NOT NULL DEFAULT '[]',
+        tags TEXT NOT NULL DEFAULT '[]',
+        sync_status TEXT NOT NULL DEFAULT 'local_only',
+        synced_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO learning_materials_new (id, session_id, source, topic, original_text, explanation, useful_expressions, corrections, vocabulary, practice_prompts, tags, sync_status, synced_at, created_at, updated_at)
+      SELECT id, session_id, source, topic, original_text, explanation, useful_expressions, corrections, vocabulary, practice_prompts, tags, sync_status, synced_at, created_at, updated_at FROM learning_materials;
+      DROP TABLE learning_materials;
+      ALTER TABLE learning_materials_new RENAME TO learning_materials;
+      CREATE INDEX IF NOT EXISTS materials_created_idx ON learning_materials(created_at DESC);
+      CREATE TABLE question_translations_new (
+        id TEXT PRIMARY KEY,
+        session_id TEXT REFERENCES sessions(id) ON DELETE SET NULL,
+        source TEXT NOT NULL,
+        question TEXT NOT NULL,
+        question_norm TEXT NOT NULL,
+        translation TEXT NOT NULL,
+        topic TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'local_only',
+        synced_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO question_translations_new (id, session_id, source, question, question_norm, translation, topic, sync_status, synced_at, created_at, updated_at)
+      SELECT id, session_id, source, question, question_norm, translation, topic, sync_status, synced_at, created_at, updated_at FROM question_translations;
+      DROP TABLE question_translations;
+      ALTER TABLE question_translations_new RENAME TO question_translations;
+      CREATE INDEX IF NOT EXISTS qt_session_norm_idx ON question_translations(session_id, question_norm);
+      COMMIT;
+      PRAGMA foreign_keys = ON;
+    `);
+    const after = this.db.prepare("PRAGMA foreign_key_check").all();
+    if (after.length > 0) throw new Error("FK unification migration failed foreign_key_check");
   }
 
   close(): void {
@@ -924,7 +996,7 @@ export class LocalStore {
   }
 
   /** Local rows that still need to be pushed, including review state. */
-  unsynced() {
+  unsynced(): SyncBatchInput {
     const sessions = this.db.prepare("SELECT * FROM sessions WHERE sync_status = 'local_only' ORDER BY created_at").all() as SessionRow[];
     const materials = this.db.prepare("SELECT * FROM learning_materials WHERE sync_status = 'local_only' ORDER BY created_at").all() as MaterialRow[];
     const questions = this.db.prepare("SELECT * FROM question_translations WHERE sync_status = 'local_only' ORDER BY created_at").all() as QuestionRow[];
@@ -935,6 +1007,9 @@ export class LocalStore {
     const practiceRecords = this.db.prepare("SELECT * FROM practice_records WHERE sync_status = 'local_only' ORDER BY created_at").all() as PracticeRecordRow[];
     const tombstones = (this.db.prepare("SELECT * FROM sync_tombstones WHERE sync_status = 'local_only'").all() as Array<{ id: string; entity: string; deleted_at: string }>)
       .map((row) => ({ id: row.id, entity: row.entity, deletedAt: row.deleted_at }));
+    // The output is validated by the cloud on every push (syncToCloud parses
+    // the batch), so asserting the protocol shape here confirms a runtime fact
+    // in types rather than making an unchecked claim.
     return {
       sessions: sessions.map(toSession),
       materials: materials.map(toMaterial),
@@ -945,7 +1020,7 @@ export class LocalStore {
       reuseEvents: reuseEvents.map(toReuseEvent),
       practiceRecords: practiceRecords.map(toPracticeRecordRow),
       tombstones
-    };
+    } as SyncBatchInput;
   }
 
 
@@ -969,6 +1044,10 @@ export class LocalStore {
 
   lastPulledAt(): string | null {
     return this.getMeta("last_pulled_at") ?? null;
+  }
+
+  setLastPulledAt(iso: string) {
+    this.setMeta("last_pulled_at", iso);
   }
 
   stats() {
@@ -1013,7 +1092,7 @@ export class LocalStore {
   }
 
   /** Apply a cloud snapshot using last-write-wins by updated_at. */
-  applyRemoteBatch(batch: unknown) {
+  applyRemoteBatch(batch: unknown): SyncPushCounts {
     const parsed = syncBatchInputSchema.parse(batch);
     const now = new Date().toISOString();
     const upsertSession = this.db.prepare(`
@@ -1094,8 +1173,10 @@ export class LocalStore {
     const practiceQuestionExists = this.db.prepare("SELECT id FROM question_translations WHERE id = ?");
     const counts = { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 };
     // Parent ids that exist locally or arrive in this batch. The cloud keeps a
-    // material or question alive after its session is deleted (SET NULL); the
-    // local FK is NOT NULL, so such an orphan must be skipped, not written.
+    // material or question alive after its session is deleted (session_id SET
+    // NULL), and the local FK agrees, so a null session is a normal orphan to
+    // keep, not an error. A non-null session that is missing on both ends is
+    // still skipped rather than failing the whole batch.
     const knownSessionIds = new Set((this.db.prepare("SELECT id FROM sessions").all() as Array<{ id: string }>).map((row) => row.id));
     const knownMaterialIds = new Set((this.db.prepare("SELECT id FROM learning_materials").all() as Array<{ id: string }>).map((row) => row.id));
     for (const row of parsed.sessions) knownSessionIds.add(row.id);
@@ -1106,12 +1187,12 @@ export class LocalStore {
         counts.sessions++;
       }
       for (const row of parsed.materials) {
-        if (!knownSessionIds.has(row.sessionId)) continue;
+        if (row.sessionId !== null && !knownSessionIds.has(row.sessionId)) continue;
         upsertMaterial.run({ ...row, usefulExpressions: JSON.stringify(row.usefulExpressions), corrections: JSON.stringify(row.corrections), vocabulary: JSON.stringify(row.vocabulary), practicePrompts: JSON.stringify(row.practicePrompts), tags: JSON.stringify(row.tags), now });
         counts.materials++;
       }
       for (const row of parsed.questions) {
-        if (!knownSessionIds.has(row.sessionId)) continue;
+        if (row.sessionId !== null && !knownSessionIds.has(row.sessionId)) continue;
         upsertQuestion.run({ ...row, questionNorm: normalizeQuestion(row.question), now });
         counts.questions++;
       }
@@ -1188,17 +1269,7 @@ export class LocalStore {
    * version. Tombstones are stamped inside the same transaction instead of
    * racing it.
    */
-  markSynced(rows: {
-    sessions?: Array<{ id: string; updatedAt: string }>;
-    materials?: Array<{ id: string; updatedAt: string }>;
-    questions?: Array<{ id: string; updatedAt: string }>;
-    reviews?: Array<{ id: string; updatedAt: string }>;
-    intents?: Array<{ id: string; updatedAt: string }>;
-    expressions?: Array<{ id: string; updatedAt: string }>;
-    reuseEvents?: string[];
-    practiceRecords?: string[];
-    tombstones?: Array<{ id: string; entity: string }>;
-  }) {
+  markSynced(rows: MarkSyncedInput) {
     const now = new Date().toISOString();
     const versioned: Array<[string, Array<{ id: string; updatedAt: string }>]> = [
       ["sessions", rows.sessions ?? []],
@@ -1369,7 +1440,7 @@ function toPracticeRecordRow(row: PracticeRecordRow): PracticeRecord {
   };
 }
 
-function toQuestion(row: QuestionRow): QuestionTranslation {
+function toQuestion(row: QuestionRow): Omit<QuestionTranslation, "sessionId"> & { sessionId: string | null } {
   return {
     id: row.id,
     sessionId: row.session_id,

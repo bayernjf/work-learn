@@ -47,7 +47,7 @@ import {
   type PatScope,
   type PracticeResult
 } from "@work-learn/shared-schema";
-import type { WorkLearnContext } from "@work-learn/shared-schema";
+import type { WorkLearnContext, CloudSyncClient, SyncSnapshot, SyncStatus } from "@work-learn/shared-schema";
 
 type DbResult = { data: unknown; error?: { message: string } | null };
 
@@ -657,7 +657,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
 
 const normalizeMaterial = (row: Record<string, unknown>) => ({
   id: String(row.id),
-  sessionId: String(row.session_id),
+  sessionId: row.session_id ? String(row.session_id) : null,
   source: String(row.source),
   topic: String(row.topic),
   originalText: String(row.original_text),
@@ -673,7 +673,7 @@ const normalizeMaterial = (row: Record<string, unknown>) => ({
 
 const normalizeQuestionRow = (row: Record<string, unknown>) => ({
   id: String(row.id),
-  sessionId: String(row.session_id),
+  sessionId: row.session_id ? String(row.session_id) : null,
   source: String(row.source),
   question: String(row.question),
   translation: String(row.translation),
@@ -795,16 +795,14 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
  * the CLI drive it directly. The local store keeps stable uuids, so re-syncing
  * the same batch must not duplicate rows.
  */
-export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string) => {
+export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string): Promise<SyncSnapshot> => {
   const trimmed = since?.trim();
   let sessionsQuery = supabase.from("sessions").select("id,source,topic,created_at,updated_at").eq("user_id", userId);
-  // The cloud keeps materials and questions alive when their session is
-  // deleted (session_id SET NULL). The local store's FK for both is NOT NULL,
-  // so a pulled row with a null session would fail the whole batch. Skip the
-  // orphans at the source; a device whose session is gone has no parent to
-  // attach them to.
-  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId).not("session_id", "is", null);
-  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId).not("session_id", "is", null);
+  // Materials and questions whose session was deleted (session_id SET NULL)
+  // are synced as-is: both ends now agree that an orphan with a null session
+  // is a kept row, not an error.
+  let materialsQuery = supabase.from("learning_materials").select(materialColumns).eq("user_id", userId);
+  let questionsQuery = supabase.from("question_translations").select(questionTranslationColumns).eq("user_id", userId);
   let reviewsQuery = supabase.from("review_items").select(syncReviewColumns).eq("user_id", userId);
   let intentsQuery = supabase.from("intents").select(syncIntentColumns).eq("user_id", userId);
   let expressionsQuery = supabase.from("saved_expressions").select(syncSavedExpressionColumns).eq("user_id", userId);
@@ -832,6 +830,9 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     practiceRecordsQuery.order("created_at", { ascending: true }),
     tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
+  // The snapshot is parsed by the peer on every pull (applyRemoteBatch runs it
+  // through syncBatchInputSchema), so asserting the protocol shape here
+  // confirms a runtime fact in types rather than making an unchecked claim.
   return {
     sessions: (ok(sessions) as Record<string, unknown>[]).map(normalizeSyncSession),
     materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
@@ -847,7 +848,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
       deletedAt: String(row.deleted_at)
     })),
     serverCursor: new Date().toISOString()
-  };
+  } as SyncSnapshot;
 };
 
 const normalizeSyncSession = (row: Record<string, unknown>) => ({
@@ -1123,6 +1124,9 @@ export const importPortableData = async (supabase: SupabaseClient, userId: strin
   const parsed = portableImportSchema.parse(input);
   const providedSessions = new Map(parsed.sessions.map((session) => [session.id, session]));
   for (const item of [...parsed.materials, ...parsed.questionTranslations, ...parsed.reuseEvents.filter((event) => event.sessionId).map((event) => ({ sessionId: event.sessionId!, source: event.source ?? "manual", topic: null, createdAt: event.createdAt, updatedAt: event.createdAt }))]) {
+    // An orphan (null session) keeps no session reference; the cloud stores it
+    // with session_id NULL, so there is nothing to synthesize.
+    if (!item.sessionId) continue;
     if (providedSessions.has(item.sessionId)) continue;
     const createdAt = item.createdAt;
     providedSessions.set(item.sessionId, {
@@ -1200,7 +1204,7 @@ const classify = (item: { id: string; updatedAt: string }, existing: Map<string,
 };
 
 /** Return lightweight cloud corpus counts for the settings/doctor screens. */
-export const getSyncStatus = async (supabase: SupabaseClient, userId: string) => {
+export const getSyncStatus = async (supabase: SupabaseClient, userId: string): Promise<SyncStatus> => {
   const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "intents" | "saved_expressions" | "reuse_events" | "sync_tombstones") => {
     const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId);
     if (result.error) throw new Error(result.error.message);
@@ -1228,6 +1232,20 @@ export const getSyncStatus = async (supabase: SupabaseClient, userId: string) =>
     latestMaterialUpdatedAt: latest.data ? String(latest.data.updated_at) : null
   };
 };
+
+/**
+ * The cloud end of the sync protocol, structurally checked against the shared
+ * `CloudSyncClient` contract. The API routes and the CLI's HTTP adapter both
+ * wrap the same shape, so a protocol change is a compile error everywhere.
+ */
+export const createCloudSyncClient = (supabase: SupabaseClient, userId: string): CloudSyncClient => ({
+  pull: (since) => fetchSyncSnapshot(supabase, userId, since ?? undefined),
+  push: async (batch) => {
+    const { serverCursor: _cursor, ...counts } = await syncToCloud(supabase, userId, batch);
+    return counts;
+  },
+  status: () => getSyncStatus(supabase, userId)
+});
 
 /** Delete a cloud material and its review, recording tombstones first. */
 

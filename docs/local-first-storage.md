@@ -111,13 +111,16 @@
 
 ## 4. 同步设计（`learn sync`）
 
+**协议已单一化**（commit `f1d5728`）：`shared-schema/src/sync.ts` 定义完整同步协议——`LocalSyncStore`（本地端：`unsynced`/`applyRemoteBatch`/`markSynced`/`lastPulledAt`/`setLastPulledAt`）与 `CloudSyncClient`（云端端：`pull`/`push`/`status`），`LocalStore` 与 `direct.ts` 的 `createCloudSyncClient`、CLI 的 HTTP 客户端**都对着这两个接口做编译期结构检查**；拉→推→拉的编排收敛为共享的 `runSync(local, cloud)`（含精确版本 stamp，避免推送期间的新编辑被误标同步）。
+
 - **方向**：双向。本地和云端都以稳定 UUID 作为实体身份。
 - **增量**：本地保存 `last_pulled_at`；`GET /api/sync?since=` 只取更新时间更新的行。
 - **冲突策略**：last-write-wins，比较 `updated_at`；时间戳相等时以写入端为准。当前不做字段级合并或 CRDT。
-- **顺序**：`learn sync` = pull → push → pull，降低并发期间漏拉的概率。
+- **顺序**：`learn sync` = pull → push → pull（`runSync` 内实现），降低并发期间漏拉的概率。
 - **复习队列**：同步 `review_items`，按 `material_id` 归并，因此一个设备完成复习后其他设备能看到。
 - **同步范围**：sessions + learning_materials + question_translations + review_items。
 - **删除**：通过 tombstone 同步。本地删除材料/问题会写入墓碑，push 时传播；另一端按 `deleted_at >= updated_at` 删除。当前不做级联 session 删除入口，删除材料会连带其 review 墓碑。
+- **删会话保料**（commit `9ceaa6e`）：云端删会话后材料/问题保留为孤儿（`session_id` SET NULL）；本地已对齐该语义——`learning_materials`/`question_translations` 的 `session_id` 可空 + `ON DELETE SET NULL`（旧库自动迁移），pull 时孤儿被保留而非跳过。
 
 ---
 

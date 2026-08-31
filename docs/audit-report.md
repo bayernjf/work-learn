@@ -9,7 +9,7 @@
 
 **核心结论：承载产品核心承诺（追踪真实复用）的同步层是最薄弱的一环，存在会静默丢数据的缺陷；同时「测试不拦回归、文档勾选先于真实验证」让已交付功能的实际可靠度低于账面。**
 
-本报告发布后所有 P0/P1 数据安全类缺陷均已修复并附回归测试；OAuth 安全面三项纯代码修复全部完成。剩余项均为需要决策或 schema 迁移的工作（限流、FK 语义统一、双实现收敛）。
+本报告发布后所有 P0/P1 数据安全类缺陷均已修复并附回归测试；OAuth 安全面三项纯代码修复全部完成。双实现收敛与 FK 语义统一已收尾（见 §架构性结论）；剩余仅 `/register` 限流（安全面，需产品决策）。
 
 ## 严重等级
 
@@ -72,9 +72,9 @@
 
 ### P1-6 FK 级联两端分叉（pull 整批回滚）
 - **发现**：实测核对后真实分歧仅 `learning_materials.session_id` 与 `question_translations.session_id`（云端可空 SET NULL vs 本地 NOT NULL CASCADE）。云端删会话后父被 SET NULL，`normalizeMaterial` 把 `String(null)` 推成 `'null'` → 本地 FK 违反 → 整个 pull 事务回滚。
-- **修复**（`2cd088a`）：快照源头过滤 `session_id IS NULL` 的行；`applyRemoteBatch` 对父缺失的 material/question/review 逐行跳过（与 practice_records 既有孤儿跳过一致）。
-- **剩余**：两端删除语义统一（删会话保料 vs 级联删料）需本地表迁移重建 FK，另立专题；孤儿行静默丢弃不上报仍在。
-- **状态**：🟡 已止血（不再回滚），语义统一未做。
+- **止血**（`2cd088a`）：快照源头过滤 `session_id IS NULL` 的行；`applyRemoteBatch` 对父缺失的 material/question/review 逐行跳过。
+- **统一**（`9ceaa6e`）：两端对齐为云端语义 **SET NULL + 可空**。本地表迁移重建两表（保留数据），`applyRemoteBatch` 接受 null-session 孤儿并保留，同步 pull 不再源头过滤，`normalize*` 不再把 `String(null)` 推成 `'null'`。
+- **状态**：✅ 已统一，附带回归测试（旧库迁移 + 孤儿保留 + 云端不过滤）。
 
 ---
 
@@ -103,7 +103,8 @@
 
 ### P2-5 孤儿行静默丢弃
 - **发现**：`applyRemoteBatch` 父记录缺失时 `continue`，该行静默丢弃且不计入返回计数。
-- **状态**：⬜ 未处理，并入 FK 语义统一专题。
+- **修复**（`9ceaa6e`）：删会话导致的孤儿（null `sessionId`）现在**保留**而非丢弃；仅「非空父 id 在两端都缺失」仍跳过（防御性，理论不触发）。
+- **状态**：✅ 已修复（并入 FK 语义统一专题）。
 
 ---
 
@@ -111,7 +112,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟡 接口已收敛（`d3bfca7`：`WorkLearnContext` 下沉 shared-schema，三端 context 编译期结构互检）；剩余：同步面接口化 + 本地表迁移统一 FK 语义（重活，另立专题） |
+| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟢 已收尾：`d3bfca7`（`WorkLearnContext` 下沉，三端 context 结构互检）+ `f1d5728`（同步面协议化，`runSync` 共享编排）+ `9ceaa6e`（FK 语义统一为云端 SET NULL 语义，本地表迁移 + 孤儿保留） |
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
 | 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 状态抽 hooks 仍可做 |
@@ -135,5 +136,5 @@
 ## 结论与建议
 
 1. 数据安全类缺陷（P0 全部 + P1 同步全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：`/register` 限流（安全面，需决策）→ FK 语义统一（需本地表迁移）→ 双实现收尾（同步面接口化，架构）。
+2. 推进顺序建议：仅剩 `/register` 限流（安全面，需决策）。双实现收尾（接口 + 同步面 + FK 语义）已完成，见上表。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

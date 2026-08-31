@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
 import { normalizeQuestion } from "@work-learn/shared-schema";
 import { LocalStore } from "./index.js";
 
@@ -861,4 +862,125 @@ test("restoreBackup rejects a file without Work Learn tables", () => {
     writeFileSync(invalidPath, "not a sqlite database");
     assert.throws(() => LocalStore.restoreBackup(invalidPath, join(dir, "target.db")), /sqlite_master|SQLite|database/i);
   });
+});
+
+test("a pulled material or question orphaned by a deleted session is kept (null sessionId)", () => {
+  withStore((store) => {
+    const result = store.applyRemoteBatch({
+      sessions: [],
+      materials: [{
+        id: "kept-orphan-material",
+        sessionId: null,
+        source: "codex",
+        topic: "t",
+        originalText: "orphan kept",
+        explanation: "",
+        usefulExpressions: [], corrections: [], vocabulary: [], practicePrompts: [], tags: [],
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      questions: [{
+        id: "kept-orphan-question",
+        sessionId: null,
+        source: "codex",
+        question: "how do I say it?",
+        translation: "translation",
+        topic: null,
+        createdAt: "2026-08-30T12:00:00.000Z",
+        updatedAt: "2026-08-30T12:00:00.000Z"
+      }],
+      reviews: [],
+      tombstones: []
+    });
+
+    assert.equal(result.materials, 1, "a null-session orphan is kept, not skipped: both ends now use SET NULL");
+    assert.equal(result.questions, 1, "same for the orphan question");
+    const { materials, questions } = store.searchCorpus();
+    assert.equal(materials.length, 1);
+    assert.equal(materials[0]?.sessionId, null);
+    assert.equal(questions.length, 1);
+    assert.equal(questions[0]?.sessionId, null);
+  });
+});
+
+test("legacy NOT NULL session FKs migrate to nullable SET NULL with data intact", () => {
+  const dir = mkdtempSync(join(tmpdir(), "work-learn-"));
+  try {
+    const dbPath = join(dir, "legacy.db");
+    const legacy = new Database(dbPath);
+    legacy.pragma("foreign_keys = ON");
+    legacy.exec(`
+      CREATE TABLE sessions (
+        id TEXT PRIMARY KEY,
+        source TEXT NOT NULL,
+        topic TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        sync_status TEXT NOT NULL DEFAULT 'local_only',
+        synced_at TEXT
+      );
+      CREATE TABLE learning_materials (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        source TEXT NOT NULL,
+        topic TEXT NOT NULL,
+        original_text TEXT NOT NULL,
+        explanation TEXT NOT NULL DEFAULT '',
+        useful_expressions TEXT NOT NULL DEFAULT '[]',
+        corrections TEXT NOT NULL DEFAULT '[]',
+        vocabulary TEXT NOT NULL DEFAULT '[]',
+        practice_prompts TEXT NOT NULL DEFAULT '[]',
+        tags TEXT NOT NULL DEFAULT '[]',
+        sync_status TEXT NOT NULL DEFAULT 'local_only',
+        synced_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE question_translations (
+        id TEXT PRIMARY KEY,
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        source TEXT NOT NULL,
+        question TEXT NOT NULL,
+        question_norm TEXT NOT NULL,
+        translation TEXT NOT NULL,
+        topic TEXT,
+        sync_status TEXT NOT NULL DEFAULT 'local_only',
+        synced_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      INSERT INTO sessions (id, source, topic, created_at, updated_at) VALUES ('s1', 'codex', 'legacy', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+      INSERT INTO learning_materials (id, session_id, source, topic, original_text, created_at, updated_at) VALUES ('m1', 's1', 'codex', 'legacy', 'legacy text', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+      INSERT INTO question_translations (id, session_id, source, question, question_norm, translation, created_at, updated_at) VALUES ('q1', 's1', 'codex', 'Q', 'q', 'T', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+    `);
+    legacy.close();
+
+    const store = new LocalStore({ dbPath });
+    store.close();
+
+    const db = new Database(dbPath);
+    try {
+      const materialCol = (db.prepare("PRAGMA table_info(learning_materials)").all() as Array<{ name: string; notnull: number }>).find((column) => column.name === "session_id");
+      assert.equal(materialCol?.notnull, 0, "session_id must become nullable");
+      const materialFk = db.prepare("PRAGMA foreign_key_list(learning_materials)").all() as Array<{ from: string; on_delete: string }>;
+      assert.equal(materialFk.find((fk) => fk.from === "session_id")?.on_delete, "SET NULL");
+      const questionFk = db.prepare("PRAGMA foreign_key_list(question_translations)").all() as Array<{ from: string; on_delete: string }>;
+      assert.equal(questionFk.find((fk) => fk.from === "session_id")?.on_delete, "SET NULL");
+
+      const rows = db.prepare("SELECT id, session_id FROM learning_materials").all() as Array<{ id: string; session_id: string | null }>;
+      assert.deepEqual(rows, [{ id: "m1", session_id: "s1" }], "the rebuild must preserve existing rows");
+
+      // The rebuilt FK really is SET NULL: deleting the session keeps the child.
+      db.pragma("foreign_keys = ON");
+      db.exec("DELETE FROM sessions WHERE id = 's1'");
+      const kept = db.prepare("SELECT session_id FROM learning_materials WHERE id = 'm1'").get() as { session_id: string | null };
+      assert.equal(kept.session_id, null, "deleting the session must null the child, not cascade");
+      const keptQuestion = db.prepare("SELECT session_id FROM question_translations WHERE id = 'q1'").get() as { session_id: string | null };
+      assert.equal(keptQuestion.session_id, null, "same for question_translations");
+    } finally {
+      db.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
