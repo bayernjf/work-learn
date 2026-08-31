@@ -57,7 +57,7 @@ Remote MCP 支持三种 Bearer token：
 
 - Web 端提供一个“MCP 连接”页面，用户可生成、查看、撤销一个长期 token。
 - token 在服务端只存哈希（或直接签发 Supabase JWT 并设置较长有效期，配合撤销表）。
-- Agent 连接 `https://work-learn-api.vercel.app/api/mcp` 时在 `Authorization: Bearer <token>` 头携带。
+- Agent 连接 `https://work-learn.pages.dev/api/mcp`（Cloudflare Pages 代理入口，中国大陆可直连；海外也可用直连后端 `https://work-learn-api.vercel.app/api/mcp`）时在 `Authorization: Bearer <token>` 头携带。
 - Hono 中间件校验 token，解析出 `user_id`，再用 service-role context 调工具；所有查询都显式限定 `user_id`。
 
 ### OAuth 2.1
@@ -69,7 +69,7 @@ Remote MCP 支持三种 Bearer token：
   - `GET /api/oauth/authorize`
   - `POST /api/oauth/decision`
   - `POST /api/oauth/token`
-- Agent 连接 `https://work-learn-api.vercel.app/api/mcp` 后动态注册 client，浏览器跳到 Work Learn consent 页；用户登录并批准后回调 agent。
+- Agent 连接 `https://work-learn.pages.dev/api/mcp` 后动态注册 client，浏览器跳到 Work Learn consent 页；用户登录并批准后回调 agent。
 - authorization code 必须携带 PKCE S256 `code_verifier`；access token 1 小时过期，refresh token 30 天过期并在刷新时轮转。
 - access token 是 opaque 随机串（`wloat_` 前缀），只以 SHA-256 哈希存进 `oauth_tokens`，校验走一次数据库查询——和 PAT 同一条路径。因此没有 JWKS endpoint：没有 JWT 需要客户端本地验签，吊销也能立即生效。
 - `/authorize` 的错误按 RFC 6749 4.1.2.1 分两类：`client_id` 或 `redirect_uri` 本身缺失/未注册时返回 JSON 400（此时 `redirect_uri` 未经验证，跳转就是开放重定向）；其余错误（`response_type` 非 `code`、缺 `code_challenge`、`code_challenge_method` 非 S256）302 跳回 `redirect_uri`，带 `error`、`error_description` 和原始 `state`。

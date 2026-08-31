@@ -88,8 +88,8 @@
 ### P2-2 `updated_at` 触发器缺失
 - **发现**：`012` 只为 4 张初始表建触发器；`intents`/`saved_expressions`/`user_settings` 无触发器，普通写入时间戳留旧，LWW 会用旧盖新。
 - **修复**（`e9d1bb1`）：迁移 `018_updated_at_triggers.sql` 补齐 3 表；`practice_records`/`reuse_events` 为追加写、无该列，刻意不动。
-- **执行**：**待用户在云端 Supabase 执行迁移 `018`**。
-- **状态**：✅ 代码已修复，⏳ 待执行迁移。
+- **执行**：2026-08-31 用户已在云端 Supabase 执行迁移 `018`（与 `019` 一并）。
+- **状态**：✅ 已修复并已执行。
 
 ### P2-3 过滤注入
 - **发现**：`searchQuestionTranslations` 把搜索词裸插进 PostgREST `.or()`，`,`/`(`/`)` 可追加条件（不能跨用户，可改写命中语义）。
@@ -131,7 +131,7 @@
 - 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 51/51（含 6 条注册限流回归 + 3 条 `/api/config` 回归）；8 包 `tsc --noEmit` 全绿。
 - `local-store` 测试依赖 better-sqlite3 原生模块，本机已用 `node-gyp` 编译成功，不再以 CI 为准。
 - CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**（本批改动已提交未推送）。
-- **待办**：push dev 触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018` 与 `019`；Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。
+- **待办**：Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。`018`/`019` 迁移已由用户于 2026-08-31 在云端执行。
 
 ## 结论与建议
 

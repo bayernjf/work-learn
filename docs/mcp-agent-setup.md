@@ -9,8 +9,11 @@
 端点（Streamable HTTP，无状态）：
 
 ```text
-https://work-learn-api.vercel.app/api/mcp
+https://work-learn.pages.dev/api/mcp
 ```
+
+> 推荐走 Cloudflare Pages 代理入口（中国大陆网络可直连，实测鉴权正常）。直连后端
+> `https://work-learn-api.vercel.app/api/mcp` 在部分网络（中国大陆）不可达；海外/无墙环境两者皆可。
 
 在支持远程 MCP 的 Agent（Claude Desktop、Cursor 等）里添加该 URL，并在请求头携带：
 
@@ -147,7 +150,7 @@ Claude Desktop 是两个产品、两个配置文件，要分别指定。
       "command": "/path/to/work-learn/packages/mcp-server/node_modules/.bin/tsx",
       "args": ["/path/to/work-learn/packages/mcp-server/src/server.ts"],
       "env": {
-        "WORK_LEARN_API_URL": "https://work-learn-api.vercel.app",
+        "WORK_LEARN_API_URL": "https://work-learn.pages.dev",
         "WORK_LEARN_ACCESS_TOKEN": "<your Work Learn personal access token>"
       }
     }

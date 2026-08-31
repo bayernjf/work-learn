@@ -215,9 +215,10 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 ## 当前待执行项
 
-- 将 `dev` 合入 `main`，由 GitHub Actions 部署包含复用追踪的 API/Web（push dev 触发 CI 全量验证；`d674991` 修过的 review tombstone 断言尚未重跑）；
-- 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引），代码已提交未推送；
-- Cloudflare Pages 控制台配置 `API_ORIGIN = https://work-learn-api.vercel.app`（`_worker.js` 的 env 注入，配置前 fallback 生效）；
+- [x] 将 `dev` 合入 `main`（PR #50，2026-08-31，`cf003ee`），CI 与 Deploy API/Web 工作流均 success；
+- [x] 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）——2026-08-31 用户已在 Supabase 执行；
+- [x] 确认 API 生产可达（2026-08-31）：部署健康（Deploy API success；CF Pages 代理 `/api/health` 返回 `{"ok":true}`、`/api/mcp` 正确响应 401）；但 `*.vercel.app` 泛域名在当前网络被阻断（TCP 层不可达、DNS 正常、不存在的随机 vercel.app 域名同样超时）。**产品不受影响**：Web 前端页面在 CF、`/api/*` 由 Pages worker 代理到 Vercel、数据直连 Supabase（均可达）。⚠️ 仅 `setup`/CLI 的默认 API URL（`https://work-learn-api.vercel.app`）在国内直连不可达，需用 `--api-url https://work-learn.pages.dev` 或 `WORK_LEARN_API_URL` 走 CF 代理（实测 `https://work-learn.pages.dev/api/mcp` 鉴权正常）。后续建议：把对外文档/教程的 API 入口统一为 `https://work-learn.pages.dev`，并评估把 setup/CLI 默认 URL 改为 pages.dev。
+- [x] Cloudflare Pages 配置 `API_ORIGIN = https://work-learn-api.vercel.app`（2026-08-31 经 `wrangler pages secret put` 写入 production，value encrypted；`_worker.js` 读取 `env.API_ORIGIN`，代理链路验证 `/api/health` 200）；
 - 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入；
 - 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达；

@@ -22,7 +22,9 @@
 - Supabase 环境变量（`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）配置在
   Vercel 项目环境变量（production / preview / development），不放入 workflow。
 - Remote MCP OAuth 还需要：
-  - `WORK_LEARN_PUBLIC_API_URL`：生产 API origin，例如 `https://work-learn-api.vercel.app`
+  - `WORK_LEARN_PUBLIC_API_URL`：面向用户的 API 入口。国内网络直连 `vercel.app` 不可达（见下），
+    建议配置为 `https://work-learn.pages.dev`（Web 端展示给 Agent 的远程 MCP 地址，走 Pages 代理）。
+    未配置时回退到请求 origin。
   - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn.pages.dev`
 
 ## Web（Cloudflare Pages）
@@ -36,9 +38,23 @@
   `https://work-learn-api.vercel.app`。浏览器只访问 `work-learn.pages.dev`，不直连 `vercel.app`，
   可避免部分网络环境下 Vercel 域名不可达导致登录页白屏。
 - `_worker.js` 的代理目标读取 Pages 运行时环境变量 `API_ORIGIN`（`env.API_ORIGIN`），未配置时
-  回退到内置默认值 `https://work-learn-api.vercel.app`。**部署侧待办**：在 Pages 控制台
-  `work-learn` → Settings → Environment variables 新增 `API_ORIGIN = https://work-learn-api.vercel.app`，
-  生效后即可移除 fallback。
+  回退到内置默认值 `https://work-learn-api.vercel.app`。**已配置**：2026-08-31 经
+  `wrangler pages secret put API_ORIGIN` 写入 production（value encrypted），`/api/health` 代理 200。
+
+### 网络可达性结论（2026-08-31 实测）
+
+- `*.vercel.app` 泛域名在当前网络（中国大陆）被阻断：DNS 正常、TCP 层不可达，连不存在的随机
+  `vercel.app` 域名同样超时——是域名级阻断，与部署本身无关。
+- **产品不受影响**：Web 页面在 Cloudflare（可达），`/api/*` 由 Pages worker 代理到 Vercel
+  （Cloudflare 边缘到 Vercel 通），数据直连 Supabase（可达）。
+- **受影响面**：`setup` 与 `learn` CLI 的默认 API URL（`https://work-learn-api.vercel.app`）在国内
+  直连不可达。绕过方式：统一走 `https://work-learn.pages.dev`（CF 代理入口，实测 `/api/mcp` 鉴权正常）：
+  ```bash
+  learn sync --api-url https://work-learn.pages.dev
+  # 或环境变量
+  export WORK_LEARN_API_URL=https://work-learn.pages.dev
+  ```
+- 对外文档/教程的远程 MCP 地址统一推荐 `https://work-learn.pages.dev/api/mcp`。
 - `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 仍可作为本地/CI 构建覆盖项，但生产主要依赖 API
   返回的公开配置；`SUPABASE_URL`、`SUPABASE_ANON_KEY` 必须在 Vercel 配置正确。
 
