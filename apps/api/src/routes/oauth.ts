@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
+import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, RegistrationRateLimitedError, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 
 /**
@@ -50,14 +50,25 @@ oauthRoute.post("/register", async (c) => {
   const name = validateClientName(body.client_name);
   if (!name.ok) return c.json({ error: name.error }, 400);
 
-  const client = await registerClient({
-    redirect_uris: check.uris,
-    client_name: name.value,
-    client_uri: typeof body.client_uri === "string" ? body.client_uri : undefined,
-    logo_uri: typeof body.logo_uri === "string" ? body.logo_uri : undefined,
-    scope: typeof body.scope === "string" ? body.scope : undefined,
-    token_endpoint_auth_method: "none"
-  });
+  let client: Awaited<ReturnType<typeof registerClient>>;
+  try {
+    client = await registerClient({
+      redirect_uris: check.uris,
+      client_name: name.value,
+      client_uri: typeof body.client_uri === "string" ? body.client_uri : undefined,
+      logo_uri: typeof body.logo_uri === "string" ? body.logo_uri : undefined,
+      scope: typeof body.scope === "string" ? body.scope : undefined,
+      token_endpoint_auth_method: "none"
+    });
+  } catch (error) {
+    // Sliding-window budget exhausted (RFC 7591 §4.2: a server MAY rate-limit
+    // registrations). Tell the client when it may retry instead of a generic 500.
+    if (error instanceof RegistrationRateLimitedError) {
+      c.header("Retry-After", String(error.retryAfterSeconds));
+      return c.json({ error: "too_many_registrations" }, 429);
+    }
+    throw error;
+  }
 
   return c.json({
     client_id: client.client_id,
