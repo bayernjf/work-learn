@@ -4,7 +4,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalStore, createLocalContext } from "@work-learn/local-store";
-import { createMcpEndpoint, createHttpContext } from "./index.js";
+import { createHttpContext } from "./http-client.js";
 import { readAccessToken } from "./token.js";
 import { registerTools } from "./tools.js";
 
@@ -30,8 +30,7 @@ const server = new McpServer({ name: "work-learn", version: "0.1.0" });
 if (hasToken) {
   const apiUrl = process.env.WORK_LEARN_API_URL ?? "http://localhost:3000";
   const accessToken = readAccessToken(process.env);
-  const endpoint = createMcpEndpoint({ apiUrl, accessToken });
-  registerTools(server, createHttpContext(endpoint.config));
+  registerTools(server, createHttpContext({ apiUrl, accessToken }));
 } else {
   const store = new LocalStore();
   registerTools(server, createLocalContext(store));

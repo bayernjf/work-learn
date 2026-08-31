@@ -55,7 +55,8 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 下一步：
 
-- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）。
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
+- 发布管道：push `dev` 触发 CI 全量验证 → PR 合入 `main` 自动部署 → 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）→ Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。
 
 测试：相关包单元测试保持全绿（详见各包 `src/*.test.ts`）。
 

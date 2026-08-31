@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
+    ".": "./src/http-client.ts",
     "./http": "./src/http.ts",
     "./direct": "./src/direct.ts",
     "./tools": "./src/tools.ts",

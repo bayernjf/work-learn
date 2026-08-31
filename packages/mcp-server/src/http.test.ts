@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { searchCorpus, suggestReuse } from "./index.js";
+import { searchCorpus, suggestReuse } from "./http-client.js";
 
 /**
  * The removed refresh flow parsed the access token as a JWT to decide whether it
