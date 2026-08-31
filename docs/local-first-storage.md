@@ -70,7 +70,7 @@
 
 ### 3.1 新增 `packages/local-store`
 
-- SQLite 封装，暴露与 `WorkLearnContext` **同构**的 `createLocalContext`
+- SQLite 封装，暴露实现共享 `WorkLearnContext` 接口的 `createLocalContext`
 - 方法：`createSession` / `saveMaterial` / `saveQuestionTranslation` / `searchCorpus` / `getReviewItems` / `markMastered`
 - 复用 `shared-schema` 的脱敏 `redactSecrets`
 - **入库精确去重**：`saveQuestionTranslation` 落库前做归一化查重（见 §7）
@@ -78,7 +78,8 @@
 
 ### 3.2 `mcp-server`
 
-- `tools.ts`：`WorkLearnContext` 接口**不变**（已够）
+- `WorkLearnContext` 已下沉到 `shared-schema/src/context.ts`（commit `d3bfca7`）：云端 `createDirectContext`、HTTP stdio `createHttpContext`、本地 `createLocalContext` 三者都对着这**同一个接口**做编译期结构检查，任一端增删方法而不同步改其他端会直接编译失败
+- `tools.ts` 从 `shared-schema` 再导出该接口（兼容旧引用）；`registerTools` 注册逻辑唯一、三端共用
 - `server.ts`：stdio 进程改用 `createLocalContext`，**移除 token 依赖**（未设 token 时走本地模式）
 
 ### 3.3 `apps/cli`

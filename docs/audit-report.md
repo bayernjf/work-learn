@@ -111,7 +111,7 @@
 
 | 项 | 状态 |
 |----|------|
-| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | ⬜ 未开始（重活，另立专题） |
+| 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟡 接口已收敛（`d3bfca7`：`WorkLearnContext` 下沉 shared-schema，三端 context 编译期结构互检）；剩余：同步面接口化 + 本地表迁移统一 FK 语义（重活，另立专题） |
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
 | 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 状态抽 hooks 仍可做 |
@@ -135,5 +135,5 @@
 ## 结论与建议
 
 1. 数据安全类缺陷（P0 全部 + P1 同步全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：`/register` 限流（安全面，需决策）→ FK 语义统一（需本地表迁移）→ 双实现收敛（架构，重活）。
+2. 推进顺序建议：`/register` 限流（安全面，需决策）→ FK 语义统一（需本地表迁移）→ 双实现收尾（同步面接口化，架构）。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

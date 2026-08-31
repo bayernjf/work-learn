@@ -315,7 +315,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - [x] 把验证搬进 CI：`ci.yml` 在 typecheck 前加 `pnpm test`（详见下方「测试此前从未真正运行」）。
   - [x] 补 `scheduleNextReview`（commit `4b396d7`）、`markSynced` 往返（`53fd03a`）、`apps/api` 进程内路由测试（`2cb04d0`）；
   - [x] CI 加一条「测试数为 0 即失败」的护栏（commit `d1aa84c`，详见下方「零测试护栏」）。
-- [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、~~拆 `main.tsx`~~（叶子组件已按域拆分，commit `6cc1ef0`，`App` 的状态/处理器抽 hooks 仍可做）、收敛双实现。
+- [ ] 清债（可最后）：~~删两个空壳包~~（已删，commit `0b59fa3`/`40b862a`）、~~删死文件~~（同上）、~~拆 `main.tsx`~~（叶子组件已按域拆分，commit `6cc1ef0`，`App` 的状态/处理器抽 hooks 仍可做）、🟡 收敛双实现（接口锚点已落，commit `d3bfca7`；同步面接口化 + FK 语义统一另立专题）。
 
 ## 测试此前从未真正运行（2026-08-30）
 
@@ -533,7 +533,7 @@ pnpm --filter @work-learn/shared-schema test
 
 **验证**：web `tsc --noEmit` 干净。**本机 vite build 起不来是既有环境问题**：`core.autocrlf=true` 使 `scripts/install-skill.sh` 检出为 CRLF，而 `vite.config.ts` 的 `AGENT_DIRS=\(\n` 正则只认 LF——与本次改动无关，CI（ubuntu/LF）不受影响。
 
-**清债只剩双实现收敛**（`direct.ts` vs `local-store`）——重活，另立专题。
+**双实现收敛进度**：接口锚点已落（`d3bfca7`，`WorkLearnContext` 下沉 shared-schema、三端 context 编译期互检）；剩余「同步面接口化」与「本地表迁移统一 FK 语义」仍属重活，另立专题。**环境注意**：本机 `node_modules/@work-learn/*` 是静态副本（junction 不可用），改 workspace 包源码后需重刷副本（`node -e "..."` 循环 `fs.cpSync('packages/<pkg>', 各消费方 node_modules/@work-learn/<pkg>)`），否则消费者 tsc 会看到旧导出。
 
 ## 2026-08-30 续八：FK 孤儿跳过（commit `2cd088a`）
 
