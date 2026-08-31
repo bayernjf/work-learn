@@ -53,7 +53,11 @@ import {
   type SuggestReuseInput,
   type UpdateReuseNudgeSettings,
   type SaveQuestionTranslationInput,
-  type WorkLearnContext
+  type WorkLearnContext,
+  type LocalSyncStore,
+  type SyncBatchInput,
+  type SyncPushCounts,
+  type MarkSyncedInput
 } from "@work-learn/shared-schema";
 
 /**
@@ -323,7 +327,7 @@ export type LocalStoreOptions = {
   dbPath?: string;
 };
 
-export class LocalStore {
+export class LocalStore implements LocalSyncStore {
   private db: Database.Database;
 
   constructor(options: LocalStoreOptions = {}) {
@@ -924,7 +928,7 @@ export class LocalStore {
   }
 
   /** Local rows that still need to be pushed, including review state. */
-  unsynced() {
+  unsynced(): SyncBatchInput {
     const sessions = this.db.prepare("SELECT * FROM sessions WHERE sync_status = 'local_only' ORDER BY created_at").all() as SessionRow[];
     const materials = this.db.prepare("SELECT * FROM learning_materials WHERE sync_status = 'local_only' ORDER BY created_at").all() as MaterialRow[];
     const questions = this.db.prepare("SELECT * FROM question_translations WHERE sync_status = 'local_only' ORDER BY created_at").all() as QuestionRow[];
@@ -935,6 +939,9 @@ export class LocalStore {
     const practiceRecords = this.db.prepare("SELECT * FROM practice_records WHERE sync_status = 'local_only' ORDER BY created_at").all() as PracticeRecordRow[];
     const tombstones = (this.db.prepare("SELECT * FROM sync_tombstones WHERE sync_status = 'local_only'").all() as Array<{ id: string; entity: string; deleted_at: string }>)
       .map((row) => ({ id: row.id, entity: row.entity, deletedAt: row.deleted_at }));
+    // The output is validated by the cloud on every push (syncToCloud parses
+    // the batch), so asserting the protocol shape here confirms a runtime fact
+    // in types rather than making an unchecked claim.
     return {
       sessions: sessions.map(toSession),
       materials: materials.map(toMaterial),
@@ -945,7 +952,7 @@ export class LocalStore {
       reuseEvents: reuseEvents.map(toReuseEvent),
       practiceRecords: practiceRecords.map(toPracticeRecordRow),
       tombstones
-    };
+    } as SyncBatchInput;
   }
 
 
@@ -969,6 +976,10 @@ export class LocalStore {
 
   lastPulledAt(): string | null {
     return this.getMeta("last_pulled_at") ?? null;
+  }
+
+  setLastPulledAt(iso: string) {
+    this.setMeta("last_pulled_at", iso);
   }
 
   stats() {
@@ -1013,7 +1024,7 @@ export class LocalStore {
   }
 
   /** Apply a cloud snapshot using last-write-wins by updated_at. */
-  applyRemoteBatch(batch: unknown) {
+  applyRemoteBatch(batch: unknown): SyncPushCounts {
     const parsed = syncBatchInputSchema.parse(batch);
     const now = new Date().toISOString();
     const upsertSession = this.db.prepare(`
@@ -1188,17 +1199,7 @@ export class LocalStore {
    * version. Tombstones are stamped inside the same transaction instead of
    * racing it.
    */
-  markSynced(rows: {
-    sessions?: Array<{ id: string; updatedAt: string }>;
-    materials?: Array<{ id: string; updatedAt: string }>;
-    questions?: Array<{ id: string; updatedAt: string }>;
-    reviews?: Array<{ id: string; updatedAt: string }>;
-    intents?: Array<{ id: string; updatedAt: string }>;
-    expressions?: Array<{ id: string; updatedAt: string }>;
-    reuseEvents?: string[];
-    practiceRecords?: string[];
-    tombstones?: Array<{ id: string; entity: string }>;
-  }) {
+  markSynced(rows: MarkSyncedInput) {
     const now = new Date().toISOString();
     const versioned: Array<[string, Array<{ id: string; updatedAt: string }>]> = [
       ["sessions", rows.sessions ?? []],

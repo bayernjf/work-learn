@@ -3,7 +3,8 @@ import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
-import { redactSecrets } from "@work-learn/shared-schema";
+import { redactSecrets, runSync } from "@work-learn/shared-schema";
+import type { CloudSyncClient, SyncPushCounts, SyncSnapshot, SyncStatus } from "@work-learn/shared-schema";
 import { DEFAULT_BACKUP_DIR, DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/local-store";
 
 const execFileAsync = promisify(execFile);
@@ -253,58 +254,47 @@ function resolveToken(): string {
   throw new Error("Set WORK_LEARN_ACCESS_TOKEN (or WORK_LEARN_ACCESS_TOKEN_FILE) to sync to your account.");
 }
 
-async function pullChanges(apiUrl: string, token: string, store: LocalStore) {
-  const since = store.lastPulledAt();
-  const url = new URL(`${apiUrl}/api/sync`);
-  if (since) url.searchParams.set("since", since);
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
-    throw new Error(body.details ?? body.error ?? `Pull failed with ${response.status}`);
-  }
-  const result = (await response.json()) as { data: { serverCursor: string } };
-  const applied = store.applyRemoteBatch(result.data);
-  store.setMeta("last_pulled_at", result.data.serverCursor);
-  return applied;
-}
-
-async function pushChanges(apiUrl: string, token: string, store: LocalStore) {
-  const batch = store.unsynced();
-  const total =
-    batch.sessions.length + batch.materials.length + batch.questions.length + batch.reviews.length +
-    batch.intents.length + batch.expressions.length + batch.reuseEvents.length + batch.practiceRecords.length +
-    batch.tombstones.length;
-  if (total === 0) return { pushed: { sessions: 0, materials: 0, questions: 0, reviews: 0, intents: 0, expressions: 0, reuseEvents: 0, practiceRecords: 0, tombstones: 0 } };
-
-  const response = await fetch(`${apiUrl}/api/sync`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(batch)
-  });
-  if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
-    throw new Error(body.details ?? body.error ?? `Push failed with ${response.status}`);
-  }
-
-  // Each mutable row is stamped with the exact version that was pushed: a row
-  // edited while the request was in flight keeps its unsynced status and is
-  // picked up by the next sync instead of losing the newer edit.
-  store.markSynced({
-    sessions: batch.sessions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    materials: batch.materials.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    // The read-model type marks updatedAt optional, but the column is NOT NULL
-    // since migration 012, so the version is always present in practice.
-    questions: batch.questions.map((row) => ({ id: row.id, updatedAt: row.updatedAt as string })),
-    reviews: batch.reviews.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    intents: batch.intents.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    expressions: batch.expressions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    reuseEvents: batch.reuseEvents.map((row) => row.id),
-    practiceRecords: batch.practiceRecords.map((row) => row.id),
-    tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
-  });
-
-  const result = (await response.json()) as { data: { sessions: number; materials: number; questions: number; reviews: number; intents: number; expressions: number; reuseEvents: number; practiceRecords: number; tombstones: number } };
-  return { pushed: result.data };
+/**
+ * The cloud end of the sync protocol over HTTP, structurally checked against
+ * the shared `CloudSyncClient` contract (the same contract the API implements
+ * against Supabase). The transport differs, the protocol does not.
+ */
+function createHttpSyncClient(apiUrl: string, token: string): CloudSyncClient {
+  return {
+    async pull(since) {
+      const url = new URL(`${apiUrl}/api/sync`);
+      if (since) url.searchParams.set("since", since);
+      const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+        throw new Error(body.details ?? body.error ?? `Pull failed with ${response.status}`);
+      }
+      const result = (await response.json()) as { data: SyncSnapshot };
+      return result.data;
+    },
+    async push(batch) {
+      const response = await fetch(`${apiUrl}/api/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(batch)
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+        throw new Error(body.details ?? body.error ?? `Push failed with ${response.status}`);
+      }
+      const result = (await response.json()) as { data: SyncPushCounts };
+      return result.data;
+    },
+    async status() {
+      const response = await fetch(`${apiUrl}/api/sync/status`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as { error?: string; details?: string };
+        throw new Error(body.details ?? body.error ?? `Sync status failed with ${response.status}`);
+      }
+      const result = (await response.json()) as { data: SyncStatus };
+      return result.data;
+    }
+  };
 }
 
 async function sync(args: string[]) {
@@ -313,11 +303,9 @@ async function sync(args: string[]) {
 
   const store = openStore();
   try {
-    const pulledBefore = await pullChanges(apiUrl, token, store);
-    const pushed = await pushChanges(apiUrl, token, store);
-    const pulledAfter = await pullChanges(apiUrl, token, store);
+    const report = await runSync(store, createHttpSyncClient(apiUrl, token));
     const stats = store.stats();
-    console.log(JSON.stringify({ pulledBefore, ...pushed, pulledAfter, local: stats }, null, 2));
+    console.log(JSON.stringify({ ...report, local: stats }, null, 2));
   } finally {
     store.close();
   }

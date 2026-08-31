@@ -47,7 +47,7 @@ import {
   type PatScope,
   type PracticeResult
 } from "@work-learn/shared-schema";
-import type { WorkLearnContext } from "@work-learn/shared-schema";
+import type { WorkLearnContext, CloudSyncClient, SyncSnapshot, SyncStatus } from "@work-learn/shared-schema";
 
 type DbResult = { data: unknown; error?: { message: string } | null };
 
@@ -795,7 +795,7 @@ export const searchQuestionTranslations = async (supabase: SupabaseClient, userI
  * the CLI drive it directly. The local store keeps stable uuids, so re-syncing
  * the same batch must not duplicate rows.
  */
-export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string) => {
+export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string, since?: string): Promise<SyncSnapshot> => {
   const trimmed = since?.trim();
   let sessionsQuery = supabase.from("sessions").select("id,source,topic,created_at,updated_at").eq("user_id", userId);
   // The cloud keeps materials and questions alive when their session is
@@ -832,6 +832,9 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
     practiceRecordsQuery.order("created_at", { ascending: true }),
     tombstonesQuery.order("deleted_at", { ascending: true })
   ]);
+  // The snapshot is parsed by the peer on every pull (applyRemoteBatch runs it
+  // through syncBatchInputSchema), so asserting the protocol shape here
+  // confirms a runtime fact in types rather than making an unchecked claim.
   return {
     sessions: (ok(sessions) as Record<string, unknown>[]).map(normalizeSyncSession),
     materials: (ok(materials) as Record<string, unknown>[]).map(normalizeMaterial),
@@ -847,7 +850,7 @@ export const fetchSyncSnapshot = async (supabase: SupabaseClient, userId: string
       deletedAt: String(row.deleted_at)
     })),
     serverCursor: new Date().toISOString()
-  };
+  } as SyncSnapshot;
 };
 
 const normalizeSyncSession = (row: Record<string, unknown>) => ({
@@ -1200,7 +1203,7 @@ const classify = (item: { id: string; updatedAt: string }, existing: Map<string,
 };
 
 /** Return lightweight cloud corpus counts for the settings/doctor screens. */
-export const getSyncStatus = async (supabase: SupabaseClient, userId: string) => {
+export const getSyncStatus = async (supabase: SupabaseClient, userId: string): Promise<SyncStatus> => {
   const count = async (table: "sessions" | "learning_materials" | "question_translations" | "review_items" | "intents" | "saved_expressions" | "reuse_events" | "sync_tombstones") => {
     const result = await supabase.from(table).select("id", { count: "exact", head: true }).eq("user_id", userId);
     if (result.error) throw new Error(result.error.message);
@@ -1228,6 +1231,20 @@ export const getSyncStatus = async (supabase: SupabaseClient, userId: string) =>
     latestMaterialUpdatedAt: latest.data ? String(latest.data.updated_at) : null
   };
 };
+
+/**
+ * The cloud end of the sync protocol, structurally checked against the shared
+ * `CloudSyncClient` contract. The API routes and the CLI's HTTP adapter both
+ * wrap the same shape, so a protocol change is a compile error everywhere.
+ */
+export const createCloudSyncClient = (supabase: SupabaseClient, userId: string): CloudSyncClient => ({
+  pull: (since) => fetchSyncSnapshot(supabase, userId, since ?? undefined),
+  push: async (batch) => {
+    const { serverCursor: _cursor, ...counts } = await syncToCloud(supabase, userId, batch);
+    return counts;
+  },
+  status: () => getSyncStatus(supabase, userId)
+});
 
 /** Delete a cloud material and its review, recording tombstones first. */
 
