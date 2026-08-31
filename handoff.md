@@ -215,8 +215,8 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 ## 当前待执行项
 
-- 将 `dev` 合入 `main`，由 GitHub Actions 部署包含复用追踪的 API/Web（push dev 触发 CI 全量验证；`d674991` 修过的 review tombstone 断言尚未重跑）；
-- 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引），代码已提交未推送；
+- [x] 将 `dev` 合入 `main`（PR #50，2026-08-31，`cf003ee`），CI 与 Deploy API/Web 工作流均 success；
+- [x] 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）——2026-08-31 用户已在 Supabase 执行；
 - Cloudflare Pages 控制台配置 `API_ORIGIN = https://work-learn-api.vercel.app`（`_worker.js` 的 env 注入，配置前 fallback 生效）；
 - 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入；
