@@ -86,6 +86,34 @@ export const validateRedirectUris = (input: unknown): RedirectUriCheck => {
   return { ok: true, uris };
 };
 
+export type ClientNameCheck =
+  | { ok: true; value: string | undefined }
+  | { ok: false; error: "invalid_client_name" };
+
+const hasControlCharacter = (value: string): boolean => {
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0;
+    if (code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+};
+
+/**
+ * Validate the client_name submitted at dynamic client registration. It is
+ * rendered verbatim into the consent page, so it must be trimmed, bounded in
+ * length and free of control characters -- otherwise an attacker-controlled
+ * client_name becomes a phishing surface or markup injection vector there.
+ */
+export const validateClientName = (input: unknown): ClientNameCheck => {
+  if (input === undefined) return { ok: true, value: undefined };
+  if (typeof input !== "string") return { ok: false, error: "invalid_client_name" };
+  const trimmed = input.trim();
+  if (trimmed.length === 0 || trimmed.length > 100 || hasControlCharacter(trimmed)) {
+    return { ok: false, error: "invalid_client_name" };
+  }
+  return { ok: true, value: trimmed };
+};
+
 /**
  * Opaque, not a signed JWT.
  *
