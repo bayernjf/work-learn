@@ -24,7 +24,7 @@ import "@fontsource-variable/geist";
 import "@fontsource-variable/geist-mono";
 import "./styles.css";
 
-function App({ supabase }: { supabase: SupabaseClient }) {
+function App({ supabase, apiUrl }: { supabase: SupabaseClient; apiUrl: string }) {
   const { t } = useI18n();
   const auth = useAuth(supabase);
   const session = auth.session;
@@ -149,11 +149,11 @@ function App({ supabase }: { supabase: SupabaseClient }) {
       <IntentDashboard session={session} />
       <PracticeHistoryDashboard session={session} />
       {corpus.empty && !corpus.loadError ? <>
-        <AgentConnect key="empty" session={session} initialOpen syncStatus={sync.syncStatus} syncStatusLoading={sync.syncStatusLoading} syncStatusError={sync.syncStatusError} onRefreshSyncStatus={sync.refreshSyncStatus} />
+        <AgentConnect key="empty" session={session} apiUrl={apiUrl} initialOpen syncStatus={sync.syncStatus} syncStatusLoading={sync.syncStatusLoading} syncStatusError={sync.syncStatusError} onRefreshSyncStatus={sync.refreshSyncStatus} />
         <ReviewList session={session} reviews={corpus.reviews} onComplete={corpus.handleCompleteReview} onSnooze={corpus.handleSnoozeReview} />
       </> : <>
         <ReviewList session={session} reviews={corpus.reviews} onComplete={corpus.handleCompleteReview} onSnooze={corpus.handleSnoozeReview} />
-        <AgentConnect key="filled" session={session} initialOpen={false} syncStatus={sync.syncStatus} syncStatusLoading={sync.syncStatusLoading} syncStatusError={sync.syncStatusError} onRefreshSyncStatus={sync.refreshSyncStatus} />
+        <AgentConnect key="filled" session={session} apiUrl={apiUrl} initialOpen={false} syncStatus={sync.syncStatus} syncStatusLoading={sync.syncStatusLoading} syncStatusError={sync.syncStatusError} onRefreshSyncStatus={sync.refreshSyncStatus} />
       </>}
       <AppFooter />
     </main>
@@ -164,11 +164,15 @@ const isOAuthConsentRoute = window.location.pathname.startsWith("/oauth/consent"
 
 const root = createRoot(document.getElementById("root")!);
 
-void bootstrapSupabase().then(({ client, error }) => {
+void bootstrapSupabase().then(({ client, config, error }) => {
   root.render(
     <StrictMode>
       <LocaleProvider>
-        {client ? (isOAuthConsentRoute ? <OAuthConsent supabase={client} /> : <App supabase={client} />) : <ConfigurationNotice error={error} />}
+        {client && config
+          ? (isOAuthConsentRoute
+            ? <OAuthConsent supabase={client} />
+            : <App supabase={client} apiUrl={config.apiUrl} />)
+          : <ConfigurationNotice error={error} />}
       </LocaleProvider>
     </StrictMode>
   );

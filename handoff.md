@@ -605,3 +605,23 @@ pnpm --filter @work-learn/shared-schema test
 **环境注意**：`apps/api/node_modules/@work-learn/mcp-server` 是唯一 mcp-server hoisted 副本，改 `packages/mcp-server` 后已 `robocopy /MIR` 同步。
 
 **提交规划**：按原子分 3 个 commit——① `fix(mcp): skip reuse events whose expression is gone`（direct.ts + 测试）；② `refactor(web): extract App state and handlers into hooks`（main.tsx + hooks/）；③ `chore(web): drop unused @tanstack/react-query`（package.json + lockfile）。文档并入 ② 或单独 docs commit。
+
+## 2026-08-31 续十四：硬编码 origin 清债（未提交）
+
+评审清债项第 7 条「硬编码 origin（`public/_worker.js`、`main.tsx`）」已落地。`main.tsx` 在前一轮拆分后该常量落在 `apps/web/src/components/AgentConnect.tsx:14`，本轮一并清掉。
+
+**改动**：
+- `apps/api/src/app.ts`：`GET /api/config` 在返回 Supabase 公开配置的同时多返回一个 `apiUrl` 字段，值与 `routes/oauth.ts` / `routes/mcp.ts` 同源（`WORK_LEARN_PUBLIC_API_URL ?? new URL(c.req.url).origin`），便于未来统一收口。
+- `apps/web/src/lib/supabase.ts`：`PublicConfig` 加 `apiUrl`，`bootstrapSupabase` 校验随之收紧。
+- `apps/web/src/main.tsx`：`App` 新增 `apiUrl` prop，从 `bootstrapSupabase` 返回的 `config.apiUrl` 取值，路由给 `<AgentConnect>`，删除原硬编码常量。
+- `apps/web/src/components/AgentConnect.tsx`：删 `const API_URL = "https://work-learn-api.vercel.app";`，改读 prop `apiUrl`。
+- `apps/web/public/_worker.js`：原模块顶层 `const API_ORIGIN = "..."` 改为函数内 `const API_ORIGIN = env.API_ORIGIN || DEFAULT_API_ORIGIN;`，环境变量优先；fallback 保留以免既有部署失效（Pages 控制台后续在 Settings → Environment variables 设置 `API_ORIGIN` 后即可切走）。注释同步说明。
+- `apps/api/src/app.test.ts`：补 3 条 `/api/config` 回归——默认走请求 origin、命中 `WORK_LEARN_PUBLIC_API_URL`、缺 Supabase 键时 500。api 48→51。
+
+**为什么走 `/api/config` 而非构建期 `VITE_*`**：supabase 配置已用同一条通道（避免环境变量散落多处），URL 永远与服务器实际部署对齐；用户改部署后无需 rebuild。`/api/config` 本就是浏览器同源，零 CORS 开销。
+
+**验证**：api 51/51（含 3 条新增），mcp-server 36/36、shared-schema 48/48 不变；8 包 `tsc --noEmit` 全绿。
+
+**未做的（已记）**：`/api/config` 的 `apiUrl` 与 `routes/{oauth,mcp}.ts` 里的 `apiBase`/`publicBase` 仍各自 inline 同一条三元表达式，未来可抽 `apps/api/src/lib/public-url.ts` 统一。本次不抽，保持单次改动只动一处。
+
+**待办**（部署侧，需人工）：Cloudflare Pages 控制台 → `work-learn` → Settings → Environment variables 新增 `API_ORIGIN = https://work-learn-api.vercel.app`（或在新增部署 / 自定义域名时改为对应的 origin），然后 `env.API_ORIGIN` 真正生效、fallback 即可删。fallback 保留期间行为等价，不影响生产。

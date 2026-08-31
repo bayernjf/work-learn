@@ -4,6 +4,11 @@ import { activeStrings } from "../i18n/strings";
 export type PublicConfig = {
   supabaseUrl: string;
   supabaseAnonKey: string;
+  // Public origin of the API, used by the web client to point users at MCP / stdio
+  // setup. The same value is returned from the API's /api/config endpoint as
+  // `WORK_LEARN_PUBLIC_API_URL ?? new URL(request.url).origin`, so the client does
+  // not need to know where the API is deployed.
+  apiUrl: string;
 };
 
 export type BootstrapResult = {
@@ -60,7 +65,7 @@ export const bootstrapSupabase = async (): Promise<BootstrapResult> => {
     const response = await fetch(`/api/config`);
     if (!response.ok) throw new Error(activeStrings().errors.config);
     const result = (await response.json()) as { data?: PublicConfig; error?: string };
-    if (!result.data?.supabaseUrl || !result.data.supabaseAnonKey) {
+    if (!result.data?.supabaseUrl || !result.data.supabaseAnonKey || !result.data.apiUrl) {
       throw new Error(result.error ?? "Supabase configuration is incomplete");
     }
 
