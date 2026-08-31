@@ -53,10 +53,17 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 - Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
 - `learn` CLI：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`（SRS 间隔重复队列）、`search`（支持 `--source`/`--tag`）、`practice`（本地生成练习）、`run`（PTY 录制终端会话）、`stats`（本地库统计）、`sync`（推送本地未同步数据到云端）、`doctor`（自检）、`delete`（删除语料）、`backup`（SQLite 备份）、`restore`（SQLite 恢复，需显式 `--yes`）、`export`（按天导出 markdown）、`expressions`（列出已保存表达）、`hook`（rc-hook 自动录制安装/卸载/查看）、`nudges`（复用 nudge 配置与待推送项）。
 
-下一步：
+下一步（真实验证，详见 `handoff.md`「当前待执行项」）：
 
+- 人工试用 `learn backup` / `learn restore --file ... --yes`；
+- 人工试用 Web 的 JSON 导出 / 导入；
+- 真实 Agent 验证复用链路：`record_reuse` / `suggest_reuse` / `configure_reuse_nudges` / `cluster_intents`（P1-d）；
 - 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
-- 发布管道：push `dev` 触发 CI 全量验证 → PR 合入 `main` 自动部署 → 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）→ Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。
+- 已暂缓：`findReuseCandidates` 接入、OAuth refresh 家族撤销。
+
+发布管道已完成（2026-08-31）：`dev` 合入 `main`（PR #50）→ CI 与 Deploy API/Web 全绿 → 云端迁移
+`018`/`019` 已执行 → Pages `API_ORIGIN` 已配置。国内网络注意：直连 `*.vercel.app` 被阻断，Agent/CLI
+入口统一走 `https://work-learn.pages.dev`（CF 代理，见 `docs/deployment.md`）。
 
 测试：相关包单元测试保持全绿（详见各包 `src/*.test.ts`）。
 
