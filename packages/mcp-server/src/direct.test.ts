@@ -26,6 +26,8 @@ function stubClient(options?: {
   tombstoned?: string[];
   /** Answer for a `.eq("text_norm", ...).maybeSingle()` probe: the cloud row already holding that norm. */
   existingByNorm?: { id: string; updated_at: string } | null;
+  /** Answer for the `saved_expressions` id probe: expression rows already on the cloud. */
+  existingExpressionIds?: string[];
 }) {
   const calls: Call[] = [];
 
@@ -82,6 +84,9 @@ function stubClient(options?: {
       }
       if (call.table === "sync_tombstones" && options?.tombstoned) {
         return Promise.resolve(resolve({ data: options.tombstoned.map((id) => ({ id })), error: null }));
+      }
+      if (call.table === "saved_expressions" && options?.existingExpressionIds) {
+        return Promise.resolve(resolve({ data: options.existingExpressionIds.map((id) => ({ id })), error: null }));
       }
       return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
     };
@@ -550,4 +555,64 @@ test("an expression the cloud has never seen is still inserted with onConflict i
 
   const insert = calls.find((call) => call.table === "saved_expressions" && call.verb === "upsert");
   assert.ok(insert, "a genuinely new expression must be pushed");
+});
+
+const REUSE_EVENT_FIXTURE = {
+  id: "event-1",
+  expressionId: "cloud-expr-1",
+  sessionId: null,
+  source: "claude" as const,
+  matchedText: "roll out",
+  contextSnippet: null,
+  matchKind: "exact" as const,
+  confidence: 1,
+  createdAt: "2026-08-30T12:00:00.000Z"
+};
+
+test("a reuse event whose expression is gone on the cloud is skipped, not fatal", async () => {
+  const { client, calls } = stubClient({ existingExpressionIds: ["cloud-expr-1"] });
+  const result = await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    reuseEvents: [
+      REUSE_EVENT_FIXTURE,
+      { ...REUSE_EVENT_FIXTURE, id: "event-2", expressionId: "ghost-expr" }
+    ]
+  });
+
+  const upserts = calls.filter((call) => call.table === "reuse_events" && call.verb === "upsert");
+  assert.equal(
+    upserts.length,
+    1,
+    "an event whose parent expression was deleted on another device must not take the whole batch down"
+  );
+  assert.equal(
+    (upserts[0]?.payload as Record<string, unknown>)?.id,
+    "event-1",
+    "the event whose expression exists is still pushed"
+  );
+  assert.equal(result.reuseEvents, 1, "the returned count must reflect what was actually pushed");
+});
+
+test("a reuse event may reference an expression pushed in the same batch", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [],
+    questions: [],
+    expressions: [EXPRESSION_FIXTURE],
+    reuseEvents: [{ ...REUSE_EVENT_FIXTURE, expressionId: "local-expr-1" }]
+  });
+
+  const upserts = calls.filter((call) => call.table === "reuse_events" && call.verb === "upsert");
+  assert.equal(
+    upserts.length,
+    1,
+    "an expression pushed in the same batch is already on the cloud by the time its events go up"
+  );
+  assert.equal(
+    calls.some((call) => call.table === "reuse_events" && call.verb === "upsert" && (call.payload as Record<string, unknown>)?.id === "event-1"),
+    true
+  );
 });
