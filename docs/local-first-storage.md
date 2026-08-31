@@ -120,6 +120,7 @@
 - **复习队列**：同步 `review_items`，按 `material_id` 归并，因此一个设备完成复习后其他设备能看到。
 - **同步范围**：sessions + learning_materials + question_translations + review_items。
 - **删除**：通过 tombstone 同步。本地删除材料/问题会写入墓碑，push 时传播；另一端按 `deleted_at >= updated_at` 删除。当前不做级联 session 删除入口，删除材料会连带其 review 墓碑。
+- **删会话保料**（commit `9ceaa6e`）：云端删会话后材料/问题保留为孤儿（`session_id` SET NULL）；本地已对齐该语义——`learning_materials`/`question_translations` 的 `session_id` 可空 + `ON DELETE SET NULL`（旧库自动迁移），pull 时孤儿被保留而非跳过。
 
 ---
 
