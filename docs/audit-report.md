@@ -9,7 +9,7 @@
 
 **核心结论：承载产品核心承诺（追踪真实复用）的同步层是最薄弱的一环，存在会静默丢数据的缺陷；同时「测试不拦回归、文档勾选先于真实验证」让已交付功能的实际可靠度低于账面。**
 
-本报告发布后所有 P0/P1 数据安全类缺陷均已修复并附回归测试；OAuth 安全面三项纯代码修复全部完成。双实现收敛与 FK 语义统一已收尾（见 §架构性结论）；剩余仅 `/register` 限流（安全面，需产品决策）。
+本报告发布后所有 P0/P1 数据安全类缺陷均已修复并附回归测试；OAuth 安全面修复全部完成（含 `/register` 限流）。双实现收敛与 FK 语义统一已收尾（见 §架构性结论）。
 
 ## 严重等级
 
@@ -40,7 +40,7 @@
 
 ---
 
-## P1 — 高危（5/6 已修复，1 项需决策）
+## P1 — 高危（6/6 已修复）
 
 ### P1-1 空 scope = 全权限（OAuth 令牌泄漏）
 - **发现**：`auth.ts` 把空 scope 解析成 `undefined`，鉴权层视 `undefined` 为「无限制」——OAuth 令牌若未请求 scope 即获得读写全权限，同意页展示的 scope 无约束力（与 `scopes_supported: []` 叠加）。
@@ -67,8 +67,8 @@
 - **发现**：无鉴权、无限流、`redirect_uri` 完全不校验（开放重定向，攻击者可拿授权码）；`client_name` 由攻击者控制并渲染进同意页（钓鱼面）。
 - **修复**（`51f8235`）：`redirect_uri` 严格校验——必须是绝对 https（loopback 的 http 例外）、无 fragment、无通配符，非法即 400。
 - **修复**（`3849bde`）：`client_name` 校验——trim、上限 100 字符、拒绝空值与控制字符，非法即 400，不再把原始文本渲染进同意页。
-- **剩余**：**限流**（serverless 无共享存储，需落库计数或网关层，待决策）。
-- **状态**：🟡 校验面已闭环，仅剩限流待决策。
+- **修复**（限流）：落库计数——`oauth_clients` 按 `created_at` 滑动窗口（默认 1 小时）计数注册数，超预算（默认 10/窗口）即 429 + `Retry-After`；阈值可用 `WORK_LEARN_REGISTRATION_MAX_PER_WINDOW` 调整；`019` migration 给 `created_at` 加索引。计数查询失败时 fail-open（insert 随后同样会失败）。6 条回归测试。
+- **状态**：✅ 已修复。
 
 ### P1-6 FK 级联两端分叉（pull 整批回滚）
 - **发现**：实测核对后真实分歧仅 `learning_materials.session_id` 与 `question_translations.session_id`（云端可空 SET NULL vs 本地 NOT NULL CASCADE）。云端删会话后父被 SET NULL，`normalizeMaterial` 把 `String(null)` 推成 `'null'` → 本地 FK 违反 → 整个 pull 事务回滚。
@@ -115,8 +115,8 @@
 | 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟢 已收尾：`d3bfca7`（`WorkLearnContext` 下沉，三端 context 结构互检）+ `f1d5728`（同步面协议化，`runSync` 共享编排）+ `9ceaa6e`（FK 语义统一为云端 SET NULL 语义，本地表迁移 + 孤儿保留） |
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
-| 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 状态抽 hooks 仍可做 |
-| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | ⬜ 未处理 |
+| 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 的状态与处理器已抽成 6 个 hooks（`useAuth`/`useCorpus`/`useSyncStatus`/`usePatterns`/`useReuse`/`useImportExport`，`main.tsx` 只剩组合与 JSX） |
+| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | 🟢 已清理 `@tanstack/react-query`（源码零引用，纯依赖声明，已随 lockfile 移除）；硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端仍 ⬜ 未处理 |
 
 ## 测试质量欠账
 
@@ -128,13 +128,13 @@
 
 ## 验证证据
 
-- 本地（环境修复后，2026-08-31）：mcp-server 34/34、api 42/42、shared-schema 45/45、setup 5/5；api/cli/mcp-server/shared-schema/setup/web 六处 `tsc --noEmit` 全绿。
-- `local-store` 测试依赖 better-sqlite3 原生模块，本机无法运行，以 CI 为准。
+- 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 48/48（含 6 条注册限流回归）；8 包 `tsc --noEmit` 全绿。
+- `local-store` 测试依赖 better-sqlite3 原生模块，本机已用 `node-gyp` 编译成功，不再以 CI 为准。
 - CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**。
-- **待办**：push `dev` 触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018`。
+- **待办**：提交并推送本批改动（限流 + 文档）触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018` 与 `019`。
 
 ## 结论与建议
 
-1. 数据安全类缺陷（P0 全部 + P1 同步全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：仅剩 `/register` 限流（安全面，需决策）。双实现收尾（接口 + 同步面 + FK 语义）已完成，见上表。
+1. 数据安全类缺陷（P0 全部 + P1 全部 + P2 数据）已闭环并有回归测试守护。
+2. 推进顺序建议：全部 P0/P1 已闭环，无剩余高危项。评审列举的三项低优先级清债（`App` 状态抽 hooks、`react-query` 清理、`reuse_events` 极端孤儿探父）已全部完成；剩余为硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

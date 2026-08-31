@@ -152,15 +152,85 @@ const service = (): SupabaseClient => {
   return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 };
 
-export const registerClient = async (input: {
-  redirect_uris: string[];
-  client_name?: string;
-  client_uri?: string;
-  logo_uri?: string;
-  scope?: string;
-  token_endpoint_auth_method?: string;
-}): Promise<OAuthClient> => {
-  const admin = service();
+/**
+ * Sliding window for dynamic client registration rate limiting.
+ *
+ * The registration endpoint is unauthenticated and creates rows that live
+ * forever (they are rendered into consent pages), so an attacker could spam it
+ * to bloat the table or stockpile phishing-looking client names. Counting
+ * registrations in `oauth_clients` (rather than a memory counter) works on
+ * serverless because every instance shares the same database.
+ */
+export const REGISTRATION_WINDOW_MS = 60 * 60 * 1000; // 1 hour
+export const REGISTRATION_MAX_PER_WINDOW = 10;
+
+const envMaxPerWindow = (): number => {
+  const raw = process.env.WORK_LEARN_REGISTRATION_MAX_PER_WINDOW;
+  if (!raw) return REGISTRATION_MAX_PER_WINDOW;
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : REGISTRATION_MAX_PER_WINDOW;
+};
+
+/** How many oauth_clients rows were created in the trailing window. */
+export const countRecentRegistrations = async (
+  admin: SupabaseClient,
+  windowMs: number = REGISTRATION_WINDOW_MS
+): Promise<number> => {
+  const since = new Date(Date.now() - windowMs).toISOString();
+  const { count } = await admin
+    .from("oauth_clients")
+    .select("client_id", { count: "exact", head: true })
+    .gte("created_at", since);
+  // Fail-open: if the count query errors out the insert that follows will also
+  // fail, so blocking here would only turn a transient DB error into a 429.
+  return count ?? 0;
+};
+
+export type RegistrationRateCheck =
+  | { ok: true }
+  | { ok: false; retryAfterSeconds: number };
+
+export const checkRegistrationRateLimit = async (
+  admin: SupabaseClient,
+  windowMs: number = REGISTRATION_WINDOW_MS,
+  maxPerWindow: number = envMaxPerWindow()
+): Promise<RegistrationRateCheck> => {
+  const recent = await countRecentRegistrations(admin, windowMs);
+  if (recent >= maxPerWindow) {
+    return { ok: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
+  }
+  return { ok: true };
+};
+
+/** Thrown by registerClient when the sliding-window budget is exhausted. */
+export class RegistrationRateLimitedError extends Error {
+  readonly retryAfterSeconds: number;
+
+  constructor(retryAfterSeconds: number) {
+    super("too_many_registrations");
+    this.name = "RegistrationRateLimitedError";
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
+
+export const registerClient = async (
+  input: {
+    redirect_uris: string[];
+    client_name?: string;
+    client_uri?: string;
+    logo_uri?: string;
+    scope?: string;
+    token_endpoint_auth_method?: string;
+  },
+  options?: {
+    admin?: SupabaseClient;
+    windowMs?: number;
+    maxPerWindow?: number;
+  }
+): Promise<OAuthClient> => {
+  const admin = options?.admin ?? service();
+  const rate = await checkRegistrationRateLimit(admin, options?.windowMs, options?.maxPerWindow);
+  if (!rate.ok) throw new RegistrationRateLimitedError(rate.retryAfterSeconds);
   const client: OAuthClient = {
     client_id: randomToken(16),
     client_secret: null,

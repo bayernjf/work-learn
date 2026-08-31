@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, validateClientName, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken } from "./oauth.js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, validateClientName, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken, checkRegistrationRateLimit, countRecentRegistrations, registerClient, RegistrationRateLimitedError, REGISTRATION_WINDOW_MS } from "./oauth.js";
 
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -272,6 +272,74 @@ test("validateRedirectUris rejects empty or non-array input", () => {
 test("validateRedirectUris collapses duplicates", () => {
   const check = validateRedirectUris(["https://app.example.com/cb", "https://app.example.com/cb"]);
   assert.deepEqual(check, { ok: true, uris: ["https://app.example.com/cb"] });
+});
+
+// --- registration rate limiting ---
+
+/** Admin stub for the registration flow: answers the window count and records inserts. */
+function stubRegistration(
+  count: number,
+  options: { countError?: boolean } = {}
+): { admin: SupabaseClient; inserted: Array<Record<string, unknown>> } {
+  const inserted: Array<Record<string, unknown>> = [];
+  const admin = {
+    from(table: string) {
+      const builder: Record<string, unknown> = {};
+      builder.select = (_column: string, _opts: unknown) => {
+        builder.gte = async () =>
+          Promise.resolve(options.countError ? { count: null, error: new Error("boom") } : { count, error: null });
+        return builder;
+      };
+      builder.insert = async (payload: Record<string, unknown>) => {
+        inserted.push(payload);
+        return Promise.resolve({ data: null, error: null });
+      };
+      return builder;
+    }
+  } as unknown as SupabaseClient;
+  return { admin, inserted };
+}
+
+const registrationInput = {
+  redirect_uris: ["https://app.example.com/cb"],
+  client_name: "Test Agent"
+};
+
+test("countRecentRegistrations asks for oauth_clients rows in the window", async () => {
+  const { admin } = stubRegistration(3);
+  assert.equal(await countRecentRegistrations(admin, 60_000), 3);
+});
+
+test("countRecentRegistrations fails open when the count query errors", async () => {
+  const { admin } = stubRegistration(0, { countError: true });
+  assert.equal(await countRecentRegistrations(admin, 60_000), 0);
+});
+
+test("registrations below the window budget are allowed", async () => {
+  const { admin } = stubRegistration(9);
+  assert.deepEqual(await checkRegistrationRateLimit(admin, REGISTRATION_WINDOW_MS, 10), { ok: true });
+});
+
+test("registrations at the window budget are rejected with a retry hint", async () => {
+  const { admin } = stubRegistration(10);
+  const check = await checkRegistrationRateLimit(admin, REGISTRATION_WINDOW_MS, 10);
+  assert.equal(check.ok, false);
+  if (!check.ok) assert.equal(check.retryAfterSeconds, REGISTRATION_WINDOW_MS / 1000);
+});
+
+test("registerClient inserts when the budget allows", async () => {
+  const { admin, inserted } = stubRegistration(0);
+  const client = await registerClient(registrationInput, { admin });
+  assert.ok(client.client_id.length > 0);
+  assert.equal(inserted.length, 1);
+  assert.equal(inserted[0]?.client_id, client.client_id);
+  assert.deepEqual(inserted[0]?.redirect_uris, ["https://app.example.com/cb"]);
+});
+
+test("registerClient throws a rate-limit error without inserting when the budget is exhausted", async () => {
+  const { admin, inserted } = stubRegistration(10);
+  await assert.rejects(registerClient(registrationInput, { admin }), RegistrationRateLimitedError);
+  assert.equal(inserted.length, 0);
 });
 
 

@@ -1103,7 +1103,21 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
   await upsertReviewsWithLww(supabase, userId, reviewRows);
   await upsertWithLww(supabase, userId, "intents", intentRows);
   await upsertWithLww(supabase, userId, "saved_expressions", expressionRows);
-  await upsertImmutableWithId(supabase, userId, "reuse_events", reuseEventRows);
+  let pushedReuseEvents = reuseEventRows;
+  if (reuseEventRows.length > 0) {
+    // A reuse_event references its expression by id. If that expression was
+    // deleted on another device (or never arrived), the FK insert fails and
+    // takes the whole batch down. Skip such rows instead: the parent is gone,
+    // so the event is meaningless on the cloud side too. Expressions pushed in
+    // this same batch are already on the cloud by now (upsertWithLww above), so
+    // they count as valid parents without an extra round-trip.
+    const expressionIds = new Set<string>(expressionRows.map((expression) => expression.id));
+    for (const row of ok(await supabase.from("saved_expressions").select("id").eq("user_id", userId)) as Array<{ id: string }>) {
+      expressionIds.add(row.id);
+    }
+    pushedReuseEvents = reuseEventRows.filter((event) => expressionIds.has(event.expression_id));
+  }
+  await upsertImmutableWithId(supabase, userId, "reuse_events", pushedReuseEvents);
   await upsertImmutableWithId(supabase, userId, "practice_records", practiceRecordRows);
 
   return {
@@ -1113,7 +1127,7 @@ export const syncToCloud = async (supabase: SupabaseClient, userId: string, inpu
     reviews: reviewRows.length,
     intents: intentRows.length,
     expressions: expressionRows.length,
-    reuseEvents: reuseEventRows.length,
+    reuseEvents: pushedReuseEvents.length,
     practiceRecords: practiceRecordRows.length,
     tombstones: parsed.tombstones.length,
     serverCursor: new Date().toISOString()
