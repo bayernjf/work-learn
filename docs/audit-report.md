@@ -128,10 +128,10 @@
 
 ## 验证证据
 
-- 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 48/48（含 6 条注册限流回归）；8 包 `tsc --noEmit` 全绿。
+- 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 51/51（含 6 条注册限流回归 + 3 条 `/api/config` 回归）；8 包 `tsc --noEmit` 全绿。
 - `local-store` 测试依赖 better-sqlite3 原生模块，本机已用 `node-gyp` 编译成功，不再以 CI 为准。
-- CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**。
-- **待办**：提交并推送本批改动（限流 + 文档）触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018` 与 `019`。
+- CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**（本批改动已提交未推送）。
+- **待办**：push dev 触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018` 与 `019`；Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。
 
 ## 结论与建议
 

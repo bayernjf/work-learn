@@ -35,6 +35,10 @@
 - Cloudflare Pages 部署包含 `apps/web/public/_worker.js`，会把同源 `/api/*` 代理到
   `https://work-learn-api.vercel.app`。浏览器只访问 `work-learn.pages.dev`，不直连 `vercel.app`，
   可避免部分网络环境下 Vercel 域名不可达导致登录页白屏。
+- `_worker.js` 的代理目标读取 Pages 运行时环境变量 `API_ORIGIN`（`env.API_ORIGIN`），未配置时
+  回退到内置默认值 `https://work-learn-api.vercel.app`。**部署侧待办**：在 Pages 控制台
+  `work-learn` → Settings → Environment variables 新增 `API_ORIGIN = https://work-learn-api.vercel.app`，
+  生效后即可移除 fallback。
 - `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 仍可作为本地/CI 构建覆盖项，但生产主要依赖 API
   返回的公开配置；`SUPABASE_URL`、`SUPABASE_ANON_KEY` 必须在 Vercel 配置正确。
 
@@ -64,6 +68,9 @@
 - Web 构建**不需要**任何 `VITE_*` 变量：浏览器只走同源 `/api/*`，由 `_worker.js` 代理到
   Vercel，Supabase 配置在运行时从 `/api/config` 取。曾经注入的 `VITE_WORK_LEARN_API_URL`
   会被内联进产物并把线上请求指向 `localhost`，已删除，不要再加回来。
+- API 的浏览器端配置（Supabase URL / anon key / `apiUrl`）统一由 `GET /api/config` 返回：
+  `apiUrl` 取 `WORK_LEARN_PUBLIC_API_URL`，未配置时回退到请求 origin。Web 端
+  `AgentConnect` 的 API 地址即来自该字段，不再硬编码。
 
 ## 部署触发
 
