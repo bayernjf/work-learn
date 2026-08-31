@@ -115,8 +115,8 @@
 | 双实现（`direct.ts` 云端 vs `local-store` 本地）是最大技术债，FK/唯一约束/tombstone CHECK/触发器全在分叉 | 🟢 已收尾：`d3bfca7`（`WorkLearnContext` 下沉，三端 context 结构互检）+ `f1d5728`（同步面协议化，`runSync` 共享编排）+ `9ceaa6e`（FK 语义统一为云端 SET NULL 语义，本地表迁移 + 孤儿保留） |
 | 空壳包 `learning-skill`（零引用）、`learning-core`（仅转发 `redactSecrets`） | ✅ 已删除（`0b59fa3`/`40b862a`） |
 | `apps/api/api/index.ts` 死文件 | ✅ 已删除（`0b59fa3`） |
-| 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 状态抽 hooks 仍可做 |
-| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | ⬜ 未处理 |
+| 前端单体 `main.tsx`（1786 行、40+ useState、无测试） | ✅ 已按域拆分（`6cc1ef0`），`App` 的状态与处理器已抽成 6 个 hooks（`useAuth`/`useCorpus`/`useSyncStatus`/`usePatterns`/`useReuse`/`useImportExport`，`main.tsx` 只剩组合与 JSX） |
+| `react-query` 装了没用、硬编码 origin、`mcp-server` 遗留 HTTP 客户端 | 🟢 已清理 `@tanstack/react-query`（源码零引用，纯依赖声明，已随 lockfile 移除）；硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端仍 ⬜ 未处理 |
 
 ## 测试质量欠账
 
@@ -128,7 +128,7 @@
 
 ## 验证证据
 
-- 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 34/34、api 48/48（含 6 条注册限流回归）；8 包 `tsc --noEmit` 全绿。
+- 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 48/48（含 6 条注册限流回归）；8 包 `tsc --noEmit` 全绿。
 - `local-store` 测试依赖 better-sqlite3 原生模块，本机已用 `node-gyp` 编译成功，不再以 CI 为准。
 - CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**。
 - **待办**：提交并推送本批改动（限流 + 文档）触发 CI 全量验证 → 合入 `main` 部署；云端执行迁移 `018` 与 `019`。
@@ -136,5 +136,5 @@
 ## 结论与建议
 
 1. 数据安全类缺陷（P0 全部 + P1 全部 + P2 数据）已闭环并有回归测试守护。
-2. 推进顺序建议：全部 P0/P1 已闭环，无剩余高危项。剩余为低优先级清债（`App` 状态抽 hooks、`react-query` 清理、`reuse_events` 极端孤儿探父）。
+2. 推进顺序建议：全部 P0/P1 已闭环，无剩余高危项。评审列举的三项低优先级清债（`App` 状态抽 hooks、`react-query` 清理、`reuse_events` 极端孤儿探父）已全部完成；剩余为硬编码 origin 与 `mcp-server` 遗留 HTTP 客户端。
 3. 任何「本地绿、生产坏」类回归都已被 CI 冒烟与零测试护栏覆盖；本机 Windows 的 junction/CRLF 环境问题不影响 CI（ubuntu/LF）。

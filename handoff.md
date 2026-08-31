@@ -591,3 +591,17 @@ pnpm --filter @work-learn/shared-schema test
 **验证**：api typecheck 0、48/48；全仓待跑。
 
 **待办**：云端执行 migration `018`+`019`；本批改动未提交（含迁移 `019`、限流实现、审计/文档更新）。
+
+## 2026-08-31 续十三：评审清债三项收尾（未提交）
+
+评审「剩余低优先级清债」三项全部落地，均已本地验证：
+
+1. **`App` 状态与处理器抽 hooks**：`apps/web/src/lib/hooks/` 新增 `useAuth` / `useCorpus` / `useSyncStatus` / `usePatterns` / `useReuse` / `useImportExport` 六个 hook，`main.tsx` 的 `App` 只剩组合与 JSX（~120 行）。行为等价，无测试可跑（web 无测试）；`useCorpus` 持有 `reloadKey` 供其余异步 hook 共享触发。
+2. **移除 `react-query`**：源码零引用，纯依赖声明，`package.json` 删除 `@tanstack/react-query` 后 `pnpm install --lockfile-only` 重写 lockfile，`@tanstack/*` 条目全部清空（`query-core` 同步移除，无其他消费者）。lockfile-only 不触碰 node_modules，避开了本机 junction 问题。
+3. **`reuse_events` 极端孤儿探父**（`direct.ts` 的 `syncToCloud`）：推送 reuse_events 前探测云端 `saved_expressions` id 集合（本批同推的 expression 视为合法父，不多花往返），`expression_id` 不在集合的行跳过、不整批失败、计数按实际推送数返回。新增 2 条回归（云端缺父 → 跳过且计数=1；同批 expression → 正常推送），mcp-server 36/36。
+
+**验证**：8 包 `tsc --noEmit` 全绿；mcp-server 36/36（34 + 2）。本机 node_modules 根与 `@types` 下 2233 个 `*_tmp_*` 残留（pnpm 中断垃圾，污染 typeRoots）已移入 `%TEMP%\wl-tmp-cleanup`。
+
+**环境注意**：`apps/api/node_modules/@work-learn/mcp-server` 是唯一 mcp-server hoisted 副本，改 `packages/mcp-server` 后已 `robocopy /MIR` 同步。
+
+**提交规划**：按原子分 3 个 commit——① `fix(mcp): skip reuse events whose expression is gone`（direct.ts + 测试）；② `refactor(web): extract App state and handlers into hooks`（main.tsx + hooks/）；③ `chore(web): drop unused @tanstack/react-query`（package.json + lockfile）。文档并入 ② 或单独 docs commit。
