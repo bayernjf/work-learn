@@ -1,39 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema, type WorkLearnContext } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
  *
  * The stdio entry implements this by calling the Hono API over HTTP with a
  * personal access token; the remote HTTP entry implements it directly against
- * Supabase inside the Vercel function. Tool registration is shared so the two
- * transports never drift.
+ * Supabase inside the Vercel function; the offline stdio entry implements it
+ * against the local SQLite store. Tool registration is shared so the
+ * transports never drift, and every context is structurally checked against
+ * the shared `WorkLearnContext` interface at compile time.
  */
-export interface WorkLearnContext {
-  createSession(input: unknown): Promise<unknown> | unknown;
-  saveMaterial(input: unknown): Promise<unknown> | unknown;
-  saveQuestionTranslation(input: unknown): Promise<unknown> | unknown;
-  searchCorpus(query?: string, filters?: { source?: string; tag?: string }): Promise<unknown> | unknown;
-  getReviewItems(): Promise<unknown> | unknown;
-  markMastered(reviewId: string, grade?: string): Promise<unknown> | unknown;
-  snoozeReview(reviewId: string, days?: number): Promise<unknown> | unknown;
-  generatePractice(input: unknown): Promise<unknown> | unknown;
-  generateAdaptivePractice(input: unknown): Promise<unknown> | unknown;
-  recordPractice(input: unknown): Promise<unknown> | unknown;
-  getPracticeHistory(input: unknown): Promise<unknown> | unknown;
-  getUserPatterns(input: unknown): Promise<unknown> | unknown;
-  recordReuse(input: unknown): Promise<unknown> | unknown;
-  getReuseSummary(): Promise<unknown> | unknown;
-  suggestReuse(input: unknown): Promise<unknown> | unknown;
-  getReuseNudgeSettings(): Promise<unknown> | unknown;
-  updateReuseNudgeSettings(input: unknown): Promise<unknown> | unknown;
-  listExpressions(input: unknown): Promise<unknown> | unknown;
-  clusterIntents(input: unknown): Promise<unknown> | unknown;
-  mergeIntents(input: unknown): Promise<unknown> | unknown;
-  splitIntent(input: unknown): Promise<unknown> | unknown;
-  listIntents(input: unknown): Promise<unknown> | unknown;
-}
+export type { WorkLearnContext };
 
 /** Register all Work Learn tools on the given MCP server. */
 export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {

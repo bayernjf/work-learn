@@ -158,7 +158,7 @@ export const toolInputSchemas = {
   search_corpus: z.object({ query: z.string().optional() })
 };
 
-import type { WorkLearnContext } from "./tools.js";
+import type { WorkLearnContext } from "@work-learn/shared-schema";
 
 /**
  * Context used by the stdio entry point: it calls the deployed Hono API over

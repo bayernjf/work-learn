@@ -47,7 +47,7 @@ import {
   type PatScope,
   type PracticeResult
 } from "@work-learn/shared-schema";
-import type { WorkLearnContext } from "./tools.js";
+import type { WorkLearnContext } from "@work-learn/shared-schema";
 
 type DbResult = { data: unknown; error?: { message: string } | null };
 
