@@ -13,6 +13,19 @@ export const app = new Hono().basePath("/api");
 
 app.get("/health", (c) => c.json({ ok: true, service: "work-learn-api" }));
 
+app.get("/debug-headers", (c) => {
+  const headers: Record<string, string> = {};
+  c.req.raw.headers.forEach((v, k) => { headers[k] = v; });
+  return c.json({
+    url: c.req.url,
+    xForwardedHost: c.req.header("x-forwarded-host"),
+    xForwardedProto: c.req.header("x-forwarded-proto"),
+    xForwardedFor: c.req.header("x-forwarded-for"),
+    host: c.req.header("host"),
+    allHeaders: headers
+  });
+});
+
 app.get(
   "/config",
   cors({
