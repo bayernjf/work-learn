@@ -218,7 +218,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - [x] 将 `dev` 合入 `main`（PR #50，2026-08-31，`cf003ee`），CI 与 Deploy API/Web 工作流均 success；
 - [x] 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）——2026-08-31 用户已在 Supabase 执行；
 - [x] 确认 API 生产可达（2026-08-31）：部署健康（Deploy API success；CF Pages 代理 `/api/health` 返回 `{"ok":true}`、`/api/mcp` 正确响应 401）；但 `*.vercel.app` 泛域名在当前网络被阻断（TCP 层不可达、DNS 正常、不存在的随机 vercel.app 域名同样超时）。**产品不受影响**：Web 前端页面在 CF、`/api/*` 由 Pages worker 代理到 Vercel、数据直连 Supabase（均可达）。后续已完成：setup/CLI 默认 API URL 改为 `https://work-learn.pages.dev`（续十六），对外文档/教程统一推荐 pages.dev 入口。
-- [x] OAuth issuer 自洽（方案 B，2026-09-02）：`_worker.js` 注入 `x-forwarded-host`，API 新增 `resolvePublicOrigin` 优先读该 header，pages.dev 与 vercel.app 两个入口各自返回匹配的 issuer/metadata/apiUrl（RFC 8414）。无需改 Vercel 环境变量。
+- [x] OAuth issuer 自洽（方案 B，2026-09-02）：`_worker.js` 注入自定义 header `x-work-learn-entry-host`（Vercel 会覆盖标准 `x-forwarded-host`，故用自定义 header），API 新增 `resolvePublicOrigin` 优先读该 header，pages.dev 与 vercel.app 两个入口各自返回匹配的 issuer/metadata/apiUrl（RFC 8414）。生产 `check-public-entry.mjs` 12/12 全过。无需改 Vercel 环境变量。
 - [x] Cloudflare Pages 配置 `API_ORIGIN = https://work-learn-api.vercel.app`（2026-08-31 经 `wrangler pages secret put` 写入 production，value encrypted；`_worker.js` 读取 `env.API_ORIGIN`，代理链路验证 `/api/health` 200）；
 - [x] 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`（2026-09-02 在隔离库实测，见下「续十六」）；
 - 发布后可人工试用 Web 的 JSON 导出 / 导入（需登录，仍待人工）；
