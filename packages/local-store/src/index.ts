@@ -28,6 +28,8 @@ import {
   defaultReuseNudgeSettings,
   suggestReuse,
   suggestReuseInputSchema,
+  findReuseCandidates,
+  suggestReuseCandidatesInputSchema,
   summarizeReuse,
   reuseNudgeSettingsSchema,
   updateReuseNudgeSettingsSchema,
@@ -809,6 +811,16 @@ export class LocalStore implements LocalSyncStore {
     return result;
   }
 
+  suggestReuseCandidates(input: unknown) {
+    const parsed = suggestReuseCandidatesInputSchema.parse(input);
+    const safeText = redactSecrets(parsed.text).text;
+    const expressions = (this.db
+      .prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC")
+      .all() as SavedExpressionRow[]).map(toSavedExpression);
+    const candidates = findReuseCandidates(safeText, expressions, parsed.threshold);
+    return { candidates: candidates.slice(0, parsed.limit) };
+  }
+
   listExpressions(input: unknown = {}) {
     const parsed = listExpressionsInputSchema.parse(input) as ListExpressionsInput;
     let rows = (this.db.prepare("SELECT * FROM saved_expressions ORDER BY updated_at DESC").all() as SavedExpressionRow[]).map(toSavedExpression);
@@ -1484,6 +1496,7 @@ export const createLocalContext = (store: LocalStore): WorkLearnContext => ({
   recordReuse: (input: unknown) => store.recordReuse(input),
   getReuseSummary: () => store.getReuseSummary(),
   suggestReuse: (input: unknown) => store.suggestReuse(input),
+  suggestReuseCandidates: (input: unknown) => store.suggestReuseCandidates(input),
   getReuseNudgeSettings: () => store.getReuseNudgeSettings(),
   updateReuseNudgeSettings: (input: unknown) => store.updateReuseNudgeSettings(input),
   listExpressions: (input: unknown) => store.listExpressions(input),
