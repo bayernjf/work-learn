@@ -2,10 +2,10 @@
  * Resolve the public origin of this API from the incoming request.
  *
  * Priority:
- * 1. `x-forwarded-host` — set unconditionally by the Cloudflare Pages worker
- *    (`apps/web/public/_worker.js`), which overwrites any client-supplied
- *    value. Trusted because only the worker sits in front of Vercel in
- *    production; direct connections to Vercel never carry this header.
+ * 1. `x-work-learn-entry-host` — set unconditionally by the Cloudflare Pages
+ *    worker (`apps/web/public/_worker.js`), overwriting any client-supplied
+ *    value. A custom header is used because Vercel's edge network
+ *    overwrites the standard `x-forwarded-host` with the Vercel origin.
  * 2. `WORK_LEARN_PUBLIC_API_URL` — explicit env override (e.g. previews).
  * 3. Request URL origin — direct connection to Vercel.
  *
@@ -21,10 +21,10 @@ export const resolvePublicOrigin = (req: {
   url: string;
   header?: (name: string) => string | undefined;
 }): string => {
-  const forwardedHost = req.header?.("x-forwarded-host");
-  if (forwardedHost) {
-    const forwardedProto = req.header?.("x-forwarded-proto") ?? "https";
-    return `${forwardedProto}://${forwardedHost}`;
+  const entryHost = req.header?.("x-work-learn-entry-host");
+  if (entryHost) {
+    const entryProto = req.header?.("x-work-learn-entry-proto") ?? "https";
+    return `${entryProto}://${entryHost}`;
   }
   return process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(req.url).origin;
 };
