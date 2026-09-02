@@ -151,6 +151,33 @@ export const fetchReuseSuggestions = async (session: Session, text: string, limi
   return (await response.json()) as { data: { suggestions: ReuseSuggestionItem[]; suppressedReason: string | null } };
 };
 
+export type ReuseCandidateItem = {
+  expressionId: string;
+  text: string;
+  overlap: number;
+  reason: "high_overlap";
+};
+
+export const fetchReuseCandidates = async (session: Session, text: string, threshold = 0.6, limit = 5) => {
+  const response = await fetch(`/api/reuse/candidates`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ text, threshold, limit })
+  });
+  if (!response.ok) throw new Error("Could not load reuse candidates");
+  return (await response.json()) as { data: { candidates: ReuseCandidateItem[] } };
+};
+
+export const recordReuse = async (session: Session, text: string, source?: string, contextSnippet?: string) => {
+  const response = await fetch(`/api/reuse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
+    body: JSON.stringify({ text, source, contextSnippet })
+  });
+  if (!response.ok) throw new Error("Could not record reuse");
+  return (await response.json()) as { data: { id: string } };
+};
+
 export const updateReuseNudgeSettings = async (session: Session, settings: Partial<ReuseNudgeSettings>) => {
   const response = await fetch(`/api/reuse/settings`, {
     method: "PATCH",
