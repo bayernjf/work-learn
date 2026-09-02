@@ -31,6 +31,7 @@ export interface WorkLearnContext {
   recordReuse(input: unknown): Promise<unknown> | unknown;
   getReuseSummary(): Promise<unknown> | unknown;
   suggestReuse(input: unknown): Promise<unknown> | unknown;
+  suggestReuseCandidates(input: unknown): Promise<unknown> | unknown;
   getReuseNudgeSettings(): Promise<unknown> | unknown;
   updateReuseNudgeSettings(input: unknown): Promise<unknown> | unknown;
   listExpressions(input: unknown): Promise<unknown> | unknown;
