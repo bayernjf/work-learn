@@ -4,11 +4,13 @@ import { createDirectContext } from "@work-learn/mcp-server/direct";
 import { handleMcpHttpRequest } from "@work-learn/mcp-server/http";
 import { createSupabaseServiceClient } from "../lib/supabase.js";
 import { authenticate } from "../lib/auth.js";
+import { resolvePublicOrigin } from "../lib/origin.js";
 
 /**
  * Remote MCP endpoint (Streamable HTTP, stateless).
  *
- * Agents connect to https://work-learn-api.vercel.app/api/mcp with an
+ * Agents connect to https://work-learn.pages.dev/api/mcp -- the Cloudflare Pages
+ * proxy for this API, reachable where the *.vercel.app origin is not -- with an
  * Authorization: Bearer <token> header. The token may be a Work Learn personal
  * access token, an OAuth access token, or a Supabase user JWT. A client with no
  * token gets a 401 pointing at the protected-resource metadata, which is how it
@@ -19,9 +21,12 @@ import { authenticate } from "../lib/auth.js";
  */
 export const mcpRoute = new Hono();
 
-const publicBase = (url: string) => process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(url).origin;
-const resourceUrl = (url: string) => `${publicBase(url)}/api/mcp`;
-const resourceMetadataUrl = (url: string) => `${resourceUrl(url)}/.well-known/oauth-protected-resource`;
+const publicBase = (req: { url: string; header?: (name: string) => string | undefined }) =>
+  resolvePublicOrigin(req);
+const resourceUrl = (req: { url: string; header?: (name: string) => string | undefined }) =>
+  `${publicBase(req)}/api/mcp`;
+const resourceMetadataUrl = (req: { url: string; header?: (name: string) => string | undefined }) =>
+  `${resourceUrl(req)}/.well-known/oauth-protected-resource`;
 
 mcpRoute.use(
   "*",
@@ -37,8 +42,8 @@ mcpRoute.use(
 
 mcpRoute.get("/.well-known/oauth-protected-resource", (c) =>
   c.json({
-    resource: resourceUrl(c.req.url),
-    authorization_servers: [`${publicBase(c.req.url)}/api/oauth`],
+    resource: resourceUrl(c.req),
+    authorization_servers: [`${publicBase(c.req)}/api/oauth`],
     scopes_supported: [],
     bearer_methods_supported: ["header"]
   })
@@ -54,7 +59,7 @@ mcpRoute.all("/", async (c) => {
       status: 401,
       headers: {
         "Content-Type": "application/json",
-        "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl(c.req.url)}"`
+        "WWW-Authenticate": `Bearer resource_metadata="${resourceMetadataUrl(c.req)}"`
       }
     });
   }

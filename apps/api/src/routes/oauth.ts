@@ -2,16 +2,19 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, RegistrationRateLimitedError, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
+import { resolvePublicOrigin } from "../lib/origin.js";
 
 /**
  * Derived from the request, not hardcoded to production.
  *
  * RFC 8414 requires the issuer in this metadata to match the authorization
- * server URL the client was pointed at. /api/mcp advertises that URL from the
- * request origin, so hardcoding a fallback here makes the two disagree on any
- * host but production, and a strict client rejects the mismatch.
+ * server URL the client was pointed at. resolvePublicOrigin reads
+ * x-forwarded-host (set by the Cloudflare Pages worker) first, so clients
+ * reaching the API through pages.dev get a pages.dev issuer, and clients
+ * reaching vercel.app directly get a vercel.app issuer — each self-consistent.
  */
-const apiBase = (url: string) => process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(url).origin;
+const apiBase = (req: { url: string; header?: (name: string) => string | undefined }) =>
+  resolvePublicOrigin(req);
 
 export const oauthRoute = new Hono();
 
@@ -27,10 +30,10 @@ oauthRoute.use(
 /** Authorization server metadata (RFC 8414) */
 oauthRoute.get("/.well-known/oauth-authorization-server", (c) =>
   c.json({
-    issuer: `${apiBase(c.req.url)}/api/oauth`,
-    authorization_endpoint: `${apiBase(c.req.url)}/api/oauth/authorize`,
-    token_endpoint: `${apiBase(c.req.url)}/api/oauth/token`,
-    registration_endpoint: `${apiBase(c.req.url)}/api/oauth/register`,
+    issuer: `${apiBase(c.req)}/api/oauth`,
+    authorization_endpoint: `${apiBase(c.req)}/api/oauth/authorize`,
+    token_endpoint: `${apiBase(c.req)}/api/oauth/token`,
+    registration_endpoint: `${apiBase(c.req)}/api/oauth/register`,
     response_types_supported: ["code"],
     grant_types_supported: ["authorization_code", "refresh_token"],
     code_challenge_methods_supported: ["S256"],
