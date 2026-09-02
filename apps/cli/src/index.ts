@@ -9,6 +9,9 @@ import { DEFAULT_BACKUP_DIR, DEFAULT_NOTES_DIR, LocalStore } from "@work-learn/l
 
 const execFileAsync = promisify(execFile);
 const MAX_TRANSCRIPT_CHARS = 100_000;
+// Cloudflare Pages proxy, not the Vercel origin: *.vercel.app is unreachable
+// from mainland China, and pages.dev fronts the same API.
+const DEFAULT_API_URL = "https://work-learn.pages.dev";
 const [command, ...args] = process.argv.slice(2);
 
 const commands = {
@@ -298,7 +301,7 @@ function createHttpSyncClient(apiUrl: string, token: string): CloudSyncClient {
 }
 
 async function sync(args: string[]) {
-  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
+  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? DEFAULT_API_URL;
   const token = resolveToken();
 
   const store = openStore();
@@ -328,7 +331,7 @@ async function deleteItem(args: string[]) {
 }
 
 async function doctor(args: string[]) {
-  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? "https://work-learn-api.vercel.app";
+  const apiUrl = option(args, "--api-url") ?? process.env.WORK_LEARN_API_URL ?? DEFAULT_API_URL;
   const report: Record<string, unknown> = {
     node: process.version,
     cwd: process.cwd(),

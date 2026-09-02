@@ -4,6 +4,7 @@ import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptive
 import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
 import { createSupabaseServiceClient } from "./lib/supabase.js";
 import { authenticate } from "./lib/auth.js";
+import { resolvePublicOrigin } from "./lib/origin.js";
 import { mcpRoute } from "./routes/mcp.js";
 import { patsRoute } from "./routes/pats.js";
 import { oauthRoute } from "./routes/oauth.js";
@@ -25,11 +26,10 @@ app.get(
     if (!supabaseUrl || !supabaseAnonKey) {
       return c.json({ error: "Public Supabase configuration is missing" }, 500);
     }
-    // Mirrors the WORK_LEARN_PUBLIC_API_URL fallback used in the OAuth and MCP
-    // routes: an env override for production, otherwise the request origin. The
-    // web client uses this to display the correct MCP/API URL to users instead
-    // of hardcoding the production origin into the bundle.
-    const apiUrl = process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(c.req.url).origin;
+    // Resolve the public origin from the request: x-forwarded-host (set by
+    // the Cloudflare Pages worker) takes priority, then env, then request
+    // origin. This makes the URL shown to users match the entry they used.
+    const apiUrl = resolvePublicOrigin(c.req);
     return c.json({ data: { supabaseUrl, supabaseAnonKey, apiUrl } });
   }
 );

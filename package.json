@@ -2,6 +2,7 @@
   "name": "work-learn",
   "private": true,
   "packageManager": "pnpm@10.12.1",
+  "engines": { "node": ">=20 <21" },
   "scripts": {
     "dev:web": "pnpm --filter @work-learn/web dev",
     "dev:api": "pnpm --filter @work-learn/api dev",

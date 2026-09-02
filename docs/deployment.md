@@ -22,9 +22,23 @@
 - Supabase 环境变量（`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）配置在
   Vercel 项目环境变量（production / preview / development），不放入 workflow。
 - Remote MCP OAuth 还需要：
-  - `WORK_LEARN_PUBLIC_API_URL`：面向用户的 API 入口。国内网络直连 `vercel.app` 不可达（见下），
-    建议配置为 `https://work-learn.pages.dev`（Web 端展示给 Agent 的远程 MCP 地址，走 Pages 代理）。
-    未配置时回退到请求 origin。
+  - `WORK_LEARN_PUBLIC_API_URL`：**必须**配置为 `https://work-learn.pages.dev`（面向用户的唯一公开入口，
+    Cloudflare 全球可达）。这个值决定三处对外广告出去的地址：`/api/config` 的 `apiUrl`（Web「Connect an
+    agent」面板展示、并被复制进用户 Agent 配置的远程 MCP 地址）、OAuth metadata 的 `issuer`、以及
+    `/api/mcp` 匿名 401 里 `WWW-Authenticate` 的 `resource_metadata` 指针。未配置时回退到请求 origin，
+    而 `_worker.js` 代理时会删掉 `host`，回退结果同样是 Vercel origin——所以留空不等于安全。
+    ⚠️ 2026-09-02 实测该值仍是 `https://work-learn-api.vercel.app`，后果不是「issuer 不匹配」这么轻：
+    国内客户端拿到的发现指针就指向被阻断的域名，第一跳取 metadata 直接 `fetch failed`，OAuth 流程根本
+    走不到授权页。修改方式（生产环境变量，需要有 Vercel 权限的人执行）：
+    ```bash
+    vercel env rm WORK_LEARN_PUBLIC_API_URL production
+    vercel env add WORK_LEARN_PUBLIC_API_URL production   # 输入 https://work-learn.pages.dev
+    # env 变更需要重新部署才生效
+    ```
+    改完用只读自检脚本验证整条发现链路是否都留在同一入口（全 GET，不注册客户端、不写生产库）：
+    ```bash
+    node scripts/check-public-entry.mjs                   # 默认检 https://work-learn.pages.dev
+    ```
   - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn.pages.dev`
 
 ## Web（Cloudflare Pages）
@@ -47,13 +61,15 @@
   `vercel.app` 域名同样超时——是域名级阻断，与部署本身无关。
 - **产品不受影响**：Web 页面在 Cloudflare（可达），`/api/*` 由 Pages worker 代理到 Vercel
   （Cloudflare 边缘到 Vercel 通），数据直连 Supabase（可达）。
-- **受影响面**：`setup` 与 `learn` CLI 的默认 API URL（`https://work-learn-api.vercel.app`）在国内
-  直连不可达。绕过方式：统一走 `https://work-learn.pages.dev`（CF 代理入口，实测 `/api/mcp` 鉴权正常）：
+- **受影响面已消除**（2026-09-02）：`setup` 与 `learn` CLI 的默认 API URL 已由
+  `https://work-learn-api.vercel.app` 改为 `https://work-learn.pages.dev`（CF 代理入口，实测
+  `/api/mcp` 鉴权正常），国内用户不需要再手动指定入口。需要覆盖时仍可用：
   ```bash
-  learn sync --api-url https://work-learn.pages.dev
+  learn sync --api-url https://work-learn-api.vercel.app   # 海外直连后端
   # 或环境变量
   export WORK_LEARN_API_URL=https://work-learn.pages.dev
   ```
+  `_worker.js` 的代理目标 `API_ORIGIN` 仍必须是 Vercel origin，不随本次改动变化。
 - 对外文档/教程的远程 MCP 地址统一推荐 `https://work-learn.pages.dev/api/mcp`。
 - `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 仍可作为本地/CI 构建覆盖项，但生产主要依赖 API
   返回的公开配置；`SUPABASE_URL`、`SUPABASE_ANON_KEY` 必须在 Vercel 配置正确。
