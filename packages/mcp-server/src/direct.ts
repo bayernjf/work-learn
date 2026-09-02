@@ -28,8 +28,10 @@ import {
   splitIntentInputSchema,
   saveQuestionTranslationInputSchema,
   findReuseMatches,
+  findReuseCandidates,
   suggestReuse,
   suggestReuseInputSchema,
+  suggestReuseCandidatesInputSchema,
   syncIntentColumns,
   syncPracticeRecordColumns,
   syncReuseEventColumns,
@@ -245,6 +247,19 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       if (inserted.error) throw new Error(inserted.error.message);
     }
     return result;
+  },
+
+  async suggestReuseCandidates(input) {
+    requireScope(scopes, "read");
+    const parsed = suggestReuseCandidatesInputSchema.parse(input);
+    const safeText = redactSecrets(parsed.text).text;
+    const expressionRows = await supabase
+      .from("saved_expressions")
+      .select(syncSavedExpressionColumns)
+      .eq("user_id", userId);
+    const expressions = (ok(expressionRows) as Record<string, unknown>[]).map(normalizeSavedExpression);
+    const candidates = findReuseCandidates(safeText, expressions, parsed.threshold);
+    return { candidates: candidates.slice(0, parsed.limit) };
   },
 
   async getReuseNudgeSettings() {

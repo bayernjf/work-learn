@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema, type WorkLearnContext } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, suggestReuseCandidatesInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema, type WorkLearnContext } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -146,6 +146,16 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       limit: z.number().int().min(1).max(1).optional().describe("Reserved for compatibility; the product allows at most one suggestion per turn.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.suggestReuse(suggestReuseInputSchema.parse(input))) }] }));
+
+  server.registerTool("suggest_reuse_candidates", {
+    description: "Find saved expressions that are similar to the current English text but did not match via exact or elastic matching. Returns candidates for user confirmation — never records reuse automatically. Use this when the user's text seems related to something they saved but no exact match was found.",
+    inputSchema: {
+      text: z.string().describe("The user's current English text to compare against saved expressions."),
+      source: sourceSchema.optional().describe("Current agent/client source, such as codex or claude."),
+      threshold: z.number().min(0).max(1).optional().describe("Minimum Jaccard overlap on content words (0-1). Default 0.6."),
+      limit: z.number().int().min(1).max(20).optional().describe("Maximum number of candidates to return. Default 5.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.suggestReuseCandidates(suggestReuseCandidatesInputSchema.parse(input))) }] }));
 
   server.registerTool("configure_reuse_nudges", {
     description: "Update the user's reuse nudge settings. Use this when the user asks to turn same-intent expansion on or off, or asks to make nudges quieter.",
