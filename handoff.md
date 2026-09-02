@@ -91,7 +91,7 @@ Agent 中调用 Skill
 - [x] 实现远程 MCP 第一版（`POST /api/mcp`，无状态 Streamable HTTP + Bearer token），复用 `registerTools`，普通用户通过 URL + access token 连接 Agent；已用 initialize/tools/list/create_session 端到端验证（`packages/mcp-server/src/{tools,direct,http}.ts`、`apps/api/src/routes/mcp.ts`）
   - [x] Web 端生成/撤销长期 Personal Access Token（服务端只存哈希），替代短期 Supabase access token
   - [x] 第二版补 MCP OAuth 2.1 授权端点、Web consent、PKCE、refresh token rotation
-  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`、`011_pat_scopes.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`、`WORK_LEARN_WEB_URL`（`OAUTH_JWT_SECRET` 已不再使用，可从 Vercel 删掉）
+  - [x] 用户已执行 `006_personal_access_tokens.sql`、`007_oauth.sql`、`011_pat_scopes.sql`；Vercel production 已配置 `WORK_LEARN_PUBLIC_API_URL`（当前为可选回退，自定义 header `x-work-learn-entry-host` 优先，见续十六）、`WORK_LEARN_WEB_URL`（`OAUTH_JWT_SECRET` 已不再使用，可从 Vercel 删掉）
   - [x] OAuth 代码层面排查完成（见下方「OAuth 兼容性排查结论与实测清单」），并修复一处缺口：`authenticate` 现在会把 OAuth token 的 `scope` 解析后传下去（`scope=read` 的 OAuth token 同样禁止写操作），与 PAT scope 行为一致
   - [ ] 实测各 Agent 远程 MCP OAuth 兼容性（清单见下）
   - [x] 给 Personal Access Token 加 scope（`011_pat_scopes.sql`）：`read`（搜索/列表）与 `write`（保存/同步/完成复习），`write` 隐含 `read`，空 scopes 视为全量向后兼容；Web 端创建时可选「只读 / 可读可写」，只读 token 的写操作返回 403；migration 已在生产执行
@@ -99,7 +99,7 @@ Agent 中调用 Skill
 ### OAuth 兼容性排查结论与实测清单
 
 **代码层面已确认符合规范的点**
-- `issuer` 从请求 URL 推导，与 protected-resource metadata 的 `authorization_servers[0]` 完全一致，严格客户端不会因 issuer 不匹配而拒绝；
+- `issuer` 从 `resolvePublicOrigin()` 推导（优先级：`x-work-learn-entry-host` 自定义 header → `WORK_LEARN_PUBLIC_API_URL` env → 请求 URL origin），与 protected-resource metadata 的 `authorization_servers[0]` 完全一致，严格客户端不会因 issuer 不匹配而拒绝。经 pages.dev 代理时返回 pages.dev issuer，直连 vercel.app 时返回 vercel.app issuer，两个入口各自自洽（2026-09-02 方案 B，生产 12/12 验证）；
 - PKCE S256 强制，`code_challenge_methods_supported: ["S256"]`；
 - 动态注册强制 public client（`token_endpoint_auth_method: "none"`），注册响应与 metadata 一致；
 - token 端点同时支持 `application/json` 与表单编码 body，支持 `authorization_code` / `refresh_token` 两种 grant；
