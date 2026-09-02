@@ -534,6 +534,13 @@ export const suggestReuseInputSchema = z.object({
   limit: z.number().int().min(1).max(1).default(1)
 });
 
+export const suggestReuseCandidatesInputSchema = z.object({
+  text: z.string().min(1).max(10_000),
+  source: sourceSchema.optional(),
+  threshold: z.number().min(0).max(1).default(0.6),
+  limit: z.number().int().min(1).max(20).default(5)
+});
+
 export const reuseNudgeSettingsSchema = z.object({
   enabled: z.boolean().default(true),
   cooldownHours: z.number().int().min(0).max(168).default(6),
@@ -828,6 +835,7 @@ export type SyncSavedExpression = z.infer<typeof syncSavedExpressionSchema>;
 export type SyncReuseEvent = z.infer<typeof syncReuseEventSchema>;
 export type RecordReuseInput = z.infer<typeof recordReuseInputSchema>;
 export type SuggestReuseInput = z.infer<typeof suggestReuseInputSchema>;
+export type SuggestReuseCandidatesInput = z.infer<typeof suggestReuseCandidatesInputSchema>;
 export type ReuseNudgeSettings = z.infer<typeof reuseNudgeSettingsSchema>;
 export type UpdateReuseNudgeSettings = z.infer<typeof updateReuseNudgeSettingsSchema>;
 export type ListExpressionsInput = z.infer<typeof listExpressionsInputSchema>;

@@ -44,7 +44,7 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 
 已经可用的部分：
 
-- 二十个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`、`record_practice`、`get_practice_history`、`generate_adaptive_practice`；
+- 二十一个 MCP 工具：`create_session`、`save_material`、`save_question_translation`、`search_corpus`、`get_review_items`、`mark_mastered`、`snooze_review`、`generate_practice`、`get_user_patterns`、`get_reuse_summary`、`record_reuse`、`suggest_reuse`、`suggest_reuse_candidates`、`configure_reuse_nudges`、`list_expressions`、`cluster_intents`、`merge_intents`、`split_intent`、`record_practice`、`get_practice_history`、`generate_adaptive_practice`；
 - 本地优先：CLI 与 stdio MCP 默认读写本地 SQLite（`~/.work-learn/work-learn.db`），不需要 token 也不需要起 API；只有配置了 token 才转而调用线上 API；
 - 两种 MCP 形态共用同一套工具实现：本地 stdio（`packages/mcp-server`）与远程 HTTP（`POST /api/mcp`，无状态 Streamable HTTP）；
 - 三种认证方式：Supabase JWT、Personal Access Token（服务端只存哈希，可选有效期，可撤销，可设只读 / 可读可写 scope）、MCP OAuth 2.1（动态注册、PKCE、access token 为 opaque 随机串按哈希查库、refresh token 轮换、Web consent 页）；

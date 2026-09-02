@@ -17,6 +17,7 @@ import { ReviewList } from "./components/Reviews";
 import { ReuseDashboard } from "./components/ReuseDashboard";
 import { PatternsPanel } from "./components/PatternsPanel";
 import { ReuseNudgePanel } from "./components/ReuseNudgePanel";
+import { ReuseCandidatePanel } from "./components/ReuseCandidatePanel";
 import { IntentDashboard } from "./components/IntentDashboard";
 import { OAuthConsent } from "./components/OAuthConsent";
 import { corpusSummary } from "./lib/markup";
@@ -125,6 +126,7 @@ function App({ supabase, apiUrl }: { supabase: SupabaseClient; apiUrl: string })
               ? <p className="corpus-empty">{corpus.query.trim() ? t.desk.noMatchQuery(corpus.query.trim()) : t.desk.noMatchTopic}</p>
               : <>
                 <ReuseNudgePanel session={session} text={corpus.query.trim() || corpus.topic || ""} />
+                <ReuseCandidatePanel session={session} text={corpus.query.trim() || corpus.topic || ""} />
                 <MaterialList session={session} materials={corpus.pageItems} view={corpus.view} onDelete={corpus.handleDeleteMaterial} onUpdate={corpus.handleUpdateMaterial} />
                 {corpus.totalPages > 1 && (
                   <nav className="pagination" aria-label={t.desk.pageOf(corpus.safePage, corpus.totalPages)}>

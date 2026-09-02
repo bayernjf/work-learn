@@ -10,6 +10,7 @@ import {
   saveMaterialInputSchema,
   saveQuestionTranslationInputSchema,
   suggestReuseInputSchema,
+  suggestReuseCandidatesInputSchema,
   updateReuseNudgeSettingsSchema,
   listExpressionsInputSchema,
   listIntentsInputSchema,
@@ -104,6 +105,11 @@ export const suggestReuse = (config: McpConfig, input: unknown) => {
   return json(config, "/reuse/suggestions", { method: "POST", body: JSON.stringify(parsed) });
 };
 
+export const suggestReuseCandidates = (config: McpConfig, input: unknown) => {
+  const parsed = suggestReuseCandidatesInputSchema.parse(input);
+  return json(config, "/reuse/candidates", { method: "POST", body: JSON.stringify(parsed) });
+};
+
 export const getReuseNudgeSettings = (config: McpConfig) => json(config, "/reuse/settings");
 
 export const updateReuseNudgeSettings = (config: McpConfig, input: unknown) => {
@@ -168,6 +174,7 @@ export const createHttpContext = (config: McpConfig): WorkLearnContext => ({
   recordReuse: (input) => recordReuse(config, input),
   getReuseSummary: () => getReuseSummary(config),
   suggestReuse: (input) => suggestReuse(config, input),
+  suggestReuseCandidates: (input) => suggestReuseCandidates(config, input),
   getReuseNudgeSettings: () => getReuseNudgeSettings(config),
   updateReuseNudgeSettings: (input) => updateReuseNudgeSettings(config, input),
   listExpressions: (input) => listExpressions(config, input),

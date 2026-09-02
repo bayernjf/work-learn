@@ -1752,6 +1752,32 @@ code {
 .reuse-note { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--ink-2); }
 .reuse-error { color: var(--danger); }
 
+/* Reuse candidate panel (high-overlap expressions for user confirmation) */
+.reuse-candidate {
+  margin: 0 0 18px;
+  padding: 14px 18px;
+  border: 1px dashed var(--accent-soft, rgba(20,111,112,.35));
+  border-radius: 12px;
+  background: var(--surface, #fff);
+}
+.reuse-candidate-list { margin: 8px 0 0; padding-left: 0; list-style: none; display: grid; gap: 10px; }
+.reuse-candidate-item { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.reuse-candidate-text { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; flex: 1; min-width: 0; }
+.reuse-candidate-confirm {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent, #146f70);
+  background: transparent;
+  border: 1px solid var(--accent, #146f70);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.reuse-candidate-confirm:hover { background: var(--accent, #146f70); color: #fff; }
+.reuse-candidate-confirm:active { opacity: 0.8; }
+
 /* Review card reveal */
 .review-card { align-items: start; }
 .review-actions {

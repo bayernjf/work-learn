@@ -28,6 +28,8 @@ function stubClient(options?: {
   existingByNorm?: { id: string; updated_at: string } | null;
   /** Answer for the `saved_expressions` id probe: expression rows already on the cloud. */
   existingExpressionIds?: string[];
+  /** Full expression rows returned by `saved_expressions` selects (for candidate matching). */
+  expressions?: Array<{ id: string; text: string; text_norm?: string; intent_id?: string | null; created_at?: string; updated_at?: string }>;
 }) {
   const calls: Call[] = [];
 
@@ -87,6 +89,9 @@ function stubClient(options?: {
       }
       if (call.table === "saved_expressions" && options?.existingExpressionIds) {
         return Promise.resolve(resolve({ data: options.existingExpressionIds.map((id) => ({ id })), error: null }));
+      }
+      if (call.table === "saved_expressions" && options?.expressions) {
+        return Promise.resolve(resolve({ data: options.expressions, error: null }));
       }
       return Promise.resolve(resolve({ data: [], count: options?.counts?.[call.table] ?? 0, error: null }));
     };
@@ -213,6 +218,50 @@ test("read-only token can suggest reuse", async () => {
   const { client } = stubClient();
   const ctx = createDirectContext(client, USER, ["read"]);
   await ctx.suggestReuse({ text: "We should roll out a migration today." });
+});
+
+test("suggestReuseCandidates returns high-overlap expressions only", async () => {
+  const { client } = stubClient({
+    expressions: [
+      { id: "exp-1", text: "roll out a migration" },
+      { id: "exp-2", text: "cut a release" }
+    ]
+  });
+  const ctx = createDirectContext(client, USER);
+  const result = await ctx.suggestReuseCandidates({ text: "Roll out a big migration.", threshold: 0.6, limit: 5 }) as { candidates: Array<{ expressionId: string; text: string; overlap: number; reason: string }> };
+  assert.ok(Array.isArray(result.candidates));
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0]?.expressionId, "exp-1");
+  assert.ok(result.candidates[0]!.overlap >= 0.6);
+});
+
+test("suggestReuseCandidates excludes exact matches", async () => {
+  const { client } = stubClient({
+    expressions: [{ id: "exp-1", text: "roll out a migration" }]
+  });
+  const ctx = createDirectContext(client, USER);
+  const result = await ctx.suggestReuseCandidates({ text: "Roll out a migration." }) as { candidates: unknown[] };
+  assert.equal(result.candidates.length, 0);
+});
+
+test("suggestReuseCandidates respects limit", async () => {
+  const { client } = stubClient({
+    expressions: [
+      { id: "exp-1", text: "roll out a migration" },
+      { id: "exp-2", text: "roll out the feature" },
+      { id: "exp-3", text: "deploy the service" }
+    ]
+  });
+  const ctx = createDirectContext(client, USER);
+  const result = await ctx.suggestReuseCandidates({ text: "Roll out a big migration today.", limit: 1 }) as { candidates: unknown[] };
+  assert.ok(result.candidates.length <= 1);
+});
+
+test("read-only token can suggest reuse candidates", async () => {
+  const { client } = stubClient({ expressions: [] });
+  const ctx = createDirectContext(client, USER, ["read"]);
+  const result = await ctx.suggestReuseCandidates({ text: "Hello world." }) as { candidates: unknown[] };
+  assert.deepEqual(result.candidates, []);
 });
 
 test("fetchSyncSnapshot scopes every table to the user", async () => {
