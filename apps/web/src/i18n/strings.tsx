@@ -231,6 +231,9 @@ export const en = {
     nudgeUpdated: "Nudge setting saved.",
     relatedTitle: "Related saved expressions",
     relatedEmpty: "No closely related expressions yet.",
+    candidateTitle: "Similar saved expressions",
+    candidateOverlap: "overlap",
+    candidateConfirm: "Mark as reused",
   },
 
   connect: {
@@ -669,6 +672,9 @@ export const zh: Strings = {
     nudgeUpdated: "复用提示设置已保存。",
     relatedTitle: "相关已存表达",
     relatedEmpty: "暂时没有高度相关的表达。",
+    candidateTitle: "相似已存表达",
+    candidateOverlap: "匹配度",
+    candidateConfirm: "标记为已复用",
   },
 
   connect: {
