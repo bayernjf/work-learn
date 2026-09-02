@@ -58,8 +58,8 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 - ✅ `learn backup` / `learn restore --file ... --yes` 已于 2026-09-02 在隔离库实测通过（含不带 `--yes` 的护栏）；
 - ✅ 复用链路 `record_reuse` / `suggest_reuse` / `configure_reuse_nudges` / `cluster_intents`（P1-d）已于 2026-09-02 经本地 stdio MCP 真实 JSON-RPC 调用跑通（exact + 屈折 variant 两层命中、聚类后恰好 1 条建议、关闭 nudge 后为 0 条）；**云端 HTTP 路径与真实宿主客户端仍未验**；
 - 人工试用 Web 的 JSON 导出 / 导入（需登录）；
-- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）——⚠️ 先解决下一条，否则国内网络会卡在 issuer 校验；
-- **待决策**：生产 `/api/config` 实测仍返回 `apiUrl = https://work-learn-api.vercel.app`（Vercel 的 `WORK_LEARN_PUBLIC_API_URL` 未按 `docs/deployment.md` 建议改成 pages.dev），导致 Web「Connect an agent」展示的地址与 OAuth `issuer` 都指向国内不可达的入口。方案 A（改 env 为 pages.dev）/ 方案 B（issuer 跟随请求 host，代理注入 `x-forwarded-host`）见 `handoff.md`；
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
+- ✅ OAuth issuer 自洽（方案 B，2026-09-02 已部署到生产）：`_worker.js` 注入自定义 header `x-work-learn-entry-host`，API `resolvePublicOrigin()` 优先读它，pages.dev 与 vercel.app 两个入口各自返回匹配的 issuer（RFC 8414）。生产 `check-public-entry.mjs` 12/12 全过。Vercel 会覆盖标准 `x-forwarded-host`，因此用自定义 header；
 - 已暂缓：`findReuseCandidates` 接入、OAuth refresh 家族撤销。
 
 发布管道已完成（2026-08-31）：`dev` 合入 `main`（PR #50、#51）→ CI 与 Deploy API/Web 全绿 → 云端迁移

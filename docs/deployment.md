@@ -22,23 +22,11 @@
 - Supabase 环境变量（`SUPABASE_URL`、`SUPABASE_ANON_KEY`、`SUPABASE_SERVICE_ROLE_KEY`）配置在
   Vercel 项目环境变量（production / preview / development），不放入 workflow。
 - Remote MCP OAuth 还需要：
-  - `WORK_LEARN_PUBLIC_API_URL`：**必须**配置为 `https://work-learn.pages.dev`（面向用户的唯一公开入口，
-    Cloudflare 全球可达）。这个值决定三处对外广告出去的地址：`/api/config` 的 `apiUrl`（Web「Connect an
-    agent」面板展示、并被复制进用户 Agent 配置的远程 MCP 地址）、OAuth metadata 的 `issuer`、以及
-    `/api/mcp` 匿名 401 里 `WWW-Authenticate` 的 `resource_metadata` 指针。未配置时回退到请求 origin，
-    而 `_worker.js` 代理时会删掉 `host`，回退结果同样是 Vercel origin——所以留空不等于安全。
-    ⚠️ 2026-09-02 实测该值仍是 `https://work-learn-api.vercel.app`，后果不是「issuer 不匹配」这么轻：
-    国内客户端拿到的发现指针就指向被阻断的域名，第一跳取 metadata 直接 `fetch failed`，OAuth 流程根本
-    走不到授权页。修改方式（生产环境变量，需要有 Vercel 权限的人执行）：
-    ```bash
-    vercel env rm WORK_LEARN_PUBLIC_API_URL production
-    vercel env add WORK_LEARN_PUBLIC_API_URL production   # 输入 https://work-learn.pages.dev
-    # env 变更需要重新部署才生效
-    ```
-    改完用只读自检脚本验证整条发现链路是否都留在同一入口（全 GET，不注册客户端、不写生产库）：
-    ```bash
-    node scripts/check-public-entry.mjs                   # 默认检 https://work-learn.pages.dev
-    ```
+  - `WORK_LEARN_PUBLIC_API_URL`：**可选**回退值。API 的 `resolvePublicOrigin()` 优先级为
+    `x-work-learn-entry-host`（由 Pages worker 注入，见下）→ 此 env → 请求 URL origin。
+    经 pages.dev 代理访问时，worker 注入的自定义 header 优先，因此无需配置此 env；直连
+    Vercel origin 时回退到请求 origin（即 vercel.app）。两个入口各自自洽，RFC 8414 issuer
+    匹配在两边都成立。生产验证：`node scripts/check-public-entry.mjs` → 12/12 全过。
   - `WORK_LEARN_WEB_URL`：生产 Web origin，例如 `https://work-learn.pages.dev`
 
 ## Web（Cloudflare Pages）
@@ -51,6 +39,10 @@
 - Cloudflare Pages 部署包含 `apps/web/public/_worker.js`，会把同源 `/api/*` 代理到
   `https://work-learn-api.vercel.app`。浏览器只访问 `work-learn.pages.dev`，不直连 `vercel.app`，
   可避免部分网络环境下 Vercel 域名不可达导致登录页白屏。
+- `_worker.js` 代理时会删除 `host` header 并注入自定义 header `x-work-learn-entry-host` 和
+  `x-work-learn-entry-proto`（无条件覆盖客户端传入值，只信任 CF worker）。API 的 `resolvePublicOrigin()`
+  优先读这两个 header 推导公开 origin。**为什么不用标准 `x-forwarded-host`**：Vercel 边缘网络会用
+  Vercel origin 覆盖它（生产调试确认），自定义 header 不会被覆盖。
 - `_worker.js` 的代理目标读取 Pages 运行时环境变量 `API_ORIGIN`（`env.API_ORIGIN`），未配置时
   回退到内置默认值 `https://work-learn-api.vercel.app`。**已配置**：2026-08-31 经
   `wrangler pages secret put API_ORIGIN` 写入 production（value encrypted），`/api/health` 代理 200。
@@ -61,14 +53,18 @@
   `vercel.app` 域名同样超时——是域名级阻断，与部署本身无关。
 - **产品不受影响**：Web 页面在 Cloudflare（可达），`/api/*` 由 Pages worker 代理到 Vercel
   （Cloudflare 边缘到 Vercel 通），数据直连 Supabase（可达）。
-- **受影响面已消除**（2026-09-02）：`setup` 与 `learn` CLI 的默认 API URL 已由
-  `https://work-learn-api.vercel.app` 改为 `https://work-learn.pages.dev`（CF 代理入口，实测
-  `/api/mcp` 鉴权正常），国内用户不需要再手动指定入口。需要覆盖时仍可用：
-  ```bash
-  learn sync --api-url https://work-learn-api.vercel.app   # 海外直连后端
-  # 或环境变量
-  export WORK_LEARN_API_URL=https://work-learn.pages.dev
-  ```
+- **受影响面已消除**（2026-09-02）：
+  - `setup` 与 `learn` CLI 的默认 API URL 已由 `https://work-learn-api.vercel.app` 改为
+    `https://work-learn.pages.dev`（CF 代理入口，实测 `/api/mcp` 鉴权正常），国内用户不需要再手动指定入口。
+  - OAuth issuer 自洽（方案 B）：`_worker.js` 注入 `x-work-learn-entry-host`，API `resolvePublicOrigin()`
+    优先读它，经 pages.dev 访问时 issuer/metadata/apiUrl 全部为 pages.dev，直连 vercel.app 时全部为
+    vercel.app。RFC 8414 issuer 匹配在两个入口都成立，生产 `check-public-entry.mjs` 12/12 全过。
+  - 需要覆盖时仍可用：
+    ```bash
+    learn sync --api-url https://work-learn-api.vercel.app   # 海外直连后端
+    # 或环境变量
+    export WORK_LEARN_API_URL=https://work-learn.pages.dev
+    ```
   `_worker.js` 的代理目标 `API_ORIGIN` 仍必须是 Vercel origin，不随本次改动变化。
 - 对外文档/教程的远程 MCP 地址统一推荐 `https://work-learn.pages.dev/api/mcp`。
 - `VITE_SUPABASE_URL`、`VITE_SUPABASE_ANON_KEY` 仍可作为本地/CI 构建覆盖项，但生产主要依赖 API
