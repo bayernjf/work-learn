@@ -31,6 +31,7 @@ test("authenticated routes reject a missing bearer token before touching the dat
     ["POST", "/api/reuse"],
     ["GET", "/api/reuse"],
     ["POST", "/api/reuse/suggestions"],
+    ["POST", "/api/reuse/candidates"],
     ["PATCH", "/api/reuse/settings"]
   ];
   for (const [method, path] of unauthenticated) {
