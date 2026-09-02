@@ -228,7 +228,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 - [x] 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议（实测 `enabled=false` → `suggestions: []`、`suppressedReason: "disabled"`）；
 - [x] 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法（2026-09-02 全链路跑通，宿主模型分组由 Agent 完成）；
 - [x] 更保守的同义变体识别策略（三层全部完成：屈折归一化 + 功能词弹性匹配 + 候选提示，见下「屈折归一化 Variant 匹配」）；
-- `findReuseCandidates` 接入 MCP 工具 / API / Web UI（核心算法已完成并导出，待上层集成；当前不做）。
+- [x] `findReuseCandidates` 接入 MCP 工具 / API（2026-09-02 完成：MCP `suggest_reuse_candidates` + API `POST /api/reuse/candidates` + local-store + HTTP client）；Web UI 候选展示待后续迭代。
 
 ## 屈折归一化 Variant 匹配（2026-08-27）
 
@@ -257,7 +257,7 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 **第三层：候选提示（`findReuseCandidates`）**：
 - 对未命中的 expression，计算实词 Jaccard 相似度，≥0.6 返回为候选
 - 不自动记录 `reuse_event`，需上层（Web/Companion/Skill）展示给用户确认
-- 已导出 `findReuseCandidates` 和 `ReuseCandidate` 类型，MCP/API 接入待后续迭代
+- 已导出 `findReuseCandidates` 和 `ReuseCandidate` 类型；MCP/API 已接入（2026-09-02），Web UI 待后续迭代
 
 **测试**：`shared-schema` 39 个测试全过（新增 20 个），全仓库 typecheck 通过。
 

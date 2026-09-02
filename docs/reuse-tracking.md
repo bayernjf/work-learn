@@ -58,7 +58,7 @@ The current user message or document is treated as a haystack. A saved expressio
 2. **Inflectional variant**: both sides lemmatized (tense, number, comparison only), then substring match. `match_kind: variant`, confidence 0.85. Irregular verbs via lookup table; doubled-consonant and -e-drop forms handled conservatively with whitelists.
 3. **Elastic variant**: lemmatized match allowing at most one function-word difference (article/preposition/pronoun/auxiliary omission or replacement). Phrasal-verb particles (out, in, up, down, etc.) are treated as content words, not function words. `match_kind: variant`, confidence 0.7.
 
-**Candidate suggestions (`findReuseCandidates`):** expressions with content-word Jaccard overlap ≥ 0.6 that did not match via any tier are returned as candidates. These are never recorded automatically — they should be shown to the user for confirmation.
+**Candidate suggestions (`findReuseCandidates`):** expressions with content-word Jaccard overlap ≥ 0.6 that did not match via any tier are returned as candidates. These are never recorded automatically — they should be shown to the user for confirmation. **Integrated 2026-09-02**: MCP tool `suggest_reuse_candidates`, API endpoint `POST /api/reuse/candidates`, local-store `suggestReuseCandidates`, and HTTP client all implemented. Threshold (default 0.6) and limit (default 5) are configurable per call.
 
 No synonym expansion is performed at any tier; semantic matching belongs to intent clustering.
 
