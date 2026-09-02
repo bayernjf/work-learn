@@ -93,6 +93,7 @@ Agent 会拉出到期的条目逐条问你，你按 **Again / Hard / Good / Easy
 | `get_reuse_summary` | 查看主动词汇、沉睡表达、跨场景复用和最近复用事件 |
 | `record_reuse` | 检查当前英文里是否自然用到了已保存表达，并记录真实复用 |
 | `suggest_reuse` | 当前英文已命中某个保存表达时，给出同一意图下最多一个其他说法；是扩充，不是纠错 |
+| `suggest_reuse_candidates` | 找出与当前英文高度相似但未精确命中的已保存表达，返回候选供用户确认，不自动记录 |
 | `configure_reuse_nudges` | 开启/关闭复用提示，或调整冷却时间和每日上限 |
 | `list_expressions` | 列出保存表达及其意图归属，可只看未聚类表达 |
 | `cluster_intents` | 按交际目标把表达分组并持久化为意图（模型辅助分组） |

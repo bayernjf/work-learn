@@ -708,3 +708,22 @@ pnpm --filter @work-learn/shared-schema test
 - 无需改 Vercel 环境变量：`WORK_LEARN_PUBLIC_API_URL` 保持现状即可，自定义 header 优先级更高。
 
 **提交**：`94d0e3e`（cli）、`e905fac`（setup）、`8f06b1d`（worker x-forwarded-host 初版）、`a31f198`（api origin）、`e08fcef`（cli tests）、`3ac6137`（check script）、`5174fd5`（node engine）、`e407bf6`（docs）、`718c750`（改自定义 header，worker 实际未生效）、`d55c0b4`（worker 真正改用自定义 header，生产 12/12）。
+
+**续十七：`findReuseCandidates` 全链路接入（2026-09-02）**
+
+此前三层 variant 匹配的第三层（候选提示）核心算法已完成并导出，但 MCP/API/Web UI 接入被标记为暂缓。本轮完成全链路接入，MCP 工具从 20 个增至 21 个。
+
+- **shared-schema**：新增 `suggestReuseCandidatesInputSchema`（text/source/threshold 默认 0.6/limit 默认 5 最大 20），`WorkLearnContext` 接口新增 `suggestReuseCandidates`，导出 `SuggestReuseCandidatesInput` 类型。
+- **mcp-server**：`direct.ts` 实现 `suggestReuseCandidates()`（读 saved_expressions → 调 `findReuseCandidates` → 返回候选，**不自动记录** reuse_events）；`tools.ts` 注册 MCP 工具 `suggest_reuse_candidates`；`http-client.ts` 新增 `POST /reuse/candidates` 客户端方法；4 个单元测试（高重叠只返回候选、精确匹配排除、limit 生效、read-only token 可用）。
+- **local-store**：SQLite 版本 `suggestReuseCandidates()`，供本地 stdio MCP 使用。
+- **API**：新增 `POST /api/reuse/candidates` 端点，401 鉴权测试已加。
+- **Web**：
+  - `lib/api.ts`：新增 `ReuseCandidateItem` 类型、`fetchReuseCandidates`、`recordReuse`。
+  - 新增 `components/ReuseCandidatePanel.tsx`：语料库搜索/topic 页面展示高重叠候选，每个候选显示匹配度百分比和"标记为已复用"按钮；点击后调用 `record_reuse` 并从列表移除；已确认候选不会再次展示（confirmedIds 状态）；debounce 400ms。
+  - `main.tsx`：在 `ReuseNudgePanel` 旁并列展示 `ReuseCandidatePanel`。
+  - `i18n/strings.tsx`：中英文翻译（candidateTitle / candidateOverlap / candidateConfirm）。
+  - `styles.css`：虚线边框样式，与 nudge 面板（实线）视觉区分。
+- **文档**：README、mcp-agent-setup、technical-architecture、remote-mcp、cli-and-mcp、usage、product-proposal 的工具列表全部从 20 更新为 21，新增 `suggest_reuse_candidates`；reuse-tracking.md 和 handoff.md 同步最新状态。
+- **验证**：typecheck 全绿（shared-schema / mcp-server / local-store / api / web）；测试全绿（shared-schema 48、mcp-server 40 新增 4、api 8 新增 1）；Web `vite build` 成功。
+
+**提交（11 个原子提交）**：`4615699`（shared-schema schema+context）、`226722f`（mcp-server direct+tools+http-client+tests）、`dc80115`（local-store）、`a5f13c3`（api 端点+测试）、`65cf6f6`（docs MCP/API 接入）、`a39c3b8`（web API client）、`05fce4e`（web ReuseCandidatePanel+i18n+CSS+接线）、`6e8d12c`（docs Web UI 接入）、后续文档同步提交。

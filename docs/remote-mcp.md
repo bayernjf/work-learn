@@ -112,6 +112,7 @@ apps/api/src/
 - `get_reuse_summary`
 - `record_reuse`
 - `suggest_reuse`
+- `suggest_reuse_candidates`
 - `configure_reuse_nudges`
 - `list_expressions`
 - `cluster_intents`
