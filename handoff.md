@@ -697,13 +697,14 @@ pnpm --filter @work-learn/shared-schema test
 
 未动的原因：改生产环境变量属于对外共享状态，且 OAuth issuer 变更会影响所有已授权客户端，需要你先定方向。
 
-**方案 B 已完成（2026-09-02 续）**：选择方案 B（issuer 跟随请求 host），两个入口各自自洽。
+**方案 B 已完成并部署到生产（2026-09-02）**：选择方案 B（issuer 跟随请求 host），两个入口各自自洽。
 
-- `apps/web/public/_worker.js`：代理时无条件注入 `x-forwarded-host` 和 `x-forwarded-proto`（覆盖客户端传入值，只信任 CF worker）。
-- 新增 `apps/api/src/lib/origin.ts`：`resolvePublicOrigin(req)`，优先级 `x-forwarded-host` → `WORK_LEARN_PUBLIC_API_URL` env → 请求 URL origin。
+- `apps/web/public/_worker.js`：代理时无条件注入 `x-work-learn-entry-host` 和 `x-work-learn-entry-proto`（覆盖客户端传入值，只信任 CF worker）。
+  - **关键发现**：标准 `x-forwarded-host` 会被 Vercel 边缘网络覆盖为 Vercel origin（生产调试确认：收到的 `x-forwarded-host` 始终是 `work-learn-api.vercel.app`），因此改用自定义 header，Vercel 不会覆盖。
+- 新增 `apps/api/src/lib/origin.ts`：`resolvePublicOrigin(req)`，优先级 `x-work-learn-entry-host` → `WORK_LEARN_PUBLIC_API_URL` env → 请求 URL origin。
 - 三处调用点统一使用：`apps/api/src/app.ts`（`/api/config` 的 `apiUrl`）、`apps/api/src/routes/oauth.ts`（issuer + 所有 endpoint）、`apps/api/src/routes/mcp.ts`（resource URL + authorization_servers + WWW-Authenticate 指针）。
 - 效果：经 pages.dev 代理访问 → issuer/metadata/apiUrl 全部为 `https://work-learn.pages.dev`；直连 vercel.app → 全部为 `https://work-learn-api.vercel.app`。RFC 8414 issuer 匹配在两个入口都成立。
-- 验证：API `tsc --noEmit` 全绿；API 测试 8/8 全过（现有测试未传 x-forwarded-host，回退路径不变）；全仓库 8 包 typecheck 全绿。
-- 无需改 Vercel 环境变量：`WORK_LEARN_PUBLIC_API_URL` 保持现状即可，x-forwarded-host 优先级更高。
+- **生产验证**：`scripts/check-public-entry.mjs https://work-learn.pages.dev` → **12/12 全过**（apiUrl、discovery pointer、resource metadata、authorization_servers、issuer 匹配、所有 endpoint 均在 pages.dev 上）。
+- 无需改 Vercel 环境变量：`WORK_LEARN_PUBLIC_API_URL` 保持现状即可，自定义 header 优先级更高。
 
-**提交状态**：本轮改动（含方案 B）都在工作树，未 commit、未 push。
+**提交**：`94d0e3e`（cli）、`e905fac`（setup）、`8f06b1d`（worker x-forwarded-host 初版）、`a31f198`（api origin）、`e08fcef`（cli tests）、`3ac6137`（check script）、`5174fd5`（node engine）、`e407bf6`（docs）、`718c750`（改自定义 header，worker 实际未生效）、`d55c0b4`（worker 真正改用自定义 header，生产 12/12）。
