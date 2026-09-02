@@ -62,11 +62,12 @@ API Key、Bearer Token、密码、私钥和常见云平台凭证会在本地先�
 执行双向同步：拉取云端增量，推送本地未同步记录，再拉取一次结果。复习完成状态也会同步：
 
 ```bash
-learn sync --api-url https://work-learn.pages.dev
+learn sync
 ```
 
-> 中国大陆网络下 `--api-url` 建议用 `https://work-learn.pages.dev`（Cloudflare Pages 代理，可直连）；
-> 直连 `https://work-learn-api.vercel.app` 会被阻断。海外/无墙环境两者皆可。
+> 默认 API 入口是 `https://work-learn.pages.dev`（Cloudflare Pages 代理，中国大陆可直连）；
+> 直连 `https://work-learn-api.vercel.app` 在国内会被阻断。海外/无墙环境需要直连后端时用
+> `learn sync --api-url https://work-learn-api.vercel.app`，或用 `WORK_LEARN_API_URL` 覆盖。
 
 token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供。冲突策略为 last-write-wins：两端修改同一条记录时，`updated_at` 更新的一端胜出。
 
@@ -78,7 +79,7 @@ token 通过 `WORK_LEARN_ACCESS_TOKEN` 或 `WORK_LEARN_ACCESS_TOKEN_FILE` 提供
 
 ```bash
 learn doctor
-learn doctor --api-url https://work-learn.pages.dev
+learn doctor --api-url https://work-learn-api.vercel.app   # 覆盖默认的 pages.dev 代理入口
 ```
 
 ### delete

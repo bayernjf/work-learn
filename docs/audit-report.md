@@ -78,7 +78,7 @@
 
 ---
 
-## P2 — 中（4/5 已修复）
+## P2 — 中（5/5 已修复）
 
 ### P2-1 review id 漂移 → 幽灵行
 - **发现**：review 行 id 两端各自随机生成，按 `material_id` 匹配内容但 id 永不收敛；删除传播的 tombstone 带删除方自己的 review id，另一端按 id 删除落空 → 幽灵行。
@@ -130,8 +130,11 @@
 
 - 本地（环境彻底恢复后，2026-08-31）：setup 5/5、shared-schema 48/48、local-store 32/32（better-sqlite3 已能本机编译运行）、mcp-server 36/36（新增 2 条 reuse_event 孤儿探父回归）、api 51/51（含 6 条注册限流回归 + 3 条 `/api/config` 回归）；8 包 `tsc --noEmit` 全绿。
 - `local-store` 测试依赖 better-sqlite3 原生模块，本机已用 `node-gyp` 编译成功，不再以 CI 为准。
-- CI 上次运行因一条 review tombstone 旧断言失败，已修复（`d674991`），**尚未重跑**（本批改动已提交未推送）。
-- **待办**：Pages 控制台配置 `API_ORIGIN`（见 `docs/deployment.md`）。`018`/`019` 迁移已由用户于 2026-08-31 在云端执行。
+- CI 已重跑并全绿（2026-08-31）：`dev` 上 CI success（run `33383489424`），合入 `main`（PR #51，`4ad47a6`）后
+  CI（`33384777878`）、Deploy Web（`33384777891`）、Deploy API（`33384777893`）均 success；此前失败的 review
+  tombstone 旧断言已由 `d674991` 修复。
+- 部署侧待办已清空：Pages `API_ORIGIN` 于 2026-08-31 经 `wrangler pages secret put` 写入 production，
+  迁移 `018`/`019` 同日由用户在云端 Supabase 执行。
 
 ## 结论与建议
 

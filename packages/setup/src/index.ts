@@ -14,7 +14,10 @@ import {
 } from "./agents.js";
 import { detectRepoPath } from "./repo.js";
 
-const DEFAULT_API_URL = "https://work-learn-api.vercel.app";
+// Written into the agent config as WORK_LEARN_API_URL. Points at the Cloudflare
+// Pages proxy, not the Vercel origin: *.vercel.app is unreachable from mainland
+// China and pages.dev fronts the same API. Override with --api-url.
+const DEFAULT_API_URL = "https://work-learn.pages.dev";
 
 type CliFlags = {
   token?: string;
