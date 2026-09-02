@@ -53,17 +53,20 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 - Web 端语料库、每日复习、PAT 管理和 Agent 接入引导；
 - `learn` CLI：`capture`（stdin / 剪贴板采集，本地先脱敏）、`review`（SRS 间隔重复队列）、`search`（支持 `--source`/`--tag`）、`practice`（本地生成练习）、`run`（PTY 录制终端会话）、`stats`（本地库统计）、`sync`（推送本地未同步数据到云端）、`doctor`（自检）、`delete`（删除语料）、`backup`（SQLite 备份）、`restore`（SQLite 恢复，需显式 `--yes`）、`export`（按天导出 markdown）、`expressions`（列出已保存表达）、`hook`（rc-hook 自动录制安装/卸载/查看）、`nudges`（复用 nudge 配置与待推送项）。
 
-下一步（真实验证，详见 `handoff.md`「当前待执行项」）：
+下一步（真实验证，详见 `handoff.md`「当前待执行项」与「2026-09-02 续十六」）：
 
-- 人工试用 `learn backup` / `learn restore --file ... --yes`；
-- 人工试用 Web 的 JSON 导出 / 导入；
-- 真实 Agent 验证复用链路：`record_reuse` / `suggest_reuse` / `configure_reuse_nudges` / `cluster_intents`（P1-d）；
-- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）；
+- ✅ `learn backup` / `learn restore --file ... --yes` 已于 2026-09-02 在隔离库实测通过（含不带 `--yes` 的护栏）；
+- ✅ 复用链路 `record_reuse` / `suggest_reuse` / `configure_reuse_nudges` / `cluster_intents`（P1-d）已于 2026-09-02 经本地 stdio MCP 真实 JSON-RPC 调用跑通（exact + 屈折 variant 两层命中、聚类后恰好 1 条建议、关闭 nudge 后为 0 条）；**云端 HTTP 路径与真实宿主客户端仍未验**；
+- 人工试用 Web 的 JSON 导出 / 导入（需登录）；
+- 实测各 Agent 客户端的远程 MCP OAuth 兼容性（清单见 `handoff.md`「OAuth 兼容性排查结论与实测清单」）——⚠️ 先解决下一条，否则国内网络会卡在 issuer 校验；
+- **待决策**：生产 `/api/config` 实测仍返回 `apiUrl = https://work-learn-api.vercel.app`（Vercel 的 `WORK_LEARN_PUBLIC_API_URL` 未按 `docs/deployment.md` 建议改成 pages.dev），导致 Web「Connect an agent」展示的地址与 OAuth `issuer` 都指向国内不可达的入口。方案 A（改 env 为 pages.dev）/ 方案 B（issuer 跟随请求 host，代理注入 `x-forwarded-host`）见 `handoff.md`；
 - 已暂缓：`findReuseCandidates` 接入、OAuth refresh 家族撤销。
 
-发布管道已完成（2026-08-31）：`dev` 合入 `main`（PR #50）→ CI 与 Deploy API/Web 全绿 → 云端迁移
+发布管道已完成（2026-08-31）：`dev` 合入 `main`（PR #50、#51）→ CI 与 Deploy API/Web 全绿 → 云端迁移
 `018`/`019` 已执行 → Pages `API_ORIGIN` 已配置。国内网络注意：直连 `*.vercel.app` 被阻断，Agent/CLI
-入口统一走 `https://work-learn.pages.dev`（CF 代理，见 `docs/deployment.md`）。
+入口统一走 `https://work-learn.pages.dev`（CF 代理，见 `docs/deployment.md`）；`setup` 与 `learn` CLI
+的默认 API URL 已于 2026-09-02 改为该地址，无需再手动传 `--api-url`（海外要直连后端时用
+`--api-url` 或 `WORK_LEARN_API_URL` 覆盖）。
 
 测试：相关包单元测试保持全绿（详见各包 `src/*.test.ts`）。
 

@@ -217,15 +217,16 @@ CLI 与 MCP 接入说明见：[docs/cli-and-mcp.md](docs/cli-and-mcp.md)
 
 - [x] 将 `dev` 合入 `main`（PR #50，2026-08-31，`cf003ee`），CI 与 Deploy API/Web 工作流均 success；
 - [x] 云端执行迁移 `018`（`updated_at` 触发器）与 `019`（`oauth_clients.created_at` 索引）——2026-08-31 用户已在 Supabase 执行；
-- [x] 确认 API 生产可达（2026-08-31）：部署健康（Deploy API success；CF Pages 代理 `/api/health` 返回 `{"ok":true}`、`/api/mcp` 正确响应 401）；但 `*.vercel.app` 泛域名在当前网络被阻断（TCP 层不可达、DNS 正常、不存在的随机 vercel.app 域名同样超时）。**产品不受影响**：Web 前端页面在 CF、`/api/*` 由 Pages worker 代理到 Vercel、数据直连 Supabase（均可达）。⚠️ 仅 `setup`/CLI 的默认 API URL（`https://work-learn-api.vercel.app`）在国内直连不可达，需用 `--api-url https://work-learn.pages.dev` 或 `WORK_LEARN_API_URL` 走 CF 代理（实测 `https://work-learn.pages.dev/api/mcp` 鉴权正常）。后续建议：把对外文档/教程的 API 入口统一为 `https://work-learn.pages.dev`，并评估把 setup/CLI 默认 URL 改为 pages.dev。
+- [x] 确认 API 生产可达（2026-08-31）：部署健康（Deploy API success；CF Pages 代理 `/api/health` 返回 `{"ok":true}`、`/api/mcp` 正确响应 401）；但 `*.vercel.app` 泛域名在当前网络被阻断（TCP 层不可达、DNS 正常、不存在的随机 vercel.app 域名同样超时）。**产品不受影响**：Web 前端页面在 CF、`/api/*` 由 Pages worker 代理到 Vercel、数据直连 Supabase（均可达）。后续已完成：setup/CLI 默认 API URL 改为 `https://work-learn.pages.dev`（续十六），对外文档/教程统一推荐 pages.dev 入口。
+- [x] OAuth issuer 自洽（方案 B，2026-09-02）：`_worker.js` 注入 `x-forwarded-host`，API 新增 `resolvePublicOrigin` 优先读该 header，pages.dev 与 vercel.app 两个入口各自返回匹配的 issuer/metadata/apiUrl（RFC 8414）。无需改 Vercel 环境变量。
 - [x] Cloudflare Pages 配置 `API_ORIGIN = https://work-learn-api.vercel.app`（2026-08-31 经 `wrangler pages secret put` 写入 production，value encrypted；`_worker.js` 读取 `env.API_ORIGIN`，代理链路验证 `/api/health` 200）；
-- 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`；
-- 发布后可人工试用 Web 的 JSON 导出 / 导入；
-- 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达；
+- [x] 发布后可人工试用 `learn backup` / `learn restore --file ... --yes`（2026-09-02 在隔离库实测，见下「续十六」）；
+- 发布后可人工试用 Web 的 JSON 导出 / 导入（需登录，仍待人工）；
+- [x] 真实 Agent 验证 `record_reuse`：先保存一条包含 useful expression 的语料，再在后续对话中自然使用该表达（2026-09-02 经本地 stdio MCP + 隔离库跑通，exact 与屈折 variant 两层都命中；**云端 HTTP 路径未验**，需 token）；
 - [x] 用户执行 `016_user_reuse_nudge_settings.sql`；
-- 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法；
-- 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议；
-- 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法；
+- [x] 真实 Agent 验证 `suggest_reuse`：确认宿主 Skill 只在当前英文命中保存表达时给出最多一个扩充式说法（同上，实测聚类前 0 条、聚类后恰好 1 条）；
+- [x] 真实 Agent 验证 `configure_reuse_nudges`：在 Agent 内关闭后不再返回建议（实测 `enabled=false` → `suggestions: []`、`suppressedReason: "disabled"`）；
+- [x] 真实 Agent 验证 P1-d：用 `list_expressions` 拉未聚类表达，模型分组后调 `cluster_intents`，再验证 `suggest_reuse` 能返回同一意图下的其他说法（2026-09-02 全链路跑通，宿主模型分组由 Agent 完成）；
 - [x] 更保守的同义变体识别策略（三层全部完成：屈折归一化 + 功能词弹性匹配 + 候选提示，见下「屈折归一化 Variant 匹配」）；
 - `findReuseCandidates` 接入 MCP 工具 / API / Web UI（核心算法已完成并导出，待上层集成；当前不做）。
 
@@ -645,4 +646,64 @@ pnpm --filter @work-learn/shared-schema test
 
 **提交**：按原子已拆 2 个 commit——① `refactor(mcp): move the HTTP client out of index.ts into http-client.ts`（`ecc442b`，新建 http-client.ts + 删 index.ts + server.ts + package.json + http.test.ts）；② `docs: record mcp-server http client debt clearance`（`36869e5`，handoff + audit-report）。未 push。
 
-**遗留说明**：`packages/learning-skill`（零引用）、`packages/learning-core`（除 `redactSecrets` 外零引用）两个空壳包未动，属于包级重构，超出本次清债范围。
+**遗留说明（已于后续轮次关闭）**：`packages/learning-skill`、`packages/learning-core` 两个空壳包已在 `0b59fa3` / `40b862a` 删除（`git ls-files` 无跟踪文件）；磁盘上只剩 gitignore 的 `node_modules` 残留目录，`pnpm install` 会自行清理，不影响构建与测试。
+
+## 2026-09-02 续十六：默认 API 入口改 pages.dev + 复用链路/备份恢复实测
+
+**改动（代码 3 处，文档 4 处）**
+
+- `packages/setup/src/index.ts`：`DEFAULT_API_URL` → `https://work-learn.pages.dev`（写进 Agent 配置的 `WORK_LEARN_API_URL`）。
+- `apps/cli/src/index.ts`：`sync` / `doctor` 两处重复字面量收敛为一个 `DEFAULT_API_URL` 常量并指向 pages.dev；`--api-url` 与 `WORK_LEARN_API_URL` 的优先级不变。
+- **刻意不改**：`apps/web/public/_worker.js` 的 `DEFAULT_API_ORIGIN` 与 Pages 的 `API_ORIGIN`（那是代理**目标**，必须是 Vercel origin）；`.github/workflows/deploy-api.yml` 的冒烟测试（CI runner 在海外，探的就是真实 origin）。
+- 文档同步：`docs/deployment.md`（受影响面改为「已消除」）、`docs/cli-and-mcp.md`（`learn sync` 示例去掉 `--api-url`，`doctor` 示例改为演示覆盖到 Vercel origin）、`apps/api/src/routes/mcp.ts` 注释、`README.md` 发布段落。
+- `docs/audit-report.md` 三处过期项修正：P2 标题 `4/5` → `5/5`（P2-5 早已 ✅）；「CI 尚未重跑 / 本批未推送」→ 实测 `gh run list`：`dev` CI success（`33383489424`），`main` 合入 PR #51（`4ad47a6`）后 CI / Deploy Web / Deploy API 全 success（`33384777878` / `33384777891` / `33384777893`）；「待办：配置 `API_ORIGIN`」→ 已于 2026-08-31 完成。
+
+**环境修复（本机 darwin/arm64）**
+
+`better-sqlite3` 的原生模块是按 Node 22（ABI 127）编的，而项目与 CI 都锁 Node 20（`.node-version` 20.20.2、三个 workflow 均 `node-version: 20`，当前 ABI 115），导致 `local-store` 测试 31/32 因 `ERR_DLOPEN_FAILED` 失败——**与被测代码无关**。`pnpm rebuild better-sqlite3` 无输出且未生效，改为在 `.pnpm/better-sqlite3@11.10.0/.../better-sqlite3` 下 `npx node-gyp rebuild --release` 后恢复：`local-store` 32/32。
+
+**验证（本轮改动）**：8 包 `tsc --noEmit` 全绿；`pnpm -r test` setup 5/5、shared-schema 48/48、local-store 32/32、mcp-server 36/36、api 51/51，与 08-31 基线一致。
+
+**复用链路实测（本地 stdio MCP，真实 JSON-RPC，隔离库 `WORK_LEARN_DB_PATH`，无 token，12 次工具调用）**
+
+- `tools/list` → 20 个工具，与文档一致；
+- `save_material` 自动把 2 条 `usefulExpressions` 升格为 `saved_expressions`（`intentId: null`）；
+- `record_reuse` 第 1 次（两句都在文中）→ `recorded: 2`，均 `matchKind: "exact"`、`confidence: 1`；
+- `record_reuse` 第 2 次 `"We rolled out the migrations gradually last night."` → `recorded: 1`，`matchKind: "variant"`、`confidence: 0.85`——屈折归一化在真实链路里确实生效（`rolled out`/`migrations` 归一命中）；
+- `suggest_reuse` 聚类前 → `matchedExpressionIds` 有命中但 `suggestions: []`（没有同意图表达，符合「不硬凑」）；
+- `cluster_intents` 由宿主模型分组 → 建出意图 `Staged rollout`，两条表达归入；
+- `suggest_reuse` 聚类后 → **恰好 1 条**建议（`reason: "same_intent"`），符合「每轮最多一个 nudge」；
+- `configure_reuse_nudges {enabled:false}` → `suggest_reuse` 返回 `suggestions: []`、`suppressedReason: "disabled"`；改回 `true` 正常；
+- `get_reuse_summary` → `reuseEvents: 4`、`activeVocabulary: 2`、`expressionBreadth: 1`、`crossContextReuse: 1`（claude + codex 两个 source）。
+
+**backup / restore 实测（同一隔离库）**
+
+- `learn backup --out .../snapshot.db` → `backedUp: true`，附当时 counts；
+- `learn delete material --id ...` → `materials: 0`、`reviews: 0`、`tombstones: 2`（material + review 各一条），`latestUpdatedAt: null`；
+- 顺带验证 FK 语义：删除后 `learn expressions --json` 的两条表达 **保留** 且 `materialId: null`、`intentId` 不变——`9ceaa6e` 统一的 SET NULL 语义在真实 CLI 路径成立，复用历史不随语料删除丢失；
+- `learn restore --file ...`（不带 `--yes`）→ 抛错退出，`exit=1`，护栏有效；
+- `learn restore --file ... --yes` → `restored: true`，并留下安全副本 `verify.db.before-restore-<ts>`，`verified.counts` 回到基线（`materials: 1`、`reviews: 1`、`tombstones: 0`）。
+
+**新发现（需决策，未擅自改动）**：生产 `GET https://work-learn.pages.dev/api/config` 实测返回
+`apiUrl: "https://work-learn-api.vercel.app"`，说明 Vercel 上的 `WORK_LEARN_PUBLIC_API_URL` 仍是 vercel.app origin（`docs/deployment.md` 早已建议配成 pages.dev，但实际值不是）。两个后果：
+
+1. Web「Connect an agent」面板（`865b240` 后改为读 `/api/config` 的 `apiUrl`）向用户展示的是**国内不可达**的那个地址，与 README/docs 统一推荐 pages.dev 的口径不一致；
+2. `apps/api/src/routes/oauth.ts:14` 的 issuer 用同一个 `apiBase`，因此经 pages.dev 代理连接的客户端拿到的 `issuer` 是 `https://work-learn-api.vercel.app/api/oauth`，与它抓取 metadata 的 URL（pages.dev）不一致，而 RFC 8414 要求完全一致 → 严格客户端会拒绝。也就是说「OAuth 兼容性实测清单」第 1 项在国内网络下不只是没测，是**当前配置下会卡在 issuer 校验**。注意 `_worker.js` 会 `headers.delete("host")`，所以即使不设该 env，请求推导出的 origin 也是 vercel.app，同样不匹配。
+
+可选方案：
+
+- **A（最小改动）**：把 Vercel `WORK_LEARN_PUBLIC_API_URL` 改为 `https://work-learn.pages.dev` 并重新部署。代价：海外直连 `vercel.app/api/mcp` 的客户端反向出现同样的 issuer 不匹配——固定值只能选一边。
+- **B（干净）**：issuer 跟随请求 host——`_worker.js` 代理时注入 `x-forwarded-host`，API 在信任代理的前提下用它推导 `apiBase`，两个入口各自自洽。代价：动 API + worker 代码，需要补回归测试，并明确「只信任 CF 代理」的边界。
+
+未动的原因：改生产环境变量属于对外共享状态，且 OAuth issuer 变更会影响所有已授权客户端，需要你先定方向。
+
+**方案 B 已完成（2026-09-02 续）**：选择方案 B（issuer 跟随请求 host），两个入口各自自洽。
+
+- `apps/web/public/_worker.js`：代理时无条件注入 `x-forwarded-host` 和 `x-forwarded-proto`（覆盖客户端传入值，只信任 CF worker）。
+- 新增 `apps/api/src/lib/origin.ts`：`resolvePublicOrigin(req)`，优先级 `x-forwarded-host` → `WORK_LEARN_PUBLIC_API_URL` env → 请求 URL origin。
+- 三处调用点统一使用：`apps/api/src/app.ts`（`/api/config` 的 `apiUrl`）、`apps/api/src/routes/oauth.ts`（issuer + 所有 endpoint）、`apps/api/src/routes/mcp.ts`（resource URL + authorization_servers + WWW-Authenticate 指针）。
+- 效果：经 pages.dev 代理访问 → issuer/metadata/apiUrl 全部为 `https://work-learn.pages.dev`；直连 vercel.app → 全部为 `https://work-learn-api.vercel.app`。RFC 8414 issuer 匹配在两个入口都成立。
+- 验证：API `tsc --noEmit` 全绿；API 测试 8/8 全过（现有测试未传 x-forwarded-host，回退路径不变）；全仓库 8 包 typecheck 全绿。
+- 无需改 Vercel 环境变量：`WORK_LEARN_PUBLIC_API_URL` 保持现状即可，x-forwarded-host 优先级更高。
+
+**提交状态**：本轮改动（含方案 B）都在工作树，未 commit、未 push。
