@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 008: Add explanation to learning materials
+-- File: 008_material_explanation.sql
+-- Date: 2026-08-23 03:18
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Stores the confirmed 'Why:' line per material; the
+--       search function is re-created to include it. Default
+--       '' keeps older Skill copies saving.
+-- -----------------------------------------------------
 -- Migration: 008_material_explanation.sql
 -- Date: 2026-08-23
 -- The Skill asks the user to confirm a "Why:" line explaining each item, but

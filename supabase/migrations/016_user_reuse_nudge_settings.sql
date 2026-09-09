@@ -1,3 +1,12 @@
+-- =====================================================
+-- Migration 016: Add reuse nudge settings
+-- File: 016_user_reuse_nudge_settings.sql
+-- Date: 2026-08-26 13:56
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Persists per-user controls for same-intent reuse
+--       nudges: enabled flag, cooldown hours and daily limit.
+-- -----------------------------------------------------
 -- Migration: 016_user_reuse_nudge_settings.sql
 -- Date: 2026-08-26
 -- File: supabase/migrations/016_user_reuse_nudge_settings.sql

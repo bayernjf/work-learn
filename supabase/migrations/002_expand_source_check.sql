@@ -1,3 +1,12 @@
+-- =====================================================
+-- Migration 002: Expand source CHECK constraint
+-- File: 002_expand_source_check.sql
+-- Date: 2026-08-17 08:54
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Adds 'opencode', 'codex' and 'pi' to the source
+--       CHECK constraint on sessions and learning_materials.
+-- -----------------------------------------------------
 -- Migration: 002_expand_source_check.sql
 -- Date: 2026-08-17
 alter table public.sessions

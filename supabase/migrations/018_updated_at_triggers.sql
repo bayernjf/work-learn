@@ -1,3 +1,16 @@
+-- =====================================================
+-- Migration 018: Add missing updated_at triggers
+-- File: 018_updated_at_triggers.sql
+-- Date: 2026-08-30 18:19
+-- Depends on: 012_sync_timestamps.sql
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: 012 built set_updated_at() for four tables; later
+--       tables (intents, saved_expressions, user_settings)
+--       never got one, so non-sync writes left updated_at
+--       stale. practice_records and reuse_events stay
+--       append-only and untouched.
+-- -----------------------------------------------------
 -- Migration: 018_updated_at_triggers.sql
 -- Date: 2026-08-30
 -- Sync correctness: 012 built the set_updated_at() trigger for sessions,

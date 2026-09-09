@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 013: Add sync tombstones
+-- File: 013_sync_tombstones.sql
+-- Date: 2026-08-25 19:15
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Propagates deletions across devices via tombstones; a
+--       tombstone wins against a row whose updated_at is
+--       older than deleted_at.
+-- -----------------------------------------------------
 -- Migration: 013_sync_tombstones.sql
 -- Date: 2026-08-25
 -- Tombstones propagate deletions across devices using last-write-wins: a

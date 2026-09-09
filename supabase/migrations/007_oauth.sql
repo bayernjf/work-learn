@@ -1,3 +1,14 @@
+-- =====================================================
+-- Migration 007: Add OAuth 2.1 storage
+-- File: 007_oauth.sql
+-- Date: 2026-08-21 06:43
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Creates oauth_clients, oauth_authorization_codes and
+--       oauth_tokens for the MCP OAuth 2.1 authorization
+--       server. Server-only tables; the API uses the
+--       service-role key.
+-- -----------------------------------------------------
 -- Migration: 007_oauth.sql
 -- Date: 2026-08-21
 -- MCP OAuth 2.1 authorization server storage.

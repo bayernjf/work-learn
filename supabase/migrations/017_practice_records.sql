@@ -1,3 +1,12 @@
+-- =====================================================
+-- Migration 017: Add practice records
+-- File: 017_practice_records.sql
+-- Date: 2026-08-26 21:10
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Persists each completed practice attempt for the
+--       practice loop and mistake book; owner-scoped RLS.
+-- -----------------------------------------------------
 -- 017: practice records (practice loop + mistake book)
 -- Persists each completed practice attempt so the user can review mistakes and
 -- close the practice loop. Owned by auth.users via user_id, RLS-scoped.

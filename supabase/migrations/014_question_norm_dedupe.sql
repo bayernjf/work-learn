@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 014: Add normalized question for dedupe
+-- File: 014_question_norm_dedupe.sql
+-- Date: 2026-08-26 08:10
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Adds question_norm for exact-dedupe, matching the
+--       local SQLite store; cloud save skips duplicate
+--       re-asks within a session.
+-- -----------------------------------------------------
 -- Migration: 014_question_norm_dedupe.sql
 -- Date: 2026-08-26
 -- Add question_norm for exact-dedupe, matching the local SQLite store.

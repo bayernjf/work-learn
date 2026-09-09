@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 010: Add question translations
+-- File: 010_question_translations.sql
+-- Date: 2026-08-23 14:56
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Archives the user's original question plus the
+--       idiomatic English translation the agent produced.
+--       Lookup/recall only; not linked to the review queue.
+-- -----------------------------------------------------
 -- Migration: 010_question_translations.sql
 -- Date: 2026-08-23
 -- New feature: save a user's original question together with the idiomatic
