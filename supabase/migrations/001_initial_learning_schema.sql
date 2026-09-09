@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 001: Initialize learning schema
+-- File: 001_initial_learning_schema.sql
+-- Date: 2026-08-17 08:54
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Creates sessions, conversation_events,
+--       learning_materials and review_items with RLS for
+--       capturing and reviewing material from AI chats.
+-- -----------------------------------------------------
 -- Migration: 001_initial_learning_schema.sql
 -- Date: 2026-08-16
 create table if not exists public.sessions (

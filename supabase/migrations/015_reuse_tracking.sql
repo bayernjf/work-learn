@@ -1,3 +1,15 @@
+-- =====================================================
+-- Migration 015: Add reuse tracking
+-- File: 015_reuse_tracking.sql
+-- Date: 2026-08-26 12:28
+-- Depends on: 013_sync_tombstones.sql
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Creates intents, saved_expressions and append-only
+--       reuse_events; multiple expressions can share an
+--       intent as register/scene alternatives. Extends the
+--       tombstone entity check and adds the reuse counter RPC.
+-- -----------------------------------------------------
 -- Migration: 015_reuse_tracking.sql
 -- Date: 2026-08-26
 -- File: supabase/migrations/015_reuse_tracking.sql

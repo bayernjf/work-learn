@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 006: Add personal access tokens
+-- File: 006_personal_access_tokens.sql
+-- Date: 2026-08-21 06:26
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Creates personal_access_tokens storing a token prefix
+--       and hash for API authentication, with RLS for owner
+--       management.
+-- -----------------------------------------------------
 -- Migration: 006_personal_access_tokens.sql
 -- Date: 2026-08-21
 create table if not exists public.personal_access_tokens (

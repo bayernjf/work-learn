@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 009: Upgrade material search with trigrams
+-- File: 009_material_search.sql
+-- Date: 2026-08-23 03:28
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Replaces naive ILIKE search with a pg_trgm GIN index
+--       on a trigger-maintained search_text column: multi-word,
+--       CJK-friendly, and wildcard-escaped.
+-- -----------------------------------------------------
 -- Migration: 009_material_search.sql
 -- Date: 2026-08-23
 --

@@ -1,3 +1,13 @@
+-- =====================================================
+-- Migration 012: Add updated_at timestamps for sync
+-- File: 012_sync_timestamps.sql
+-- Date: 2026-08-25 19:03
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Adds updated_at to the synced tables plus a
+--       set_updated_at() trigger supporting last-write-wins
+--       bidirectional sync; review status is synced too.
+-- -----------------------------------------------------
 -- Migration: 012_sync_timestamps.sql
 -- Date: 2026-08-25
 -- Add updated_at timestamps for bidirectional sync. Sync uses stable UUIDs and

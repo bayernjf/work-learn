@@ -1,3 +1,12 @@
+-- =====================================================
+-- Migration 004: Add codebuddy to source CHECK
+-- File: 004_expand_source_codebuddy.sql
+-- Date: 2026-08-20 03:17
+-- Run: Supabase SQL Editor, execute once
+-- =====================================================
+-- Note: Adds 'codebuddy' to the source CHECK constraint on
+--       sessions and learning_materials.
+-- -----------------------------------------------------
 -- Migration: 004_expand_source_codebuddy.sql
 -- Date: 2026-08-20
 alter table public.sessions
