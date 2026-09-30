@@ -727,3 +727,23 @@ pnpm --filter @work-learn/shared-schema test
 - **验证**：typecheck 全绿（shared-schema / mcp-server / local-store / api / web）；测试全绿（shared-schema 48、mcp-server 40 新增 4、api 8 新增 1）；Web `vite build` 成功。
 
 **提交（11 个原子提交）**：`4615699`（shared-schema schema+context）、`226722f`（mcp-server direct+tools+http-client+tests）、`dc80115`（local-store）、`a5f13c3`（api 端点+测试）、`65cf6f6`（docs MCP/API 接入）、`a39c3b8`（web API client）、`05fce4e`（web ReuseCandidatePanel+i18n+CSS+接线）、`6e8d12c`（docs Web UI 接入）、后续文档同步提交。
+
+**续十八：项目级代码审计与功能清单（2026-09-30）**
+
+对全仓做了一轮独立的项目级代码审计，产出两份新文档：
+
+- [docs/code-audit.md](docs/code-audit.md)：架构与依赖边界、代码质量、安全、测试与功能正确性缺口。基线 `dev` @ `ff01066`。高危 4 项、中 11 项、低 9 项，附录含证据索引。
+- [docs/feature-inventory.md](docs/feature-inventory.md)：REST（44 端点）/ MCP（21 工具）/ CLI（15 命令）/ Web / Companion / 本地存储 / 数据模型（15 表）的全量功能点。
+
+与 [docs/audit-report.md](docs/audit-report.md)（2026-08-30 安全/同步/测试专项，P0/P1/P2 已闭环）**互补**：后者是「发现即修复」的专项跟踪留档，前者是全项目级的结构性审计。
+
+本轮最需优先处理的四项：
+
+1. **FUNC-1（功能中断）**：Web `ReuseNudgePanel` 经 `lib/api.ts:144` 传 `limit=5`，而 `suggestReuseInputSchema` 上限为 1（`shared-schema/src/index.ts:534`）→ 该面板必然 400。修复方向：前端不传 limit（用默认 1），或后端放宽上限。
+2. **SEC-1**：脱敏只覆盖保存路径；`updateMaterialSchema`、`recordPracticeInputSchema`、sync/import schema 均未挂 `redactSecrets` —— 而代码注释宣称脱敏是「密钥入库前的最后一道关」。
+3. **SEC-2**：`/api/mcp`（`routes/mcp.ts:34-39`）与 `/api/oauth`（`routes/oauth.ts:24-26`）的 CORS 反射任意 Origin 且允许 `Authorization`，无 `Vary: Origin`；`/oauth/register`、`/oauth/authorize` 未鉴权。
+4. **SEC-3**：OAuth 注册限流为全局计数且 fail-open（`lib/oauth.ts:186` `return count ?? 0`），未鉴权端点被 10 次请求即可耗尽 1 小时窗口。
+
+另记 **TEST-1**：`apps/web` 与 `apps/companion` 零测试且无 `test` 脚本，根 `pnpm test`（`pnpm -r test`）会静默跳过它们并以 0 退出——流水线给人一种「有测试守护」的错觉。
+
+顺手修正：`docs/technical-architecture-v0.1.md` 仍列着已删除的 `packages/learning-core` 与 `packages/learning-skill`（两个目录仅剩 `node_modules`，`git ls-files` 无跟踪文件），已更新为当前结构并补上 `apps/companion`。
