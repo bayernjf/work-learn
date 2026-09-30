@@ -34,6 +34,12 @@ Agent 中调用 Skill -> 整理当前对话 -> 展示抽取结果 -> MCP/API 保
 - [远程 MCP 方案](docs/remote-mcp.md)：普通用户通过 URL 连接 Agent 的远程 MCP 设计。
 - [部署](docs/deployment.md)：GitHub Actions 部署 Vercel API 与 Cloudflare Pages，以及所需 Secrets。
 
+### 审计与清单
+
+- [项目级代码审计报告](docs/code-audit.md)：架构边界、代码质量、安全、测试与功能正确性缺口（2026-09-30，基线 `ff01066`）。
+- [产品功能清单](docs/feature-inventory.md)：REST / MCP / CLI / Web / Companion / 本地存储 / 数据模型的全量功能点。
+- [专项审计修复跟踪](docs/audit-report.md)：2026-08-30 那轮安全 / 同步 / 测试专项的发现与修复记录（P0/P1/P2 已闭环）。
+
 ### 当前实施
 
 - [项目交接](handoff.md)：当前决策、待实现模块和下一步。

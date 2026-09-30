@@ -17,16 +17,19 @@ AI Agent           -> Skill / MCP / CLI
 ## 2. Monorepo 结构
 
 ```text
-apps/web          React + Vite 静态前端
-apps/api          Hono API，本地 Node 适配器 + Vercel 入口
-apps/cli          learn 命令行入口
-packages/shared-schema   Zod 输入输出协议
-packages/learning-core   学习材料领域逻辑
-packages/learning-skill  Universal Learning Skill 指令
-packages/mcp-server      Agent 工具目录和 MCP 适配边界
+apps/web                 React + Vite 静态前端
+apps/api                 Hono API，本地 Node 适配器 + Vercel 入口
+apps/cli                 learn 命令行入口
+apps/companion           Electron macOS 菜单栏应用（薄壳，复用 learn CLI）
+packages/shared-schema   Zod 输入输出协议 + 纯算法（SRS 调度、同步编排、词形还原、脱敏）
+packages/mcp-server      MCP 工具目录、stdio/HTTP 传输，以及云端 Supabase 直连 context
 packages/local-store     本地 SQLite 存储（真相源），本地优先的核心
 packages/setup           npx 一键安装器，写入各 Agent 的 MCP 配置
 ```
+
+> 已删除的空壳包：`packages/learning-core`（原「领域逻辑」，已下沉到 `shared-schema` 与 `mcp-server`）与
+> `packages/learning-skill`（零引用，Skill 实际位于 `skills/work-learn/SKILL.md`）。
+> 依赖方向：见 [code-audit.md](code-audit.md) §1.2；注意 API 的数据访问层目前仍寄居在 `packages/mcp-server/src/direct.ts`。
 
 ## 3. 首版 API 边界
 
