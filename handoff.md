@@ -336,7 +336,7 @@ Agent 接入配置见：[docs/mcp-agent-setup.md](docs/mcp-agent-setup.md)（需
 - 测试桩 `stubClient` 现在记录 `gte`/`lte` 比较算子到 `call.comparisons`（此前 `lte` 是空实现，无法断言），新增的 LWW 回归测试复用共享桩。
 - 修掉上面第 3 条的陈旧断言，并补上 id 作用域断言。
 
-**已知未覆盖**：`packages/local-store` 的约 21 个测试在本机跑不了——`better-sqlite3` 需要原生模块，预编译包下载超时、本机无 MSVC 工具链。只能靠 CI（ubuntu + Node 20 可正常构建）覆盖。
+**已知未覆盖**：~~`packages/local-store` 的约 21 个测试在本机跑不了——`better-sqlite3` 需要原生模块，预编译包下载超时、本机无 MSVC 工具链。只能靠 CI（ubuntu + Node 20 可正常构建）覆盖。~~ 已解决（2026-10-02，Node 24 升级）：预编译包在本机可正常下载，`local-store` 32/32 本机通过，见下文「续十九」。
 
 ## P0-2：practice_records 同步（2026-08-30）
 
@@ -662,6 +662,8 @@ pnpm --filter @work-learn/shared-schema test
 
 `better-sqlite3` 的原生模块是按 Node 22（ABI 127）编的，而项目与 CI 都锁 Node 20（`.node-version` 20.20.2、三个 workflow 均 `node-version: 20`，当前 ABI 115），导致 `local-store` 测试 31/32 因 `ERR_DLOPEN_FAILED` 失败——**与被测代码无关**。`pnpm rebuild better-sqlite3` 无输出且未生效，改为在 `.pnpm/better-sqlite3@11.10.0/.../better-sqlite3` 下 `npx node-gyp rebuild --release` 后恢复：`local-store` 32/32。
 
+> 2026-10-02 补：这段描述的 ABI 手工对齐已不再需要。Node 24 升级把 `better-sqlite3` 带到 12.11.1，预编译包与运行时 ABI（137）对齐，`node-gyp rebuild` 这一步不再出现，见「续十九」。
+
 **验证（本轮改动）**：8 包 `tsc --noEmit` 全绿；`pnpm -r test` setup 5/5、shared-schema 48/48、local-store 32/32、mcp-server 36/36、api 51/51，与 08-31 基线一致。
 
 **复用链路实测（本地 stdio MCP，真实 JSON-RPC，隔离库 `WORK_LEARN_DB_PATH`，无 token，12 次工具调用）**
@@ -747,3 +749,27 @@ pnpm --filter @work-learn/shared-schema test
 另记 **TEST-1**：`apps/web` 与 `apps/companion` 零测试且无 `test` 脚本，根 `pnpm test`（`pnpm -r test`）会静默跳过它们并以 0 退出——流水线给人一种「有测试守护」的错觉。
 
 顺手修正：`docs/technical-architecture-v0.1.md` 仍列着已删除的 `packages/learning-core` 与 `packages/learning-skill`（两个目录仅剩 `node_modules`，`git ls-files` 无跟踪文件），已更新为当前结构并补上 `apps/companion`。
+
+**续十九：Node 24 升级（2026-10-02）**
+
+**触发**：PR #61 合并到 `main` 后，`Deploy API to Vercel`（run `36907796333`）失败，`pnpm dlx vercel@latest build --prod` 报 `Error: Node.js Version "20.x" is discontinued and must be upgraded`。**与 #61 的内容无关**（它只改 `handoff.md`）——Vercel 侧下线 Node 20 是时间炸弹，在那次合并上引爆。同批的 CI 与 Cloudflare Pages 部署均正常；线上 API 停留在 #60 的构建，未中断，但此后每次合并到 `main` 都会卡住 API 部署。
+
+**根因**：根 `package.json` 的 `engines.node` 是 `>=20 <21`，Vercel 读它挑运行时。
+
+**改动**（commit `666f454`）：
+
+- `engines` → `>=24 <25`；`.nvmrc` → `24`；`.node-version` → `24.20.0`；三个 workflow → `node-version: 24`；`apps/api/scripts/bundle-function.mjs` 的 esbuild `target` → `node24`。
+- `better-sqlite3` `^11.8.1`（实际 11.10.0）→ `^12.11.1`。**原因**：11.x 的 GitHub release 只发布到 ABI 115/127/131（Node 20/22/23），**没有 137（Node 24）**，在 Vercel 构建里会退化成 node-gyp 源码编译。`12.0.0` 的 release notes 明写 "Add node v24 to build matrix"。
+  - **踩坑**：GitHub 上的 tag `v12.12.0` 存在，但**没发到 npm**（npm 上 12.x 最高 `12.11.1`）；而 `13.0.x` 三个版本的 GitHub release **资产数为 0**，装了要源码编译。选版本要看「npm 上存在」且「release 资产里有对应 ABI」，两个条件都要满足。
+  - 核对方法：`gh api repos/WiseLibs/better-sqlite3/releases/tags/v12.11.1 --jq '.assets[].name'`，找 `node-v137-<platform>.tar.gz`。
+- `scripts/run-tests.mjs` 加 `--test-reporter=tap`。**原因**：Node 22 把默认 reporter 从 `tap` 改成 `spec`，而该脚本用 `/^# tests ([0-9]+)/` 解析 TAP 尾部计数，不钉住 reporter 会让每次运行都报「could not read the test count」——零测试护栏变成必然失败。钉住后升级前后输出格式完全一致。
+- `.npmrc` 里 `engine-strict` 的注释更新：原先「不能开，因为 `@supabase/supabase-js` 要 >=22 而项目钉 20」的理由随升级消失（**项目此前一直在 Node 20 上跑一个声明 >=22 的依赖**）。是否开启 engine-strict 是另一个决定，本轮没动。
+
+**环境坑（本机）**：`pnpm install` 后 `packages/local-store` 仍解析到旧的 `better-sqlite3@11.10.0`——`node-linker=hoisted` 下根目录已换成 12.11.1，但 `packages/local-store/node_modules/better-sqlite3` 是一条 8 月 23 号留下的旧符号链接，指向 `.pnpm/better-sqlite3@11.10.0`，Node 就近解析先命中它。`rm -rf packages/local-store/node_modules && pnpm install` 后恢复正常。
+
+**验证（本机 darwin/arm64，Node 24.20.0）**：`pnpm install` 成功且 `better-sqlite3` 预编译包正常下载（`node-v137-darwin-arm64`）；`node -e` 冒烟通过（ABI 137）；`pnpm test` 全绿 —— setup 5、shared-schema 48、local-store 32、mcp-server 40、cli 5、api 57；`pnpm typecheck` 全绿；`pnpm build` 成功；`pnpm --filter @work-learn/api build:function` 产出 `api/[[...route]].js`（1.95 MB）。
+
+**待确认**：Vercel 侧是否真的接受 `>=24 <25` 这个范围（本机到 `vercel.com` 与 `work-learn-api.vercel.app` 均不通，无法本地复现 `vercel build`），需要下次合并到 `main` 时看 `Deploy API to Vercel` 是否转绿。
+
+**本地开发注意**：本机默认 Node 仍是 v20.20.2，需切到 24（`fnm use 24`）才能跑 `pnpm test`，否则 `better-sqlite3` 会报 `ERR_DLOPEN_FAILED`。
+
