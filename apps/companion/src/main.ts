@@ -10,7 +10,7 @@ const HOTKEY = process.env.WORK_LEARN_HOTKEY ?? "CommandOrControl+Shift+L";
 // against its TypeScript source (apps/cli/src/index.ts) — the package's build is
 // noEmit, so there is no compiled dist to spawn. This keeps the companion a thin
 // shell that reuses the existing core logic (handoff.md:124). The spawned process
-// must run under the same Node ABI that better-sqlite3 was built for (Node 22 in
+// must run under the same Node ABI that better-sqlite3 was built for (Node 24 in
 // this repo), so launch the companion from a shell that has that Node on PATH.
 function resolveLearn(): { command: string; baseArgs: string[] } {
   const override = process.env.WORK_LEARN_CLI_PATH?.trim();
