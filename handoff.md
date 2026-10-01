@@ -585,7 +585,7 @@ pnpm --filter @work-learn/shared-schema test
 
 ## 2026-08-31 续十二：`/register` 限流落地（审计剩余 P1 闭环，commits `7bef123` / `c9de8fc` / `0063fd4`）
 
-**方案**：落库计数（用户拍板；serverless 无共享存储，所有实例共用 Supabase 计数）。`oauth_clients` 已有 `created_at`，新增 `019` migration 只加 `created_at` 索引。
+**方案**：落库计数（用户决策；serverless 无共享存储，所有实例共用 Supabase 计数）。`oauth_clients` 已有 `created_at`，新增 `019` migration 只加 `created_at` 索引。
 
 **改动**：
 - `lib/oauth.ts`：`REGISTRATION_WINDOW_MS`（1h）/ `REGISTRATION_MAX_PER_WINDOW`（10，可经 `WORK_LEARN_REGISTRATION_MAX_PER_WINDOW` 覆盖）；`countRecentRegistrations`（`select count head:true .gte(created_at)`，查询失败 **fail-open**——随后 insert 同样会失败）；`checkRegistrationRateLimit`；`RegistrationRateLimitedError`；`registerClient` 增加可选 `{admin, windowMs, maxPerWindow}`（测试注入），insert 前检查、超预算抛限流错误不落库；
