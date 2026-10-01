@@ -69,7 +69,7 @@ apps/web / apps/companion / packages/setup ：零 workspace 依赖
 ### 1.4 构建、类型检查与 CI
 
 - `tsconfig.base.json`：`strict` + **`noUncheckedIndexedAccess: true`** + `isolatedModules`，这是全仓类型安全的底子。
-- CI（`.github/workflows/ci.yml`）：node 20 → `pnpm install --frozen-lockfile` → `pnpm test` → `pnpm typecheck` → `pnpm build`。**不跑 lint**（因为仓库根本没有 linter，见 TEST-2）。
+- CI（`.github/workflows/ci.yml`）：node 24 → `pnpm install --frozen-lockfile` → `pnpm test` → `pnpm typecheck` → `pnpm build`。**不跑 lint**（因为仓库根本没有 linter，见 TEST-2）。
 - 部署：`deploy-api.yml`（esbuild 打包 + Vercel prebuilt + `/api/health`、`/api/config` 冒烟 + 405 方法路由检查）、`deploy-web.yml`（Cloudflare Pages + `! grep -rq 'localhost:30'` 同域守卫）。这两条冒烟设计得很好，是本仓质量保障的亮点。
 
 ### 1.5 运行时矩阵

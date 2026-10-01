@@ -83,7 +83,7 @@ if (files.length === 0) {
 
 const result = spawnSync(
   process.execPath,
-  ["--import", "tsx", "--test"].concat(files),
+  ["--import", "tsx", "--test", "--test-reporter=tap"].concat(files),
   { stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", maxBuffer: 256 * 1024 * 1024 }
 );
 
@@ -92,6 +92,9 @@ process.stdout.write(result.stdout ?? "");
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 // The runner prints a TAP trailer; "# tests N" is the authoritative total.
+// The reporter is pinned above because Node 22 changed the default from tap to
+// spec, whose "tests N" line this parser does not read -- without the flag the
+// upgrade turns every run into a false "could not read the test count" failure.
 const counts = [...(result.stdout ?? "").matchAll(/^# tests ([0-9]+)/gm)];
 const total = counts.length > 0 ? Number(counts[counts.length - 1][1]) : null;
 

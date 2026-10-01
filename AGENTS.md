@@ -14,7 +14,7 @@ Work Learn：跨 AI Agent 的个人英语语料学习系统。把用户与 Claud
 
 ## 技术栈
 - pnpm workspace（`apps/`、`api/`、`packages/`、`skills/`、`supabase/`），`packageManager: pnpm@10.12.1`
-- Node >= 20 < 21（`engines` 锁定 20.x）
+- Node >= 24 < 25（`engines` 锁定 24.x；Vercel 已下线 20.x，见 handoff.md「Node 24 升级」）
 - TypeScript 5.7、wrangler 4.86（Cloudflare）、Vercel（`vercel.json`）、Supabase
 
 ## 常用命令
@@ -29,7 +29,7 @@ pnpm lint
 
 ## 约定
 - 包管理器是 pnpm，**不要**用 npm/yarn。
-- Node 版本锁在 20.x（`onlyBuiltDependencies: better-sqlite3、electron`），升级前先确认原生依赖兼容。
+- Node 版本锁在 24.x（`onlyBuiltDependencies: better-sqlite3、electron`），升级前先确认原生依赖有对应 ABI 的预编译包：`better-sqlite3` 的 GitHub release 资产名里带 `node-v<ABI>`（Node 24 = 137），npm 上已发布的版本号可能与 GitHub tag 对不上。
 - 文档在 `docs/`（usage、product-proposal、brand 等），落地页仓库是 `work-learn-landing`。
 - 落地页文案（MCP 工具数、接入端点、支持的 Agent 列表）依赖本仓库现状，改产品后同步更新落地页。
 
