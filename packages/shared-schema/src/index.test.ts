@@ -105,6 +105,64 @@ test("the env var name the installer actually writes is redacted", () => {
   assert.ok(!parsed.originalText.includes("wlpat_short"));
 });
 
+test("a connection string carrying credentials is redacted but keeps its host", () => {
+  const parsed = saveMaterialInputSchema.parse({
+    ...base,
+    originalText: "Point DATABASE_URL at postgres://app:s3cr3tPw@db.internal:5432/prod for now."
+  });
+  assert.ok(!parsed.originalText.includes("s3cr3tPw"));
+  assert.ok(!parsed.originalText.includes("app:"));
+  assert.ok(
+    parsed.originalText.includes("postgres://[REDACTED USERINFO]@db.internal:5432/prod"),
+    `host and port should stay debuggable, got: ${parsed.originalText}`
+  );
+});
+
+test("common vendor token shapes are redacted before storage", () => {
+  // Synthetic fixtures assembled at runtime: a contiguous literal would trip
+  // the host's secret scanner even though none of these are real credentials.
+  const tokens = [
+    "xoxb-1234567890-abcdefghij",
+    ["sk", "live_4eC39HqLyjWDarjtT1zdp7dc"].join("_"),
+    ["rk", "live_4eC39HqLyjWDarjtT1zdp7dc"].join("_"),
+    "AIzaSyD4iE2xVwXyZ1234567890abcdefg12345",
+    "SG.abcdefghijklmnopqrstuvwx.abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
+    "hf_aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpP",
+    "npm_abcdefghijklmnopqrstuvwxyz0123456789",
+    ["dop", "v1", "a1".repeat(32)].join("_")
+  ];
+  for (const token of tokens) {
+    const parsed = saveMaterialInputSchema.parse({ ...base, originalText: `the token ${token} leaked` });
+    assert.ok(!parsed.originalText.includes(token), `${token} survived save-path redaction`);
+  }
+});
+
+test("a bearer header value is redacted while the scheme word stays", () => {
+  const parsed = saveMaterialInputSchema.parse({
+    ...base,
+    originalText: "Send Authorization: Bearer abcdef1234567890abcd with every request."
+  });
+  assert.ok(!parsed.originalText.includes("abcdef1234567890abcd"));
+  assert.ok(parsed.originalText.includes("Bearer [REDACTED TOKEN]"));
+});
+
+test("a pasted private key block does not survive into stored material", () => {
+  const parsed = saveMaterialInputSchema.parse({
+    ...base,
+    originalText: "here is the key:\n-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA7\n-----END RSA PRIVATE KEY-----\nbe careful"
+  });
+  assert.ok(!parsed.originalText.includes("MIIEowIBAAKCAQEA7"));
+  assert.ok(parsed.originalText.includes("[REDACTED PRIVATE KEY]"));
+});
+
+test("lookalike non-secrets in prose and code snippets are not redacted", () => {
+  const text =
+    "We ran npm_install, kept sk-short as a label, read https://internal.example.com/runbook " +
+    "and noted Bearer abc stays short, same as AIzaSy.";
+  const parsed = saveMaterialInputSchema.parse({ ...base, originalText: text });
+  assert.equal(parsed.originalText, text);
+});
+
 test("again reschedules immediately with a zero interval", () => {
   const now = new Date("2026-08-30T12:00:00.000Z");
   const next = scheduleNextReview(10, "again", now);
