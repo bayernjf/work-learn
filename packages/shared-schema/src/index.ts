@@ -396,14 +396,23 @@ export function getLlmConfig(): LlmConfig | null {
 
 // Minimal OpenAI-compatible chat completion call using the global fetch from
 // Node 18+. Throws if the LLM is not configured or the request fails, so
-// callers can fall back to rule-based practice.
-export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
+// callers can fall back to rule-based practice. The request is bounded by an
+// 8s timeout: the API runs as a serverless function with maxDuration 10, so a
+// hanging LLM endpoint must not pin the invocation until the platform kills
+// it (review 2026-11-02 P2-3).
+export const LLM_TIMEOUT_MS = 8_000;
+
+export async function chatCompletion(
+  messages: ChatMessage[],
+  options?: { timeoutMs?: number }
+): Promise<string> {
   const config = getLlmConfig();
   if (!config) throw new Error("LLM not configured (set WORK_LEARN_LLM_BASE_URL and WORK_LEARN_LLM_API_KEY)");
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({ model: config.model, messages, temperature: 0.7, response_format: { type: "json_object" } })
+    body: JSON.stringify({ model: config.model, messages, temperature: 0.7, response_format: { type: "json_object" } }),
+    signal: AbortSignal.timeout(options?.timeoutMs ?? LLM_TIMEOUT_MS)
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");

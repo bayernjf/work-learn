@@ -752,7 +752,11 @@ export class LocalStore implements LocalSyncStore {
     try {
       const exercises = await generateAdaptivePractice({ ...parsed, context }, chatCompletion);
       return { generatedAt: new Date().toISOString(), materials: [], questions: [], exercises, mode: "adaptive" as const };
-    } catch {
+    } catch (error) {
+      // Log the real reason before degrading (stderr keeps the stdio MCP
+      // channel clean): a hanging or misconfigured LLM must be visible, not
+      // silently folded into the fallback (review 2026-11-02 P2-3).
+      console.error(`adaptive practice via LLM failed, using rule-based fallback: ${error instanceof Error ? error.message : String(error)}`);
       const fallback = this.generatePractice({ limit: parsed.count, materialId: parsed.materialId });
       return { ...fallback, mode: "adaptive_fallback" as const };
     }

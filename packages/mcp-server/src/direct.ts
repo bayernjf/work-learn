@@ -639,9 +639,12 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
     try {
       const exercises = await generateAdaptivePractice({ ...parsed, context }, chatCompletion);
       return { generatedAt: new Date().toISOString(), materials: [], questions: [], exercises, mode: "adaptive" as const };
-    } catch {
-      // LLM not configured or returned bad output: fall back to the deterministic
-      // rule-based generator so practice always works.
+    } catch (error) {
+      // LLM not configured, timed out, or returned bad output: fall back to
+      // the deterministic rule-based generator so practice always works, but
+      // log the actual reason so a broken LLM config is not silently folded
+      // into a fallback (review 2026-11-02 P2-3).
+      console.error(`adaptive practice via LLM failed, using rule-based fallback: ${error instanceof Error ? error.message : String(error)}`);
       const fallback = (await this.generatePractice({ limit: parsed.count, materialId: parsed.materialId })) as PracticeResult;
       return { ...fallback, mode: "adaptive_fallback" as const };
     }
