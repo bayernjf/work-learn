@@ -17,8 +17,9 @@ import { corsOrigin } from "../lib/cors.js";
  * token gets a 401 pointing at the protected-resource metadata, which is how it
  * discovers the authorization server and runs the OAuth flow unattended -- the
  * only path that works on a phone, where there is no local process to configure.
- * The same twenty tools as the stdio MCP server are available, but the request runs
- * inside the API function and writes to Supabase directly.
+ * The same MCP tools as the stdio server are available (both sides share
+ * registerTools), but the request runs inside the API function and writes to
+ * Supabase directly.
  */
 export const mcpRoute = new Hono();
 
