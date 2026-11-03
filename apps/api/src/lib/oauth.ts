@@ -157,32 +157,54 @@ const service = (): SupabaseClient => {
  *
  * The registration endpoint is unauthenticated and creates rows that live
  * forever (they are rendered into consent pages), so an attacker could spam it
- * to bloat the table or stockpile phishing-looking client names. Counting
- * registrations in `oauth_clients` (rather than a memory counter) works on
- * serverless because every instance shares the same database.
+ * to bloat the table or stockpile phishing-looking client names. Attempts are
+ * recorded per source IP in `oauth_registration_attempts` (migration 020) so
+ * one abusive source cannot exhaust the budget for everyone (review
+ * 2026-11-02 P1-4); a generous global backstop still bounds table growth
+ * under rotating-IP spam. Every attempt is recorded BEFORE the budget
+ * decision, so concurrent bursts are counted, and counting errors fail
+ * closed (deny) instead of waving traffic through.
  */
 export const REGISTRATION_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-export const REGISTRATION_MAX_PER_WINDOW = 10;
+export const REGISTRATION_MAX_PER_WINDOW = 10; // per source IP
+export const REGISTRATION_GLOBAL_MAX_PER_WINDOW = 100; // backstop across all sources
 
-const envMaxPerWindow = (): number => {
-  const raw = process.env.WORK_LEARN_REGISTRATION_MAX_PER_WINDOW;
-  if (!raw) return REGISTRATION_MAX_PER_WINDOW;
+const envPositiveInt = (raw: string | undefined, fallback: number): number => {
+  if (!raw) return fallback;
   const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : REGISTRATION_MAX_PER_WINDOW;
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
 };
 
-/** How many oauth_clients rows were created in the trailing window. */
-export const countRecentRegistrations = async (
+const envMaxPerWindow = (): number =>
+  envPositiveInt(process.env.WORK_LEARN_REGISTRATION_MAX_PER_WINDOW, REGISTRATION_MAX_PER_WINDOW);
+
+const envGlobalMaxPerWindow = (): number =>
+  envPositiveInt(process.env.WORK_LEARN_REGISTRATION_GLOBAL_MAX_PER_WINDOW, REGISTRATION_GLOBAL_MAX_PER_WINDOW);
+
+/** Record a registration attempt for its source IP before any budget decision. */
+export const recordRegistrationAttempt = async (admin: SupabaseClient, ip: string): Promise<void> => {
+  const { error } = await admin.from("oauth_registration_attempts").insert({ ip });
+  if (error) throw new Error(`failed to record registration attempt: ${error.message}`);
+};
+
+/**
+ * How many attempts were recorded in the trailing window, optionally narrowed
+ * to one source IP. Throws on error — a rate limiter that cannot count must
+ * deny, not fail open (review 2026-11-02 P1-4).
+ */
+export const countRecentAttempts = async (
   admin: SupabaseClient,
-  windowMs: number = REGISTRATION_WINDOW_MS
+  windowMs: number = REGISTRATION_WINDOW_MS,
+  ip?: string
 ): Promise<number> => {
   const since = new Date(Date.now() - windowMs).toISOString();
-  const { count } = await admin
-    .from("oauth_clients")
-    .select("client_id", { count: "exact", head: true })
+  let query = admin
+    .from("oauth_registration_attempts")
+    .select("id", { count: "exact", head: true })
     .gte("created_at", since);
-  // Fail-open: if the count query errors out the insert that follows will also
-  // fail, so blocking here would only turn a transient DB error into a 429.
+  if (ip !== undefined) query = query.eq("ip", ip);
+  const { count, error } = await query;
+  if (error) throw new Error(`failed to count registration attempts: ${error.message}`);
   return count ?? 0;
 };
 
@@ -192,11 +214,18 @@ export type RegistrationRateCheck =
 
 export const checkRegistrationRateLimit = async (
   admin: SupabaseClient,
+  ip: string,
   windowMs: number = REGISTRATION_WINDOW_MS,
-  maxPerWindow: number = envMaxPerWindow()
+  maxPerWindow: number = envMaxPerWindow(),
+  globalMaxPerWindow: number = envGlobalMaxPerWindow()
 ): Promise<RegistrationRateCheck> => {
-  const recent = await countRecentRegistrations(admin, windowMs);
-  if (recent >= maxPerWindow) {
+  const [forSource, global] = await Promise.all([
+    countRecentAttempts(admin, windowMs, ip),
+    countRecentAttempts(admin, windowMs)
+  ]);
+  // The current attempt is already recorded, so strict `>` keeps exactly
+  // maxPerWindow successful registrations per source and window.
+  if (forSource > maxPerWindow || global > globalMaxPerWindow) {
     return { ok: false, retryAfterSeconds: Math.ceil(windowMs / 1000) };
   }
   return { ok: true };
@@ -224,12 +253,20 @@ export const registerClient = async (
   },
   options?: {
     admin?: SupabaseClient;
+    ip?: string;
     windowMs?: number;
     maxPerWindow?: number;
+    globalMaxPerWindow?: number;
   }
 ): Promise<OAuthClient> => {
   const admin = options?.admin ?? service();
-  const rate = await checkRegistrationRateLimit(admin, options?.windowMs, options?.maxPerWindow);
+  // Record the attempt before the budget decision: the count below includes
+  // the current request, so a burst racing itself stays bounded, and every
+  // source without an identifiable IP shares the "unknown" bucket (both
+  // fail-closed, review 2026-11-02 P1-4).
+  const ip = options?.ip ?? "unknown";
+  await recordRegistrationAttempt(admin, ip);
+  const rate = await checkRegistrationRateLimit(admin, ip, options?.windowMs, options?.maxPerWindow, options?.globalMaxPerWindow);
   if (!rate.ok) throw new RegistrationRateLimitedError(rate.retryAfterSeconds);
   const client: OAuthClient = {
     client_id: randomToken(16),
