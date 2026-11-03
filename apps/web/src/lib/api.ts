@@ -141,11 +141,13 @@ export type ReuseSuggestionItem = {
   reason: "same_intent" | "scene" | "recent";
 };
 
-export const fetchReuseSuggestions = async (session: Session, text: string, limit = 5) => {
+export const fetchReuseSuggestions = async (session: Session, text: string, limit?: number) => {
   const response = await fetch(`/api/reuse/suggestions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ text, limit })
+    // suggestReuseInputSchema caps limit at 1; omit it unless a caller
+    // deliberately wants the single-suggestion default overridden.
+    body: JSON.stringify(limit === undefined ? { text } : { text, limit })
   });
   if (!response.ok) throw new Error("Could not load reuse suggestions");
   return (await response.json()) as { data: { suggestions: ReuseSuggestionItem[]; suppressedReason: string | null } };

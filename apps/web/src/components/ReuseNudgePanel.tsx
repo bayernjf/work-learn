@@ -16,7 +16,7 @@ export function ReuseNudgePanel({ session, text }: { session: Session; text: str
       setLoading(true);
       setError("");
       try {
-        const response = await fetchReuseSuggestions(session, text, 5);
+        const response = await fetchReuseSuggestions(session, text);
         if (!cancelled) setItems(response.data.suggestions);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : t.errors.load);
