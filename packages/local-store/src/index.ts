@@ -935,16 +935,18 @@ export class LocalStore implements LocalSyncStore {
   }
 
   markMastered(reviewId: string, grade: ReviewGrade = "good") {
+    // Match getReviewItems: a due snoozed item is back in the queue, so
+    // completing it must not filter on 'pending' only (review 2026-11-02 P1-3).
     const row = this.db
-      .prepare("SELECT interval_days FROM review_items WHERE id = ? AND status = 'pending'")
+      .prepare("SELECT interval_days FROM review_items WHERE id = ? AND status IN ('pending', 'snoozed')")
       .get(reviewId) as { interval_days: number } | undefined;
     if (!row) throw new Error("Review item not found or already completed");
     const { intervalDays, dueAt, mastered } = scheduleNextReview(row.interval_days ?? 0, grade);
     const result = this.db
       .prepare(
         mastered
-          ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
-          : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
+          ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status IN ('pending', 'snoozed')`
+          : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status IN ('pending', 'snoozed')`
       )
       // dueAt comes from the scheduler; writing the current time here reschedules
       // the item to be due immediately, which defeats spaced repetition entirely.

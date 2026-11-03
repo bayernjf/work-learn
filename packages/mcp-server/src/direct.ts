@@ -514,12 +514,14 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
 
   async markMastered(reviewId, grade = "good") {
     requireScope(scopes, "write");
+    // Match getReviewItems: a due snoozed item is back in the queue, so
+    // completing it must not filter on "pending" only (review 2026-11-02 P1-3).
     const current = await supabase
       .from("review_items")
       .select("interval_days")
       .eq("id", reviewId)
       .eq("user_id", userId)
-      .eq("status", "pending")
+      .in("status", ["pending", "snoozed"])
       .single();
     if (current.error) throw new Error(current.error.message);
     const prev = (current.data?.interval_days as number | undefined) ?? 0;
@@ -530,7 +532,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
         .update({ status: "completed", completed_at: new Date().toISOString(), interval_days: intervalDays })
         .eq("id", reviewId)
         .eq("user_id", userId)
-        .eq("status", "pending")
+        .in("status", ["pending", "snoozed"])
         .select()
         .single();
       return ok(result);
@@ -540,7 +542,7 @@ export const createDirectContext = (supabase: SupabaseClient, userId: string, sc
       .update({ status: "pending", due_at: dueAt, interval_days: intervalDays })
       .eq("id", reviewId)
       .eq("user_id", userId)
-      .eq("status", "pending")
+      .in("status", ["pending", "snoozed"])
       .select()
       .single();
     return ok(result);
