@@ -4,7 +4,7 @@
       "src": "api/[[...route]].js",
       "use": "@vercel/node",
       "config": {
-        "maxDuration": 10
+        "maxDuration": 30
       }
     }
   ],
