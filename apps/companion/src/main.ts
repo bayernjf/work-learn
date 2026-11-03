@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, shell, globalShortcut, Notification, clipboard, screen } from "electron";
-import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { runProcess } from "./run-process.js";
 
 const WEB_URL = process.env.WORK_LEARN_WEB_URL ?? "https://work-learn.pages.dev";
 const HOTKEY = process.env.WORK_LEARN_HOTKEY ?? "CommandOrControl+Shift+L";
@@ -25,29 +25,16 @@ interface LearnResult {
   output: string;
 }
 
+// All spawns go through runProcess (P2-4): a hung CLI/osascript is killed at
+// a hard timeout instead of living forever, and the 3s nudge loop below never
+// starts a new tick while the previous one is still running.
 function runLearn(extraArgs: string[]): Promise<LearnResult> {
   const { command, baseArgs } = resolveLearn();
-  return new Promise((resolve) => {
-    const child = spawn(command, [...baseArgs, ...extraArgs], { env: process.env });
-    let out = "";
-    let err = "";
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-    child.on("error", (e: Error) => resolve({ ok: false, output: e.message }));
-    child.on("close", (code) => resolve({ ok: code === 0, output: (out + err).trim() }));
-  });
+  return runProcess(command, [...baseArgs, ...extraArgs]);
 }
 
 function runOsascript(script: string): Promise<LearnResult> {
-  return new Promise((resolve) => {
-    const child = spawn("osascript", ["-e", script], { env: process.env });
-    let out = "";
-    let err = "";
-    child.stdout.on("data", (d: Buffer) => (out += d.toString()));
-    child.stderr.on("data", (d: Buffer) => (err += d.toString()));
-    child.on("error", (e: Error) => resolve({ ok: false, output: e.message }));
-    child.on("close", (code) => resolve({ ok: code === 0, output: (out + err).trim() }));
-  });
+  return runProcess("osascript", ["-e", script]);
 }
 
 // Ask the frontmost app to copy its current selection to the pasteboard.
@@ -204,27 +191,36 @@ function hideNudge() {
   if (nudgeWindow && nudgeWindow.isVisible()) nudgeWindow.hide();
 }
 
+let nudgeTickInFlight = false;
+
 async function tickAgentNudge() {
-  const appName = await frontmostApp();
-  const isAgent = AGENT_APPS.some((a) => appName.startsWith(a));
-  if (!isAgent) {
-    hideNudge();
-    lastNudgeKey = "";
-    return;
-  }
-  const { ok, output } = await runLearn(["expressions", "--json", "--limit", "6"]);
-  let expressions: string[] = [];
-  if (ok) {
-    try {
-      expressions = (JSON.parse(output) as Array<{ text: string }>).map((e) => e.text).filter(Boolean);
-    } catch {
-      /* ignore malformed output */
+  // In-flight guard (P2-4): a slow tick must never stack on the previous one.
+  if (nudgeTickInFlight) return;
+  nudgeTickInFlight = true;
+  try {
+    const appName = await frontmostApp();
+    const isAgent = AGENT_APPS.some((a) => appName.startsWith(a));
+    if (!isAgent) {
+      hideNudge();
+      lastNudgeKey = "";
+      return;
     }
+    const { ok, output } = await runLearn(["expressions", "--json", "--limit", "6"]);
+    let expressions: string[] = [];
+    if (ok) {
+      try {
+        expressions = (JSON.parse(output) as Array<{ text: string }>).map((e) => e.text).filter(Boolean);
+      } catch {
+        /* ignore malformed output */
+      }
+    }
+    const key = expressions.join("|");
+    if (key === lastNudgeKey) return;
+    lastNudgeKey = key;
+    showNudge(expressions);
+  } finally {
+    nudgeTickInFlight = false;
   }
-  const key = expressions.join("|");
-  if (key === lastNudgeKey) return;
-  lastNudgeKey = key;
-  showNudge(expressions);
 }
 
 function startAgentNudgeLoop() {

@@ -9,6 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsc -p tsconfig.json && electron .",
     "start": "electron .",
+    "test": "node ../../scripts/run-tests.mjs \"src/*.test.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
