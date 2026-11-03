@@ -14,6 +14,7 @@ import {
   ReviewItem
 } from "../api";
 import { facetCounts } from "../markup";
+import { pageWindow, sortMaterials, type CorpusSort } from "../corpus";
 import { useI18n } from "../../i18n/context";
 
 export function useCorpus(session: Session | null) {
@@ -25,7 +26,7 @@ export function useCorpus(session: Session | null) {
   const [topic, setTopic] = useState<string | null>(null);
   const [source, setSource] = useState<string | null>(null);
   const [tag, setTag] = useState<string | null>(null);
-  const [sort, setSort] = useState<"newest" | "oldest" | "topic" | "source">("newest");
+  const [sort, setSort] = useState<CorpusSort>("newest");
   const [view, setView] = useState<"card" | "list">("card");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(12);
@@ -111,30 +112,12 @@ export function useCorpus(session: Session | null) {
   const visible = useMemo(() => {
     const base = results ?? materials;
     const filtered = topic ? base.filter((material) => material.topic === topic) : base;
-    const sorted = [...filtered];
-    switch (sort) {
-      case "oldest":
-        sorted.sort((a, b) => a.created_at.localeCompare(b.created_at));
-        break;
-      case "topic":
-        sorted.sort((a, b) => a.topic.localeCompare(b.topic));
-        break;
-      case "source":
-        sorted.sort((a, b) => a.source.localeCompare(b.source));
-        break;
-      case "newest":
-      default:
-        sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
-        break;
-    }
-    return sorted;
+    return sortMaterials(filtered, sort);
   }, [results, materials, topic, sort]);
 
   useEffect(() => { setPage(1); }, [query, source, tag, topic, sort, view, pageSize]);
 
-  const totalPages = Math.max(1, Math.ceil(visible.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const pageItems = visible.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const { totalPages, safePage, items: pageItems } = pageWindow(visible, page, pageSize);
   const visibleQuestions = questionResults ?? questions;
   const empty = materials.length === 0 && questions.length === 0;
 
