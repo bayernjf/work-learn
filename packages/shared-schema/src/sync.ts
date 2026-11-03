@@ -92,6 +92,48 @@ export type SyncReport = {
   pulledAfter: SyncPushCounts;
 };
 
+/**
+ * Push in bounded chunks so a large first sync cannot run past the serverless
+ * function's duration limit (vercel.json maxDuration). Each chunk is stamped
+ * synced as soon as the cloud acknowledges it, so a timeout midway leaves the
+ * confirmed rows marked and the rest pending: the next sync resumes instead of
+ * replaying the whole batch or silently dropping it.
+ */
+export const DEFAULT_PUSH_CHUNK_SIZE = 25;
+
+export type SyncRunOptions = {
+  /** Maximum rows sent to `cloud.push` per request. */
+  pushChunkSize?: number;
+};
+
+/** Raised when a chunk fails after earlier chunks were already confirmed. */
+export class SyncPartialPushError extends Error {
+  readonly pushed: SyncPushCounts;
+  readonly remaining: number;
+  readonly completedChunks: number;
+  readonly totalChunks: number;
+
+  constructor(input: {
+    cause: unknown;
+    pushed: SyncPushCounts;
+    remaining: number;
+    completedChunks: number;
+    totalChunks: number;
+  }) {
+    const reason = input.cause instanceof Error ? input.cause.message : String(input.cause);
+    super(
+      `Push failed after ${input.completedChunks}/${input.totalChunks} chunks: ${reason}. ` +
+        `${input.remaining} rows remain local and will resume on the next sync.`,
+      { cause: input.cause }
+    );
+    this.name = "SyncPartialPushError";
+    this.pushed = input.pushed;
+    this.remaining = input.remaining;
+    this.completedChunks = input.completedChunks;
+    this.totalChunks = input.totalChunks;
+  }
+}
+
 const emptyCounts = (): SyncPushCounts => ({
   sessions: 0,
   materials: 0,
@@ -122,35 +164,127 @@ const pullStep = async (local: LocalSyncStore, cloud: CloudSyncClient): Promise<
   return applied;
 };
 
-const pushStep = async (local: LocalSyncStore, cloud: CloudSyncClient): Promise<SyncPushCounts> => {
+const emptyBatch = (): SyncBatchInput => ({
+  sessions: [],
+  materials: [],
+  questions: [],
+  reviews: [],
+  intents: [],
+  expressions: [],
+  reuseEvents: [],
+  practiceRecords: [],
+  tombstones: []
+});
+
+/**
+ * Dependency order matters: tombstones must be applied before rows, and
+ * sessions before the materials that reference them. Chunking by this order
+ * keeps every FK available by the time a child row is pushed.
+ */
+const SYNC_FIELDS = [
+  "tombstones",
+  "sessions",
+  "materials",
+  "questions",
+  "reviews",
+  "intents",
+  "expressions",
+  "reuseEvents",
+  "practiceRecords"
+] as const;
+
+/**
+ * Split a batch into chunks of at most `maxRows` total rows, preserving the
+ * dependency order above. Exported so the batching contract is testable.
+ */
+export const chunkBatch = (batch: SyncBatchInput, maxRows: number): SyncBatchInput[] => {
+  if (!Number.isInteger(maxRows) || maxRows < 1) {
+    throw new RangeError(`pushChunkSize must be a positive integer, got ${maxRows}`);
+  }
+  const chunks: SyncBatchInput[] = [];
+  let current = emptyBatch();
+  let rowsInCurrent = 0;
+  const flush = () => {
+    if (rowsInCurrent === 0) return;
+    chunks.push(current);
+    current = emptyBatch();
+    rowsInCurrent = 0;
+  };
+  for (const field of SYNC_FIELDS) {
+    for (const row of batch[field]) {
+      if (rowsInCurrent === maxRows) flush();
+      (current[field] as unknown[]).push(row);
+      rowsInCurrent += 1;
+    }
+  }
+  flush();
+  return chunks;
+};
+
+const markSyncedFor = (batch: SyncBatchInput): MarkSyncedInput => ({
+  sessions: batch.sessions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  materials: batch.materials.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  questions: batch.questions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  reviews: batch.reviews.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  intents: batch.intents.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  expressions: batch.expressions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
+  reuseEvents: batch.reuseEvents.map((row) => row.id),
+  practiceRecords: batch.practiceRecords.map((row) => row.id),
+  tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
+});
+
+const addCounts = (total: SyncPushCounts, next: SyncPushCounts) => {
+  for (const field of SYNC_FIELDS) total[field] += next[field];
+};
+
+const pushStep = async (
+  local: LocalSyncStore,
+  cloud: CloudSyncClient,
+  options: SyncRunOptions
+): Promise<SyncPushCounts> => {
   const batch = local.unsynced();
-  if (countBatch(batch) === 0) return emptyCounts();
-  const pushed = await cloud.push(batch);
-  // Each mutable row is stamped with the exact version that was pushed: a row
-  // edited while the request was in flight keeps its unsynced status and is
-  // picked up by the next sync instead of losing the newer edit.
-  local.markSynced({
-    sessions: batch.sessions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    materials: batch.materials.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    questions: batch.questions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    reviews: batch.reviews.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    intents: batch.intents.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    expressions: batch.expressions.map((row) => ({ id: row.id, updatedAt: row.updatedAt })),
-    reuseEvents: batch.reuseEvents.map((row) => row.id),
-    practiceRecords: batch.practiceRecords.map((row) => row.id),
-    tombstones: batch.tombstones.map((row) => ({ id: row.id, entity: row.entity }))
-  });
+  const chunks = chunkBatch(batch, options.pushChunkSize ?? DEFAULT_PUSH_CHUNK_SIZE);
+  if (chunks.length === 0) return emptyCounts();
+
+  const pushed = emptyCounts();
+  for (let index = 0; index < chunks.length; index += 1) {
+    const chunk = chunks[index]!;
+    try {
+      // Count only what the cloud confirmed, then stamp exactly that chunk.
+      // A row edited while its chunk was in flight keeps its newer updatedAt
+      // and stays unsynced for the next run.
+      addCounts(pushed, await cloud.push(chunk));
+      local.markSynced(markSyncedFor(chunk));
+    } catch (error) {
+      // Chunks before this one are already confirmed and marked; this chunk
+      // and every later one stay unsynced locally. Surfacing the partial
+      // progress (rather than swallowing it) keeps a timeout from looking like
+      // data loss and makes the resume point explicit.
+      const remaining = chunks.slice(index).reduce((sum, item) => sum + countBatch(item), 0);
+      throw new SyncPartialPushError({
+        cause: error,
+        pushed: { ...pushed },
+        remaining,
+        completedChunks: index,
+        totalChunks: chunks.length
+      });
+    }
+  }
   return pushed;
 };
 
 /**
  * The one sync orchestration, shared by every transport: pull the cloud delta,
- * push local changes, then pull again so the local store converges with the
- * writes just pushed.
+ * push local changes in bounded chunks, then pull again so the local store
+ * converges with the writes just pushed.
  */
-export const runSync = async (local: LocalSyncStore, cloud: CloudSyncClient): Promise<SyncReport> => {
+export const runSync = async (
+  local: LocalSyncStore,
+  cloud: CloudSyncClient,
+  options: SyncRunOptions = {}
+): Promise<SyncReport> => {
   const pulledBefore = await pullStep(local, cloud);
-  const pushed = await pushStep(local, cloud);
+  const pushed = await pushStep(local, cloud, options);
   const pulledAfter = await pullStep(local, cloud);
   return { pulledBefore, pushed, pulledAfter };
 };
