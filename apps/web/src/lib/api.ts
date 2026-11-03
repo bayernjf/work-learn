@@ -3,7 +3,7 @@ import { activeStrings } from "../i18n/strings";
 
 export type LearningMaterial = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   topic: string;
   source: string;
   original_text: string;
@@ -41,7 +41,7 @@ export const fetchMaterials = async (session: Session, query = "", filters: Corp
 
 export type QuestionTranslation = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   source: string;
   question: string;
   translation: string;
@@ -419,7 +419,9 @@ export type PortableCorpus = {
   sessions: Array<{ id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>;
   materials: Array<{
     id: string;
-    sessionId: string;
+    // Nullable like syncMaterialSchema: orphan materials (session deleted)
+    // export with sessionId null and no synthetic session entry (P2-10).
+    sessionId: string | null;
     source: string;
     topic: string;
     originalText: string;
@@ -434,7 +436,7 @@ export type PortableCorpus = {
   }>;
   questionTranslations: Array<{
     id: string;
-    sessionId: string;
+    sessionId: string | null;
     source: string;
     question: string;
     translation: string;

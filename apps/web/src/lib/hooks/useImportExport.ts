@@ -21,6 +21,11 @@ export function useImportExport(session: Session | null, corpus: {
     const exportedAt = new Date().toISOString();
     const sessions = new Map<string, { id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>();
     for (const material of corpus.materials) {
+      // Orphan materials (session deleted, FK set null) must not synthesize a
+      // session with id null — the import schema requires a non-empty id and
+      // would reject the whole file (review 2026-11-02 P2-10). The material
+      // itself exports fine with sessionId: null.
+      if (material.session_id === null) continue;
       sessions.set(material.session_id, {
         id: material.session_id,
         source: material.source,
@@ -30,6 +35,7 @@ export function useImportExport(session: Session | null, corpus: {
       });
     }
     for (const question of corpus.questions) {
+      if (question.session_id === null) continue;
       if (!sessions.has(question.session_id)) sessions.set(question.session_id, {
         id: question.session_id,
         source: question.source,
