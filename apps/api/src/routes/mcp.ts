@@ -5,6 +5,7 @@ import { handleMcpHttpRequest } from "@work-learn/mcp-server/http";
 import { createSupabaseServiceClient } from "../lib/supabase.js";
 import { authenticate } from "../lib/auth.js";
 import { resolvePublicOrigin } from "../lib/origin.js";
+import { corsOrigin } from "../lib/cors.js";
 
 /**
  * Remote MCP endpoint (Streamable HTTP, stateless).
@@ -31,7 +32,7 @@ const resourceMetadataUrl = (req: { url: string; header?: (name: string) => stri
 mcpRoute.use(
   "*",
   cors({
-    origin: (origin) => origin ?? "*",
+    origin: corsOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type", "Mcp-Session-Id"],
     // WWW-Authenticate carries the discovery pointer below. Without exposing it, a

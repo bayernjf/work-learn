@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, RegistrationRateLimitedError, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 import { resolvePublicOrigin } from "../lib/origin.js";
+import { corsOrigin } from "../lib/cors.js";
 
 /**
  * Derived from the request, not hardcoded to production.
@@ -21,7 +22,7 @@ export const oauthRoute = new Hono();
 oauthRoute.use(
   "*",
   cors({
-    origin: (origin) => origin ?? "*",
+    origin: corsOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type"]
   })
