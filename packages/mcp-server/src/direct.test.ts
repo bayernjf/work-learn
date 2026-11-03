@@ -179,6 +179,19 @@ test("markMastered cannot complete another user's review item", async () => {
   );
 });
 
+test("markMastered matches pending and snoozed items, like the review queue", async () => {
+  const { client, calls } = stubClient();
+  await createDirectContext(client, USER).markMastered("review-id");
+  // P1-3: a due snoozed item reappears in getReviewItems; completing it must
+  // not filter on "pending" only, or the item is stuck forever.
+  const writers = calls.filter((call) => (call.verb === "select" || call.verb === "update") && call.table === "review_items");
+  assert.ok(writers.length >= 2, "markMastered must select the interval and update the row");
+  for (const call of writers) {
+    const status = call.filters.find(([column]) => column === "status");
+    assert.deepEqual(status?.[1], ["pending", "snoozed"]);
+  }
+});
+
 test("no read hands the internal search column to a client", async () => {
   const { client, calls } = stubClient();
   const ctx = createDirectContext(client, USER);
