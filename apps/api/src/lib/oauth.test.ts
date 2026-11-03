@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, validateClientName, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken, checkRegistrationRateLimit, countRecentRegistrations, registerClient, RegistrationRateLimitedError, REGISTRATION_WINDOW_MS } from "./oauth.js";
+import { randomToken, verifyOAuthToken, isOAuthAccessToken, OAUTH_ACCESS_PREFIX, validateRedirectUris, validateClientName, resolveIssuedScope, DEFAULT_OAUTH_SCOPE, exchangeAuthorizationCode, rotateRefreshToken, checkRegistrationRateLimit, countRecentAttempts, registerClient, RegistrationRateLimitedError, REGISTRATION_WINDOW_MS } from "./oauth.js";
 
 const USER = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 
@@ -276,28 +276,43 @@ test("validateRedirectUris collapses duplicates", () => {
 
 // --- registration rate limiting ---
 
-/** Admin stub for the registration flow: answers the window count and records inserts. */
+/**
+ * Table-aware admin stub for the registration flow: records inserts per table
+ * and answers attempt counts, narrowed to the source ip when the query filters
+ * on it (the real PostgREST builder is thenable in any chain order).
+ */
 function stubRegistration(
-  count: number,
+  counts: { forIp?: number; global?: number },
   options: { countError?: boolean } = {}
-): { admin: SupabaseClient; inserted: Array<Record<string, unknown>> } {
-  const inserted: Array<Record<string, unknown>> = [];
+): { admin: SupabaseClient; clients: Array<Record<string, unknown>>; attempts: Array<Record<string, unknown>> } {
+  const clients: Array<Record<string, unknown>> = [];
+  const attempts: Array<Record<string, unknown>> = [];
   const admin = {
     from(table: string) {
       const builder: Record<string, unknown> = {};
-      builder.select = (_column: string, _opts: unknown) => {
-        builder.gte = async () =>
-          Promise.resolve(options.countError ? { count: null, error: new Error("boom") } : { count, error: null });
+      let byIp = false;
+      builder.select = (_column: string, _opts: unknown) => builder;
+      builder.gte = () => builder;
+      builder.eq = (column: string, _value: unknown) => {
+        if (column === "ip") byIp = true;
         return builder;
       };
+      builder.then = (resolve: (result: { count: number | null; error: unknown }) => unknown) =>
+        Promise.resolve(
+          resolve(
+            options.countError
+              ? { count: null, error: new Error("boom") }
+              : { count: (byIp ? counts.forIp : counts.global) ?? 0, error: null }
+          )
+        );
       builder.insert = async (payload: Record<string, unknown>) => {
-        inserted.push(payload);
+        (table === "oauth_registration_attempts" ? attempts : clients).push(payload);
         return Promise.resolve({ data: null, error: null });
       };
       return builder;
     }
   } as unknown as SupabaseClient;
-  return { admin, inserted };
+  return { admin, clients, attempts };
 }
 
 const registrationInput = {
@@ -305,41 +320,63 @@ const registrationInput = {
   client_name: "Test Agent"
 };
 
-test("countRecentRegistrations asks for oauth_clients rows in the window", async () => {
-  const { admin } = stubRegistration(3);
-  assert.equal(await countRecentRegistrations(admin, 60_000), 3);
+test("countRecentAttempts counts attempts in the window, narrowed to the source ip when given", async () => {
+  const { admin } = stubRegistration({ forIp: 3, global: 40 });
+  assert.equal(await countRecentAttempts(admin, 60_000, "1.2.3.4"), 3);
+  assert.equal(await countRecentAttempts(admin, 60_000), 40);
 });
 
-test("countRecentRegistrations fails open when the count query errors", async () => {
-  const { admin } = stubRegistration(0, { countError: true });
-  assert.equal(await countRecentRegistrations(admin, 60_000), 0);
+test("countRecentAttempts fails closed when the count query errors", async () => {
+  const { admin } = stubRegistration({}, { countError: true });
+  await assert.rejects(countRecentAttempts(admin, 60_000), /failed to count registration attempts/);
 });
 
-test("registrations below the window budget are allowed", async () => {
-  const { admin } = stubRegistration(9);
-  assert.deepEqual(await checkRegistrationRateLimit(admin, REGISTRATION_WINDOW_MS, 10), { ok: true });
+test("registrations below both budgets are allowed", async () => {
+  const { admin } = stubRegistration({ forIp: 9, global: 99 });
+  assert.deepEqual(await checkRegistrationRateLimit(admin, "1.2.3.4", REGISTRATION_WINDOW_MS, 10, 100), { ok: true });
 });
 
-test("registrations at the window budget are rejected with a retry hint", async () => {
-  const { admin } = stubRegistration(10);
-  const check = await checkRegistrationRateLimit(admin, REGISTRATION_WINDOW_MS, 10);
+test("a source at its per-ip budget is rejected with a retry hint", async () => {
+  const { admin } = stubRegistration({ forIp: 11, global: 11 });
+  const check = await checkRegistrationRateLimit(admin, "1.2.3.4", REGISTRATION_WINDOW_MS, 10, 100);
   assert.equal(check.ok, false);
   if (!check.ok) assert.equal(check.retryAfterSeconds, REGISTRATION_WINDOW_MS / 1000);
 });
 
-test("registerClient inserts when the budget allows", async () => {
-  const { admin, inserted } = stubRegistration(0);
-  const client = await registerClient(registrationInput, { admin });
-  assert.ok(client.client_id.length > 0);
-  assert.equal(inserted.length, 1);
-  assert.equal(inserted[0]?.client_id, client.client_id);
-  assert.deepEqual(inserted[0]?.redirect_uris, ["https://app.example.com/cb"]);
+test("one abusive source cannot exhaust the budget for a different source", async () => {
+  const { admin } = stubRegistration({ forIp: 0, global: 50 });
+  const check = await checkRegistrationRateLimit(admin, "5.6.7.8", REGISTRATION_WINDOW_MS, 10, 100);
+  assert.equal(check.ok, true);
 });
 
-test("registerClient throws a rate-limit error without inserting when the budget is exhausted", async () => {
-  const { admin, inserted } = stubRegistration(10);
-  await assert.rejects(registerClient(registrationInput, { admin }), RegistrationRateLimitedError);
-  assert.equal(inserted.length, 0);
+test("the global backstop rejects when the whole window is flooded", async () => {
+  const { admin } = stubRegistration({ forIp: 0, global: 101 });
+  const check = await checkRegistrationRateLimit(admin, "9.9.9.9", REGISTRATION_WINDOW_MS, 10, 100);
+  assert.equal(check.ok, false);
+});
+
+test("registerClient records the attempt, then inserts when the budget allows", async () => {
+  const { admin, clients, attempts } = stubRegistration({ forIp: 1, global: 1 });
+  const client = await registerClient(registrationInput, { admin, ip: "1.2.3.4" });
+  assert.ok(client.client_id.length > 0);
+  assert.deepEqual(attempts, [{ ip: "1.2.3.4" }]);
+  assert.equal(clients.length, 1);
+  assert.equal(clients[0]?.client_id, client.client_id);
+  assert.deepEqual(clients[0]?.redirect_uris, ["https://app.example.com/cb"]);
+});
+
+test("registerClient throws a rate-limit error without inserting the client when the budget is exhausted", async () => {
+  const { admin, clients, attempts } = stubRegistration({ forIp: 11, global: 11 });
+  await assert.rejects(registerClient(registrationInput, { admin, ip: "1.2.3.4" }), RegistrationRateLimitedError);
+  assert.equal(clients.length, 0);
+  // The denied attempt is still recorded, so a racing burst keeps failing closed.
+  assert.deepEqual(attempts, [{ ip: "1.2.3.4" }]);
+});
+
+test("registerClient shares the unknown bucket when no source ip is identifiable", async () => {
+  const { admin, attempts } = stubRegistration({ forIp: 0, global: 0 });
+  await registerClient(registrationInput, { admin });
+  assert.deepEqual(attempts, [{ ip: "unknown" }]);
 });
 
 
