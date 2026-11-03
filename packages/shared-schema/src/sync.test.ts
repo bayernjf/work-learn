@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { runSync } from "./sync.js";
-import { syncBatchInputSchema } from "./index.js";
+import { portableImportSchema, syncBatchInputSchema } from "./index.js";
 import type { CloudSyncClient, LocalSyncStore, MarkSyncedInput, SyncBatchInput, SyncPushCounts, SyncSnapshot } from "./index.js";
 
 const pushCounts = (batch: SyncBatchInput): SyncPushCounts => ({
@@ -165,4 +165,32 @@ test("sync schemas accept a null sessionId for an orphan kept after its session 
   const parsed = syncBatchInputSchema.parse(batch);
   assert.equal(parsed.materials[0]?.sessionId, null);
   assert.equal(parsed.questions[0]?.sessionId, null);
+});
+
+test("portableImportSchema accepts orphan materials without a synthetic session (P2-10)", () => {
+  const now = new Date().toISOString();
+  const parsed = portableImportSchema.parse({
+    version: 1,
+    exportedAt: now,
+    sessions: [],
+    materials: [{
+      id: "mat_orphan",
+      sessionId: null,
+      source: "codex",
+      topic: "orphaned",
+      originalText: "kept after its session was deleted",
+      explanation: "",
+      usefulExpressions: [],
+      corrections: [],
+      vocabulary: [],
+      practicePrompts: [],
+      tags: [],
+      createdAt: now,
+      updatedAt: now
+    }],
+    questionTranslations: [],
+    reviews: []
+  });
+  assert.equal(parsed.sessions.length, 0);
+  assert.equal(parsed.materials[0]?.sessionId, null);
 });

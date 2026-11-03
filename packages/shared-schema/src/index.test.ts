@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasScope, saveMaterialInputSchema, scheduleNextReview } from "./index.js";
+import { chatCompletion, hasScope, saveMaterialInputSchema, scheduleNextReview } from "./index.js";
 
 const base = {
   sessionId: "sess_1",
@@ -199,4 +199,26 @@ test("the due date lands now plus the new interval in days", () => {
   const now = new Date("2026-08-30T12:00:00.000Z");
   const next = scheduleNextReview(10, "good", now);
   assert.equal(next.dueAt, new Date(now.getTime() + 21 * 86_400_000).toISOString());
+});
+
+test("chatCompletion aborts a hanging LLM call at the configured timeout (P2-3)", async () => {
+  const prevUrl = process.env.WORK_LEARN_LLM_BASE_URL;
+  const prevKey = process.env.WORK_LEARN_LLM_API_KEY;
+  process.env.WORK_LEARN_LLM_BASE_URL = "https://llm.example.invalid";
+  process.env.WORK_LEARN_LLM_API_KEY = "test-key";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+    })) as typeof fetch;
+  try {
+    await assert.rejects(
+      chatCompletion([{ role: "user", content: "hi" }], { timeoutMs: 20 }),
+      /timed out|abort/i
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (prevUrl === undefined) delete process.env.WORK_LEARN_LLM_BASE_URL; else process.env.WORK_LEARN_LLM_BASE_URL = prevUrl;
+    if (prevKey === undefined) delete process.env.WORK_LEARN_LLM_API_KEY; else process.env.WORK_LEARN_LLM_API_KEY = prevKey;
+  }
 });
