@@ -752,7 +752,11 @@ export class LocalStore implements LocalSyncStore {
     try {
       const exercises = await generateAdaptivePractice({ ...parsed, context }, chatCompletion);
       return { generatedAt: new Date().toISOString(), materials: [], questions: [], exercises, mode: "adaptive" as const };
-    } catch {
+    } catch (error) {
+      // Log the real reason before degrading (stderr keeps the stdio MCP
+      // channel clean): a hanging or misconfigured LLM must be visible, not
+      // silently folded into the fallback (review 2026-11-02 P2-3).
+      console.error(`adaptive practice via LLM failed, using rule-based fallback: ${error instanceof Error ? error.message : String(error)}`);
       const fallback = this.generatePractice({ limit: parsed.count, materialId: parsed.materialId });
       return { ...fallback, mode: "adaptive_fallback" as const };
     }
@@ -935,16 +939,18 @@ export class LocalStore implements LocalSyncStore {
   }
 
   markMastered(reviewId: string, grade: ReviewGrade = "good") {
+    // Match getReviewItems: a due snoozed item is back in the queue, so
+    // completing it must not filter on 'pending' only (review 2026-11-02 P1-3).
     const row = this.db
-      .prepare("SELECT interval_days FROM review_items WHERE id = ? AND status = 'pending'")
+      .prepare("SELECT interval_days FROM review_items WHERE id = ? AND status IN ('pending', 'snoozed')")
       .get(reviewId) as { interval_days: number } | undefined;
     if (!row) throw new Error("Review item not found or already completed");
     const { intervalDays, dueAt, mastered } = scheduleNextReview(row.interval_days ?? 0, grade);
     const result = this.db
       .prepare(
         mastered
-          ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
-          : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status = 'pending'`
+          ? `UPDATE review_items SET status = 'completed', completed_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status IN ('pending', 'snoozed')`
+          : `UPDATE review_items SET status = 'pending', due_at = ?, interval_days = ?, updated_at = ?, sync_status = 'local_only' WHERE id = ? AND status IN ('pending', 'snoozed')`
       )
       // dueAt comes from the scheduler; writing the current time here reschedules
       // the item to be due immediately, which defeats spaced repetition entirely.
@@ -1484,9 +1490,9 @@ export const createLocalContext = (store: LocalStore): WorkLearnContext => ({
   createSession: (input: unknown) => store.createSession(input),
   saveMaterial: (input: unknown) => store.saveMaterial(input),
   saveQuestionTranslation: (input: unknown) => store.saveQuestionTranslation(input),
-  searchCorpus: (query?: string) => store.searchCorpus(query),
+  searchCorpus: (query?: string, filters?: { source?: string; tag?: string }) => store.searchCorpus(query, filters),
   getReviewItems: () => store.getReviewItems(),
-  markMastered: (reviewId: string) => store.markMastered(reviewId),
+  markMastered: (reviewId: string, grade?: string) => store.markMastered(reviewId, grade as ReviewGrade | undefined),
   snoozeReview: (reviewId: string, days?: number) => store.snoozeReview(reviewId, days),
   generatePractice: (input: unknown) => store.generatePractice(input),
   getUserPatterns: (input: unknown) => store.getUserPatterns(input),

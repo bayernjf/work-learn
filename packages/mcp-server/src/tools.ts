@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, suggestReuseCandidatesInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema, type WorkLearnContext } from "@work-learn/shared-schema";
+import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, getPracticeHistoryInputSchema, recordReuseInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema, sourceSchema, suggestReuseInputSchema, suggestReuseCandidatesInputSchema, updateReuseNudgeSettingsSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listExpressionsInputSchema, listIntentsInputSchema, type WorkLearnContext } from "@work-learn/shared-schema";
 
 /**
  * A capability bound to a single authenticated user.
@@ -205,6 +205,14 @@ export const registerTools = (server: McpServer, ctx: WorkLearnContext) => {
       })).min(2).describe("At least two new intent groups.")
     }
   }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.splitIntent(splitIntentInputSchema.parse(input))) }] }));
+
+  server.registerTool("list_intents", {
+    description: "List the user's intent clusters with their saved expressions. Use this to review the current grouping before clustering, merging, or splitting.",
+    inputSchema: {
+      limit: z.number().int().min(1).max(200).optional().describe("Maximum intents to return, default 100."),
+      expressionLimit: z.number().int().min(1).max(1000).optional().describe("Maximum expressions to return, default 500.")
+    }
+  }, async (input) => ({ content: [{ type: "text", text: JSON.stringify(await ctx.listIntents(listIntentsInputSchema.parse(input ?? {}))) }] }));
 };
 
 export { createSessionInputSchema, saveMaterialInputSchema, saveQuestionTranslationInputSchema };

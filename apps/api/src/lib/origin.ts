@@ -6,6 +6,9 @@
  *    worker (`apps/web/public/_worker.js`), overwriting any client-supplied
  *    value. A custom header is used because Vercel's edge network
  *    overwrites the standard `x-forwarded-host` with the Vercel origin.
+ *    The value is validated against the known Pages hosts: a direct request
+ *    to Vercel never passes the worker, so a client could otherwise spoof the
+ *    header and poison the OAuth issuer metadata (review 2026-11-02 P2-2).
  * 2. `WORK_LEARN_PUBLIC_API_URL` — explicit env override (e.g. previews).
  * 3. Request URL origin — direct connection to Vercel.
  *
@@ -17,14 +20,17 @@
  * self-consistent: pages.dev clients get pages.dev issuer, vercel.app
  * clients get vercel.app issuer.
  */
+const ENTRY_HOST = /^([a-z0-9-]+\.)?work-learn\.pages\.dev$/;
+
 export const resolvePublicOrigin = (req: {
   url: string;
   header?: (name: string) => string | undefined;
 }): string => {
   const entryHost = req.header?.("x-work-learn-entry-host");
-  if (entryHost) {
-    const entryProto = req.header?.("x-work-learn-entry-proto") ?? "https";
-    return `${entryProto}://${entryHost}`;
+  if (entryHost && ENTRY_HOST.test(entryHost)) {
+    // Pages is always TLS, so the issuer for a validated entry host is
+    // pinned to https regardless of any spoofable proto header.
+    return `https://${entryHost}`;
   }
   return process.env.WORK_LEARN_PUBLIC_API_URL ?? new URL(req.url).origin;
 };

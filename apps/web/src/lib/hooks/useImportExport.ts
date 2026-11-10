@@ -2,6 +2,7 @@ import { ChangeEvent, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { importCorpus, LearningMaterial, PortableCorpus, QuestionTranslation } from "../api";
 import { buildExportMarkdown, downloadBlob } from "../markup";
+import { buildPortableCorpus } from "../portable";
 import { useI18n } from "../../i18n/context";
 
 export function useImportExport(session: Session | null, corpus: {
@@ -19,58 +20,9 @@ export function useImportExport(session: Session | null, corpus: {
 
   const handleExportJson = () => {
     const exportedAt = new Date().toISOString();
-    const sessions = new Map<string, { id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>();
-    for (const material of corpus.materials) {
-      sessions.set(material.session_id, {
-        id: material.session_id,
-        source: material.source,
-        topic: material.topic,
-        createdAt: material.created_at,
-        updatedAt: material.updated_at
-      });
-    }
-    for (const question of corpus.questions) {
-      if (!sessions.has(question.session_id)) sessions.set(question.session_id, {
-        id: question.session_id,
-        source: question.source,
-        topic: question.topic,
-        createdAt: question.created_at,
-        updatedAt: question.updated_at
-      });
-    }
-    const payload: PortableCorpus = {
-      version: 1,
-      exportedAt,
-      sessions: [...sessions.values()],
-      materials: corpus.materials.map((material) => ({
-        id: material.id,
-        sessionId: material.session_id,
-        source: material.source,
-        topic: material.topic,
-        originalText: material.original_text,
-        explanation: material.explanation,
-        usefulExpressions: material.useful_expressions,
-        corrections: material.corrections,
-        vocabulary: material.vocabulary,
-        practicePrompts: material.practice_prompts,
-        tags: material.tags,
-        createdAt: material.created_at,
-        updatedAt: material.updated_at
-      })),
-      questionTranslations: corpus.questions.map((question) => ({
-        id: question.id,
-        sessionId: question.session_id,
-        source: question.source,
-        question: question.question,
-        translation: question.translation,
-        topic: question.topic,
-        createdAt: question.created_at,
-        updatedAt: question.updated_at
-      })),
-      reviews: []
-    };
+    const payload = buildPortableCorpus(corpus.materials, corpus.questions, exportedAt);
     const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
-    downloadBlob(blob, `work-learn-${new Date().toISOString().slice(0, 10)}.json`);
+    downloadBlob(blob, `work-learn-${exportedAt.slice(0, 10)}.json`);
   };
 
   const handleImportClick = () => importInput.current?.click();

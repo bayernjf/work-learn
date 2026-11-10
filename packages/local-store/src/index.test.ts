@@ -5,7 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { normalizeQuestion } from "@work-learn/shared-schema";
-import { LocalStore } from "./index.js";
+import { LocalStore, createLocalContext } from "./index.js";
 
 const withStore = (fn: (store: LocalStore, dir: string) => void) => {
   const dir = mkdtempSync(join(tmpdir(), "work-learn-"));
@@ -78,6 +78,62 @@ test("material save feeds the review queue and can be marked mastered", () => {
     const id = (reviews[0] as { review_id: string }).review_id;
     store.markMastered(id);
     assert.equal(store.getReviewItems().length, 0);
+  });
+});
+
+test("a snoozed review item can be completed once it is due (P1-3)", () => {
+  withStore((store) => {
+    const session = store.createSession({ source: "codex", topic: "db" });
+    store.saveMaterial({
+      sessionId: session.id,
+      source: "codex",
+      topic: "db",
+      originalText: "decouple the validation from the persistence layer",
+      usefulExpressions: ["decouple"],
+      corrections: [],
+      vocabulary: ["decouple"],
+      practicePrompts: [],
+      tags: ["db"]
+    });
+    const id = (store.getReviewItems()[0] as { review_id: string }).review_id;
+    store.snoozeReview(id, -1); // due yesterday: back in the queue as snoozed
+    const queue = store.getReviewItems();
+    assert.equal(queue.length, 1);
+    assert.equal((queue[0] as { status: string }).status, "snoozed");
+    // Must not throw "Review item not found or already completed".
+    const result = store.markMastered(id);
+    assert.equal(result.status, "pending"); // reviewed snoozed items resume normal scheduling
+    assert.equal(result.intervalDays, 2); // prev 0, grade good -> base 1 * 2.1
+    assert.equal(store.getReviewItems().length, 0); // due two days out now
+  });
+});
+
+test("the local context passes grade and corpus filters through (P1-5/P2-5)", () => {
+  withStore((store) => {
+    const ctx = createLocalContext(store);
+    const session = store.createSession({ source: "codex", topic: "db" });
+    const base = {
+      sessionId: session.id,
+      topic: "db",
+      corrections: [],
+      vocabulary: [] as string[],
+      practicePrompts: [] as string[],
+      tags: [] as string[],
+      usefulExpressions: [] as string[]
+    };
+    store.saveMaterial({ ...base, source: "codex", originalText: "ship it carefully" });
+    store.saveMaterial({ ...base, source: "chatgpt", originalText: "measure twice" });
+    // P2-5: filters reach the store instead of being dropped by the adapter.
+    const filtered = ctx.searchCorpus(undefined, { source: "chatgpt" }) as { materials: Array<{ source: string }> };
+    assert.equal(filtered.materials.length, 1);
+    assert.equal(filtered.materials[0]?.source, "chatgpt");
+    // P1-5: an explicit "again" resets the interval instead of silently
+    // degrading to "good"; the default still applies the good multiplier.
+    const id = (store.getReviewItems()[0] as { review_id: string }).review_id;
+    const again = ctx.markMastered(id, "again") as { intervalDays: number };
+    assert.equal(again.intervalDays, 0);
+    const good = ctx.markMastered(id) as { intervalDays: number };
+    assert.equal(good.intervalDays, 2);
   });
 });
 

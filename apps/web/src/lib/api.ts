@@ -3,7 +3,7 @@ import { activeStrings } from "../i18n/strings";
 
 export type LearningMaterial = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   topic: string;
   source: string;
   original_text: string;
@@ -41,7 +41,7 @@ export const fetchMaterials = async (session: Session, query = "", filters: Corp
 
 export type QuestionTranslation = {
   id: string;
-  session_id: string;
+  session_id: string | null;
   source: string;
   question: string;
   translation: string;
@@ -141,11 +141,13 @@ export type ReuseSuggestionItem = {
   reason: "same_intent" | "scene" | "recent";
 };
 
-export const fetchReuseSuggestions = async (session: Session, text: string, limit = 5) => {
+export const fetchReuseSuggestions = async (session: Session, text: string, limit?: number) => {
   const response = await fetch(`/api/reuse/suggestions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.access_token}` },
-    body: JSON.stringify({ text, limit })
+    // suggestReuseInputSchema caps limit at 1; omit it unless a caller
+    // deliberately wants the single-suggestion default overridden.
+    body: JSON.stringify(limit === undefined ? { text } : { text, limit })
   });
   if (!response.ok) throw new Error("Could not load reuse suggestions");
   return (await response.json()) as { data: { suggestions: ReuseSuggestionItem[]; suppressedReason: string | null } };
@@ -417,7 +419,9 @@ export type PortableCorpus = {
   sessions: Array<{ id: string; source: string; topic: string | null; createdAt: string; updatedAt: string }>;
   materials: Array<{
     id: string;
-    sessionId: string;
+    // Nullable like syncMaterialSchema: orphan materials (session deleted)
+    // export with sessionId null and no synthetic session entry (P2-10).
+    sessionId: string | null;
     source: string;
     topic: string;
     originalText: string;
@@ -432,7 +436,7 @@ export type PortableCorpus = {
   }>;
   questionTranslations: Array<{
     id: string;
-    sessionId: string;
+    sessionId: string | null;
     source: string;
     question: string;
     translation: string;

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { knownAgents } from "./agents.js";
-import { redactSecrets } from "./redaction.js";
+import { redactFreeText } from "./redaction.js";
 import { lemmatizeText, lemmatizeWord, hasElasticMatch, findReuseCandidates } from "./inflection.js";
 
 export { knownAgents };
-export { redactSecrets } from "./redaction.js";
+export { redactSecrets, redactFreeText } from "./redaction.js";
 export type { RedactionResult } from "./redaction.js";
 export { lemmatizeText, lemmatizeWord, hasElasticMatch, findReuseCandidates } from "./inflection.js";
 export type { ReuseCandidate } from "./inflection.js";
@@ -151,19 +151,27 @@ export const learningMaterialSchema = z.object({
 // that writes a material -- the remote MCP context and the Hono API -- parses
 // this schema first. An agent pastes conversation text here verbatim, so this is
 // the last point before a leaked key or absolute path reaches the database.
+//
+// redactIfPresent keeps null/undefined/"" as-is; everything else goes through
+// the single redactFreeText funnel (2026-11-02 review P1-1).
+const redactIfPresent = <T extends string | null | undefined>(value: T): T =>
+  (value ? redactFreeText(value) : value) as T;
+
 export const saveMaterialInputSchema = learningMaterialSchema
   .omit({ id: true, createdAt: true })
   .transform((input) => ({
     ...input,
-    topic: redactSecrets(input.topic).text,
-    originalText: redactSecrets(input.originalText).text,
-    explanation: redactSecrets(input.explanation).text,
-    usefulExpressions: input.usefulExpressions.map((value) => redactSecrets(value).text),
-    corrections: input.corrections.map((value) => redactSecrets(value).text),
-    vocabulary: input.vocabulary.map((value) => redactSecrets(value).text),
-    practicePrompts: input.practicePrompts.map((value) => redactSecrets(value).text)
+    topic: redactFreeText(input.topic),
+    originalText: redactFreeText(input.originalText),
+    explanation: redactFreeText(input.explanation),
+    usefulExpressions: input.usefulExpressions.map(redactFreeText),
+    corrections: input.corrections.map(redactFreeText),
+    vocabulary: input.vocabulary.map(redactFreeText),
+    practicePrompts: input.practicePrompts.map(redactFreeText)
   }));
 
+// Same redaction contract as saveMaterialInputSchema (tags stay untouched in
+// both): PATCH /api/materials/:id writes these fields straight to the row.
 export const updateMaterialSchema = z.object({
   topic: z.string().trim().min(1).max(200).optional(),
   explanation: z.string().max(2000).optional(),
@@ -172,7 +180,15 @@ export const updateMaterialSchema = z.object({
   vocabulary: z.array(z.string().trim().min(1).max(100)).optional(),
   practicePrompts: z.array(z.string().trim().min(1).max(500)).optional(),
   tags: z.array(z.string().trim().min(1).max(50)).optional()
-});
+}).transform((input) => ({
+  ...input,
+  topic: redactIfPresent(input.topic),
+  explanation: redactIfPresent(input.explanation),
+  usefulExpressions: input.usefulExpressions?.map(redactFreeText),
+  corrections: input.corrections?.map(redactFreeText),
+  vocabulary: input.vocabulary?.map(redactFreeText),
+  practicePrompts: input.practicePrompts?.map(redactFreeText)
+}));
 
 // A question/translation pair: the user's original question (often in Chinese)
 // together with the idiomatic English rendering an agent produced. Kept as a
@@ -193,10 +209,10 @@ export const saveQuestionTranslationInputSchema = questionTranslationSchema
   .omit({ id: true, createdAt: true })
   .transform((input) => ({
     ...input,
-    source: redactSecrets(input.source).text,
-    question: redactSecrets(input.question).text,
-    translation: redactSecrets(input.translation).text,
-    topic: input.topic ? redactSecrets(input.topic).text : input.topic
+    source: redactFreeText(input.source),
+    question: redactFreeText(input.question),
+    translation: redactFreeText(input.translation),
+    topic: redactIfPresent(input.topic)
   }));
 
 // The columns the API returns for a question translation. Explicit rather than
@@ -250,6 +266,9 @@ export type PracticeRecord = {
   createdAt: string;
 };
 
+// userAnswer (up to 50k chars) is exactly where a user pastes terminal output
+// or config snippets, so the free-text fields are redacted on parse -- the
+// record lands verbatim in practice_records otherwise.
 export const recordPracticeInputSchema = z.object({
   exerciseType: z.enum(["reuse", "recall", "correction", "apply", "question", "mcq", "fill", "scenario"]),
   materialId: z.string().min(1).optional(),
@@ -259,7 +278,12 @@ export const recordPracticeInputSchema = z.object({
   userAnswer: z.string().max(50_000).default(""),
   isCorrect: z.boolean().nullable().optional(),
   status: z.enum(["remembered", "practice_again", "pending"]).default("pending")
-});
+}).transform((input) => ({
+  ...input,
+  focus: redactFreeText(input.focus),
+  prompt: redactFreeText(input.prompt),
+  userAnswer: redactFreeText(input.userAnswer)
+}));
 export type RecordPracticeInput = z.infer<typeof recordPracticeInputSchema>;
 
 export const getPracticeHistoryInputSchema = z.object({
@@ -372,14 +396,23 @@ export function getLlmConfig(): LlmConfig | null {
 
 // Minimal OpenAI-compatible chat completion call using the global fetch from
 // Node 18+. Throws if the LLM is not configured or the request fails, so
-// callers can fall back to rule-based practice.
-export async function chatCompletion(messages: ChatMessage[]): Promise<string> {
+// callers can fall back to rule-based practice. The request is bounded by an
+// 8s timeout: the API runs as a serverless function with maxDuration 10, so a
+// hanging LLM endpoint must not pin the invocation until the platform kills
+// it (review 2026-11-02 P2-3).
+export const LLM_TIMEOUT_MS = 8_000;
+
+export async function chatCompletion(
+  messages: ChatMessage[],
+  options?: { timeoutMs?: number }
+): Promise<string> {
   const config = getLlmConfig();
   if (!config) throw new Error("LLM not configured (set WORK_LEARN_LLM_BASE_URL and WORK_LEARN_LLM_API_KEY)");
   const response = await fetch(`${config.baseUrl}/chat/completions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({ model: config.model, messages, temperature: 0.7, response_format: { type: "json_object" } })
+    body: JSON.stringify({ model: config.model, messages, temperature: 0.7, response_format: { type: "json_object" } }),
+    signal: AbortSignal.timeout(options?.timeoutMs ?? LLM_TIMEOUT_MS)
   });
   if (!response.ok) {
     const text = await response.text().catch(() => "");
@@ -401,11 +434,13 @@ export const syncSessionSchema = z.object({
   topic: z.string().trim().max(160).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
-});
+}).transform((input) => ({ ...input, topic: redactIfPresent(input.topic) }));
 
 // A learning material as synced from a local store, id included for idempotency.
 // sessionId is nullable: the cloud keeps a material alive after its session is
 // deleted (ON DELETE SET NULL), and both ends agree on that orphan semantics.
+// Synced rows skip the save path, so the same redaction contract as
+// saveMaterialInputSchema is applied here (2026-11-02 review P1-1).
 export const syncMaterialSchema = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1).nullable(),
@@ -420,7 +455,16 @@ export const syncMaterialSchema = z.object({
   tags: z.array(z.string()),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
-});
+}).transform((input) => ({
+  ...input,
+  topic: redactFreeText(input.topic),
+  originalText: redactFreeText(input.originalText),
+  explanation: redactFreeText(input.explanation),
+  usefulExpressions: input.usefulExpressions.map(redactFreeText),
+  corrections: input.corrections.map(redactFreeText),
+  vocabulary: input.vocabulary.map(redactFreeText),
+  practicePrompts: input.practicePrompts.map(redactFreeText)
+}));
 
 // A question/translation pair as synced from a local store, id included.
 // sessionId is nullable for the same orphan semantics as syncMaterialSchema.
@@ -433,7 +477,13 @@ export const syncQuestionTranslationSchema = z.object({
   topic: z.string().trim().max(200).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
-});
+}).transform((input) => ({
+  ...input,
+  source: redactFreeText(input.source),
+  question: redactFreeText(input.question),
+  translation: redactFreeText(input.translation),
+  topic: redactIfPresent(input.topic)
+}));
 
 export const syncReviewSchema = z.object({
   id: z.string().min(1),
@@ -452,7 +502,11 @@ export const syncIntentSchema = z.object({
   description: z.string().max(1000).nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
-});
+}).transform((input) => ({
+  ...input,
+  label: redactFreeText(input.label),
+  description: redactIfPresent(input.description)
+}));
 
 export const syncSavedExpressionSchema = z.object({
   id: z.string().min(1),
@@ -468,6 +522,16 @@ export const syncSavedExpressionSchema = z.object({
   lastReusedAt: z.string().datetime().nullable(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime()
+}).transform((input) => {
+  const text = redactFreeText(input.text);
+  return {
+    ...input,
+    text,
+    // textNorm is derived from the raw text, so redacting the text alone would
+    // still leak the secret through the normalized copy; recompute instead.
+    textNorm: normalizeReuseText(text),
+    note: redactIfPresent(input.note)
+  };
 });
 
 export const syncReuseEventSchema = z.object({
@@ -480,7 +544,12 @@ export const syncReuseEventSchema = z.object({
   matchKind: reuseMatchKindSchema,
   confidence: z.number().min(0).max(1),
   createdAt: z.string().datetime()
-});
+}).transform((input) => ({
+  ...input,
+  source: redactIfPresent(input.source),
+  matchedText: redactFreeText(input.matchedText),
+  contextSnippet: redactIfPresent(input.contextSnippet)
+}));
 
 // A practice attempt is immutable once written, exactly like a reuse event:
 // there is no updated_at to arbitrate on, so the sync treats it as insert-only
@@ -496,7 +565,12 @@ export const syncPracticeRecordSchema = z.object({
   isCorrect: z.boolean().nullable(),
   status: z.enum(["pending", "remembered", "practice_again"]),
   createdAt: z.string().datetime()
-});
+}).transform((input) => ({
+  ...input,
+  focus: redactFreeText(input.focus),
+  prompt: redactFreeText(input.prompt),
+  userAnswer: redactFreeText(input.userAnswer)
+}));
 
 export const recordReuseInputSchema = z.object({
   text: z.string().min(1).max(10_000),

@@ -1,4 +1,4 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import { createSessionInputSchema, generatePracticeInputSchema, generateAdaptivePracticeInputSchema, getPracticeHistoryInputSchema, getUserPatternsInputSchema, recordPracticeInputSchema, recordReuseInputSchema, saveMaterialInputSchema, suggestReuseInputSchema, suggestReuseCandidatesInputSchema, saveQuestionTranslationInputSchema, updateReuseNudgeSettingsSchema, listExpressionsInputSchema, clusterIntentsInputSchema, mergeIntentsInputSchema, splitIntentInputSchema, listIntentsInputSchema, syncBatchInputSchema, syncPullQuerySchema } from "@work-learn/shared-schema";
 import { ScopeError, createDirectContext, deleteCloudMaterial, deleteCloudQuestion, importPortableData, updateCloudMaterial, fetchSyncSnapshot, getSyncStatus, requireScope, searchQuestionTranslations, syncToCloud } from "@work-learn/mcp-server/direct";
@@ -56,12 +56,12 @@ const contextFor = async (authorization: string | undefined) => {
 const detail = (error: unknown) => (error instanceof Error ? error.message : String(error));
 
 /**
- * Scope violations surface as 403, everything else stays a 500.
+ * Scope violations surface as 403, everything else stays a 500 — as the real
+ * HTTP status, not a body field: c.json's second argument is the status, so a
+ * denial must not look like HTTP 200 to clients and monitors (review P2-6).
  */
-const errorResponse = (message: string, error: unknown) =>
-  error instanceof ScopeError
-    ? { error: message, details: detail(error), status: 403 as const }
-    : { error: message, details: detail(error), status: 500 as const };
+export const errorJson = (c: Context, message: string, error: unknown) =>
+  c.json({ error: message, details: detail(error) }, error instanceof ScopeError ? 403 : 500);
 
 app.post("/sessions", async (c) => {
   const ctx = await contextFor(c.req.header("Authorization"));
@@ -73,7 +73,7 @@ app.post("/sessions", async (c) => {
   try {
     return c.json({ data: await ctx.createSession(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not create session", error));
+    return errorJson(c, "Could not create session", error);
   }
 });
 
@@ -87,7 +87,7 @@ app.post("/materials", async (c) => {
   try {
     return c.json({ data: await ctx.saveMaterial(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not save learning material", error));
+    return errorJson(c, "Could not save learning material", error);
   }
 });
 
@@ -101,7 +101,7 @@ app.post("/question-translations", async (c) => {
   try {
     return c.json({ data: await ctx.saveQuestionTranslation(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not save question translation", error));
+    return errorJson(c, "Could not save question translation", error);
   }
 });
 
@@ -112,7 +112,7 @@ app.delete("/materials/:id", async (c) => {
     requireScope(auth.scopes, "write");
     return c.json({ data: await deleteCloudMaterial(createSupabaseServiceClient(), auth.userId, c.req.param("id")) });
   } catch (error) {
-    return c.json(errorResponse("Could not delete learning material", error));
+    return errorJson(c, "Could not delete learning material", error);
   }
 });
 
@@ -123,7 +123,7 @@ app.patch("/materials/:id", async (c) => {
     requireScope(auth.scopes, "write");
     return c.json({ data: await updateCloudMaterial(createSupabaseServiceClient(), auth.userId, c.req.param("id"), await c.req.json()) });
   } catch (error) {
-    return c.json(errorResponse("Could not update learning material", error));
+    return errorJson(c, "Could not update learning material", error);
   }
 });
 
@@ -134,7 +134,7 @@ app.delete("/question-translations/:id", async (c) => {
     requireScope(auth.scopes, "write");
     return c.json({ data: await deleteCloudQuestion(createSupabaseServiceClient(), auth.userId, c.req.param("id")) });
   } catch (error) {
-    return c.json(errorResponse("Could not delete question translation", error));
+    return errorJson(c, "Could not delete question translation", error);
   }
 });
 
@@ -148,7 +148,7 @@ app.get("/question-translations", async (c) => {
     requireScope(auth.scopes, "read");
     return c.json({ data: await searchQuestionTranslations(createSupabaseServiceClient(), auth.userId, query, source), query: query ?? "" });
   } catch (error) {
-    return c.json(errorResponse("Could not load question translations", error));
+    return errorJson(c, "Could not load question translations", error);
   }
 });
 
@@ -159,7 +159,7 @@ app.get("/sync/status", async (c) => {
     requireScope(auth.scopes, "read");
     return c.json({ data: await getSyncStatus(createSupabaseServiceClient(), auth.userId) });
   } catch (error) {
-    return c.json(errorResponse("Could not load sync status", error));
+    return errorJson(c, "Could not load sync status", error);
   }
 });
 
@@ -174,7 +174,7 @@ app.get("/sync", async (c) => {
     requireScope(auth.scopes, "read");
     return c.json({ data: await fetchSyncSnapshot(createSupabaseServiceClient(), auth.userId, parsed.data.since) });
   } catch (error) {
-    return c.json(errorResponse("Could not load sync snapshot", error));
+    return errorJson(c, "Could not load sync snapshot", error);
   }
 });
 
@@ -189,7 +189,7 @@ app.post("/sync", async (c) => {
     requireScope(auth.scopes, "write");
     return c.json({ data: await syncToCloud(createSupabaseServiceClient(), auth.userId, parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not sync", error));
+    return errorJson(c, "Could not sync", error);
   }
 });
 
@@ -201,7 +201,7 @@ app.post("/import", async (c) => {
     requireScope(auth.scopes, "write");
     return c.json({ data: await importPortableData(createSupabaseServiceClient(), auth.userId, await c.req.json()) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not import data", error));
+    return errorJson(c, "Could not import data", error);
   }
 });
 
@@ -215,7 +215,7 @@ app.get("/materials", async (c) => {
   try {
     return c.json({ data: await ctx.searchCorpus(query, { source, tag }), query: query ?? "" });
   } catch (error) {
-    return c.json(errorResponse("Could not load learning materials", error));
+    return errorJson(c, "Could not load learning materials", error);
   }
 });
 
@@ -226,7 +226,7 @@ app.get("/reviews", async (c) => {
   try {
     return c.json({ data: await ctx.getReviewItems() });
   } catch (error) {
-    return c.json(errorResponse("Could not load review items", error));
+    return errorJson(c, "Could not load review items", error);
   }
 });
 
@@ -241,7 +241,7 @@ app.post("/reviews/:id/complete", async (c) => {
     }
     return c.json({ data: await ctx.markMastered(c.req.param("id"), grade as "again" | "hard" | "good" | "easy") });
   } catch (error) {
-    return c.json(errorResponse("Could not complete review item", error));
+    return errorJson(c, "Could not complete review item", error);
   }
 });
 
@@ -252,7 +252,7 @@ app.post("/reviews/:id/snooze", async (c) => {
   try {
     return c.json({ data: await ctx.snoozeReview(c.req.param("id"), Number.isFinite(days) ? days : 1) });
   } catch (error) {
-    return c.json(errorResponse("Could not snooze review item", error));
+    return errorJson(c, "Could not snooze review item", error);
   }
 });
 
@@ -266,7 +266,7 @@ app.post("/practice", async (c) => {
   try {
     return c.json({ data: await ctx.generatePractice(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not generate practice", error));
+    return errorJson(c, "Could not generate practice", error);
   }
 });
 
@@ -280,7 +280,7 @@ app.post("/practice/adaptive", async (c) => {
   try {
     return c.json({ data: await ctx.generateAdaptivePractice(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not generate adaptive practice", error));
+    return errorJson(c, "Could not generate adaptive practice", error);
   }
 });
 
@@ -294,7 +294,7 @@ app.post("/practice/record", async (c) => {
   try {
     return c.json({ data: await ctx.recordPractice(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not record practice", error));
+    return errorJson(c, "Could not record practice", error);
   }
 });
 
@@ -310,7 +310,7 @@ app.get("/practice/history", async (c) => {
   try {
     return c.json({ data: await ctx.getPracticeHistory(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not load practice history", error));
+    return errorJson(c, "Could not load practice history", error);
   }
 });
 
@@ -324,7 +324,7 @@ app.post("/patterns", async (c) => {
   try {
     return c.json({ data: await ctx.getUserPatterns(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not load user patterns", error));
+    return errorJson(c, "Could not load user patterns", error);
   }
 });
 
@@ -338,7 +338,7 @@ app.post("/reuse", async (c) => {
   try {
     return c.json({ data: await ctx.recordReuse(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not record expression reuse", error));
+    return errorJson(c, "Could not record expression reuse", error);
   }
 });
 
@@ -349,7 +349,7 @@ app.get("/reuse", async (c) => {
   try {
     return c.json({ data: await ctx.getReuseSummary() });
   } catch (error) {
-    return c.json(errorResponse("Could not load reuse summary", error));
+    return errorJson(c, "Could not load reuse summary", error);
   }
 });
 
@@ -363,7 +363,7 @@ app.post("/reuse/suggestions", async (c) => {
   try {
     return c.json({ data: await ctx.suggestReuse(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not suggest reusable expressions", error));
+    return errorJson(c, "Could not suggest reusable expressions", error);
   }
 });
 
@@ -377,7 +377,7 @@ app.post("/reuse/candidates", async (c) => {
   try {
     return c.json({ data: await ctx.suggestReuseCandidates(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not find reuse candidates", error));
+    return errorJson(c, "Could not find reuse candidates", error);
   }
 });
 
@@ -388,7 +388,7 @@ app.get("/reuse/settings", async (c) => {
   try {
     return c.json({ data: await ctx.getReuseNudgeSettings() });
   } catch (error) {
-    return c.json(errorResponse("Could not load reuse nudge settings", error));
+    return errorJson(c, "Could not load reuse nudge settings", error);
   }
 });
 
@@ -402,7 +402,7 @@ app.patch("/reuse/settings", async (c) => {
   try {
     return c.json({ data: await ctx.updateReuseNudgeSettings(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not update reuse nudge settings", error));
+    return errorJson(c, "Could not update reuse nudge settings", error);
   }
 });
 
@@ -418,7 +418,7 @@ app.get("/expressions", async (c) => {
   try {
     return c.json({ data: await ctx.listExpressions(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not list expressions", error));
+    return errorJson(c, "Could not list expressions", error);
   }
 });
 
@@ -430,7 +430,7 @@ app.post("/intents/cluster", async (c) => {
   try {
     return c.json({ data: await ctx.clusterIntents(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not cluster intents", error));
+    return errorJson(c, "Could not cluster intents", error);
   }
 });
 
@@ -442,7 +442,7 @@ app.post("/intents/merge", async (c) => {
   try {
     return c.json({ data: await ctx.mergeIntents(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not merge intents", error));
+    return errorJson(c, "Could not merge intents", error);
   }
 });
 
@@ -454,7 +454,7 @@ app.post("/intents/split", async (c) => {
   try {
     return c.json({ data: await ctx.splitIntent(parsed.data) }, 201);
   } catch (error) {
-    return c.json(errorResponse("Could not split intent", error));
+    return errorJson(c, "Could not split intent", error);
   }
 });
 
@@ -469,7 +469,7 @@ app.get("/intents", async (c) => {
   try {
     return c.json({ data: await ctx.listIntents(parsed.data) });
   } catch (error) {
-    return c.json(errorResponse("Could not list intents", error));
+    return errorJson(c, "Could not list intents", error);
   }
 });
 

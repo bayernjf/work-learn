@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { materialColumns } from "@work-learn/shared-schema";
-import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, searchQuestionTranslations, syncToCloud } from "./direct.js";
+import { createDirectContext, deleteCloudMaterial, fetchSyncSnapshot, getSyncStatus, importPortableData, searchQuestionTranslations, syncToCloud, updateCloudMaterial } from "./direct.js";
 
 type Comparison = { op: "gte" | "lte"; column: string; value: unknown };
 type Call = {
@@ -177,6 +177,19 @@ test("markMastered cannot complete another user's review item", async () => {
     update.filters.some(([column, value]) => column === "id" && value === "review-owned-by-someone-else"),
     "the update must be scoped to the requested review id"
   );
+});
+
+test("markMastered matches pending and snoozed items, like the review queue", async () => {
+  const { client, calls } = stubClient();
+  await createDirectContext(client, USER).markMastered("review-id");
+  // P1-3: a due snoozed item reappears in getReviewItems; completing it must
+  // not filter on "pending" only, or the item is stuck forever.
+  const writers = calls.filter((call) => (call.verb === "select" || call.verb === "update") && call.table === "review_items");
+  assert.ok(writers.length >= 2, "markMastered must select the interval and update the row");
+  for (const call of writers) {
+    const status = call.filters.find(([column]) => column === "status");
+    assert.deepEqual(status?.[1], ["pending", "snoozed"]);
+  }
 });
 
 test("no read hands the internal search column to a client", async () => {
@@ -664,4 +677,209 @@ test("a reuse event may reference an expression pushed in the same batch", async
     calls.some((call) => call.table === "reuse_events" && call.verb === "upsert" && (call.payload as Record<string, unknown>)?.id === "event-1"),
     true
   );
+});
+
+// ── Redaction on every write path (2026-11-02 review P1-1) ─────────────────
+// Each test drives the real write path (schema parse + supabase payload) and
+// asserts on what would be stored -- none calls the redaction helper directly.
+
+const writePayloads = (calls: Call[]): Array<{ table: string; verb: string; payload: string }> =>
+  calls
+    .filter((call) => ["insert", "update", "upsert"].includes(call.verb))
+    .map((call) => ({ table: call.table, verb: call.verb, payload: JSON.stringify(call.payload ?? null) }));
+
+test("updateCloudMaterial redacts pasted secrets before the update reaches the database", async () => {
+  const { client, calls } = stubClient();
+  const secret = "ghp_abcdefghijklmnopqrstuvwxyz0123";
+  await updateCloudMaterial(client, USER, "material-1", {
+    topic: `Rotating ${secret}`,
+    explanation: `because ${secret} leaked`,
+    usefulExpressions: [`say "rotate ${secret}"`]
+  });
+  const update = calls.find((call) => call.table === "learning_materials" && call.verb === "update");
+  assert.ok(update, "the update must be issued");
+  const stored = JSON.stringify(update.payload);
+  assert.ok(!stored.includes(secret), `secret leaked into the update payload: ${stored}`);
+  assert.ok(stored.includes("[REDACTED"), "the marker proves the payload went through redaction");
+});
+
+test("updateCloudMaterial leaves ordinary learning text untouched", async () => {
+  const { client, calls } = stubClient();
+  const fields = {
+    topic: "Phrasal verbs",
+    explanation: "'roll back' is the verb; 'rollback' is the noun.",
+    usefulExpressions: ["roll back the deploy"]
+  };
+  await updateCloudMaterial(client, USER, "material-1", fields);
+  const update = calls.find((call) => call.table === "learning_materials" && call.verb === "update");
+  const payload = update?.payload as Record<string, unknown>;
+  assert.equal(payload.topic, fields.topic);
+  assert.equal(payload.explanation, fields.explanation);
+  assert.deepEqual(payload.useful_expressions, fields.usefulExpressions);
+});
+
+test("recordPractice redacts a key pasted into the answer before insert", async () => {
+  const { client, calls } = stubClient();
+  const secret = "sk-abcdefghijklmnopqrstuvwxyz012345";
+  await createDirectContext(client, USER).recordPractice({
+    exerciseType: "recall",
+    focus: `deploy with ${secret}`,
+    prompt: "How do you say it?",
+    userAnswer: `I ran curl -H "Authorization: Bearer ${secret}" and it worked`,
+    isCorrect: false,
+    status: "practice_again"
+  });
+  const insert = calls.find((call) => call.table === "practice_records" && call.verb === "insert");
+  assert.ok(insert, "the practice record must be inserted");
+  const stored = JSON.stringify(insert.payload);
+  assert.ok(!stored.includes(secret), `secret leaked into practice_records: ${stored}`);
+  assert.ok(stored.includes("[REDACTED"));
+});
+
+test("recordPractice keeps an ordinary answer verbatim", async () => {
+  const { client, calls } = stubClient();
+  await createDirectContext(client, USER).recordPractice({
+    exerciseType: "recall",
+    focus: "roll back",
+    prompt: "How do you say 回滚？",
+    userAnswer: "You roll back the deploy.",
+    isCorrect: true,
+    status: "remembered"
+  });
+  const insert = calls.find((call) => call.table === "practice_records" && call.verb === "insert");
+  const payload = insert?.payload as Record<string, unknown>;
+  assert.equal(payload.user_answer, "You roll back the deploy.");
+  assert.equal(payload.focus, "roll back");
+  assert.equal(payload.prompt, "How do you say 回滚？");
+});
+
+test("syncToCloud redacts secrets in every free-text row of the batch", async () => {
+  const { client, calls } = stubClient();
+  const secret = "AKIAIOSFODNN7EXAMPLE";
+  const stamp = "2026-08-30T12:00:00.000Z";
+  await syncToCloud(client, USER, {
+    sessions: [{ id: "session-sec", source: "claude", topic: `rotating ${secret}`, createdAt: stamp, updatedAt: stamp }],
+    materials: [{
+      ...MATERIAL_FIXTURE,
+      id: "material-sec",
+      sessionId: "session-sec",
+      originalText: `We set AWS key ${secret} yesterday.`,
+      usefulExpressions: [`rotate ${secret}`]
+    }],
+    questions: [{
+      id: "question-sec",
+      sessionId: "session-sec",
+      source: "claude",
+      question: `${secret} 是什么？`,
+      translation: "what is it",
+      topic: `topic ${secret}`,
+      createdAt: stamp,
+      updatedAt: stamp
+    }],
+    intents: [{ id: "intent-sec", label: `label ${secret}`, description: `desc ${secret}`, createdAt: stamp, updatedAt: stamp }],
+    expressions: [{
+      ...EXPRESSION_FIXTURE,
+      id: "expr-sec",
+      text: `token ${secret}`,
+      textNorm: `token ${secret.toLowerCase()}`,
+      note: `note ${secret}`
+    }],
+    reuseEvents: [{
+      ...REUSE_EVENT_FIXTURE,
+      id: "event-sec",
+      expressionId: "expr-sec",
+      matchedText: `matched ${secret}`,
+      contextSnippet: `context ${secret}`
+    }],
+    practiceRecords: [{ ...PRACTICE_RECORD, id: "practice-sec", userAnswer: `answer ${secret}` }]
+  });
+
+  const writes = writePayloads(calls);
+  assert.ok(writes.length > 0, "the batch must write rows");
+  for (const write of writes) {
+    assert.ok(!write.payload.includes(secret), `${write.table} ${write.verb} leaked the secret: ${write.payload}`);
+    assert.ok(
+      !write.payload.includes(secret.toLowerCase()),
+      `${write.table} ${write.verb} leaked the secret through a normalized copy: ${write.payload}`
+    );
+  }
+  assert.ok(writes.some((write) => write.payload.includes("[REDACTED")), "at least one row must show the redaction marker");
+});
+
+test("syncToCloud leaves ordinary learning content untouched", async () => {
+  const { client, calls } = stubClient();
+  await syncToCloud(client, USER, {
+    sessions: [],
+    materials: [{
+      ...MATERIAL_FIXTURE,
+      id: "material-clean",
+      originalText: "I'd rather roll this back than patch it in place.",
+      usefulExpressions: ["roll back"]
+    }],
+    questions: []
+  });
+  const write = calls.find((call) => call.table === "learning_materials" && ["insert", "update", "upsert"].includes(call.verb));
+  assert.ok(write, "the material must be written");
+  const stored = JSON.stringify(write.payload);
+  assert.ok(stored.includes("I'd rather roll this back than patch it in place."));
+  assert.ok(!stored.includes("[REDACTED"), "clean content must not trigger redaction");
+});
+
+test("importPortableData redacts secrets in imported rows before they are written", async () => {
+  const { client, calls } = stubClient();
+  const secret = "xoxb-1234567890-abcdefghij";
+  const stamp = "2026-08-30T12:00:00.000Z";
+  await importPortableData(client, USER, {
+    version: 1,
+    sessions: [],
+    materials: [{
+      ...MATERIAL_FIXTURE,
+      id: "material-imp",
+      originalText: `my slack token is ${secret}`,
+      corrections: [`not ${secret}`]
+    }],
+    questionTranslations: [{
+      id: "question-imp",
+      sessionId: null,
+      source: "claude",
+      question: `${secret} 怎么读？`,
+      translation: "how do you read it",
+      topic: null,
+      createdAt: stamp,
+      updatedAt: stamp
+    }],
+    reviews: [],
+    intents: [],
+    expressions: [],
+    reuseEvents: []
+  });
+  const writes = writePayloads(calls);
+  assert.ok(writes.length > 0, "the import must write rows");
+  for (const write of writes) {
+    assert.ok(!write.payload.includes(secret), `${write.table} ${write.verb} leaked the secret: ${write.payload}`);
+  }
+  assert.ok(writes.some((write) => write.payload.includes("[REDACTED")), "at least one row must show the redaction marker");
+});
+
+test("importPortableData leaves ordinary imported content untouched", async () => {
+  const { client, calls } = stubClient();
+  await importPortableData(client, USER, {
+    version: 1,
+    sessions: [],
+    materials: [{
+      ...MATERIAL_FIXTURE,
+      id: "material-imp-clean",
+      originalText: "She suggested rolling back the migration."
+    }],
+    questionTranslations: [],
+    reviews: [],
+    intents: [],
+    expressions: [],
+    reuseEvents: []
+  });
+  const write = calls.find((call) => call.table === "learning_materials" && ["insert", "update", "upsert"].includes(call.verb));
+  assert.ok(write, "the imported material must be written");
+  const stored = JSON.stringify(write.payload);
+  assert.ok(stored.includes("She suggested rolling back the migration."));
+  assert.ok(!stored.includes("[REDACTED"), "clean content must not trigger redaction");
 });

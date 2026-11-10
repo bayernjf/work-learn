@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { createAuthorizationCode, exchangeAuthorizationCode, getClient, registerClient, RegistrationRateLimitedError, rotateRefreshToken, validateClientName, validateRedirectUris } from "../lib/oauth.js";
 import { createSupabaseUserClient, getBearerToken } from "../lib/supabase.js";
 import { resolvePublicOrigin } from "../lib/origin.js";
+import { corsOrigin } from "../lib/cors.js";
 
 /**
  * Derived from the request, not hardcoded to production.
@@ -21,7 +22,7 @@ export const oauthRoute = new Hono();
 oauthRoute.use(
   "*",
   cors({
-    origin: (origin) => origin ?? "*",
+    origin: corsOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type"]
   })
@@ -53,6 +54,12 @@ oauthRoute.post("/register", async (c) => {
   const name = validateClientName(body.client_name);
   if (!name.ok) return c.json({ error: name.error }, 400);
 
+  // Per-source rate limiting (P1-4): first XFF hop is the client when behind
+  // the Pages worker / Vercel edge; x-real-ip is the Vercel fallback. Requests
+  // without either share the "unknown" bucket instead of bypassing the limit.
+  const forwarded = c.req.header("x-forwarded-for");
+  const ip = (forwarded?.split(",")[0]?.trim() || c.req.header("x-real-ip")) ?? undefined;
+
   let client: Awaited<ReturnType<typeof registerClient>>;
   try {
     client = await registerClient({
@@ -62,7 +69,7 @@ oauthRoute.post("/register", async (c) => {
       logo_uri: typeof body.logo_uri === "string" ? body.logo_uri : undefined,
       scope: typeof body.scope === "string" ? body.scope : undefined,
       token_endpoint_auth_method: "none"
-    });
+    }, { ip });
   } catch (error) {
     // Sliding-window budget exhausted (RFC 7591 §4.2: a server MAY rate-limit
     // registrations). Tell the client when it may retry instead of a generic 500.

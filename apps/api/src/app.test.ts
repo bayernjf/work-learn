@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { app } from "./app.js";
+import { Hono } from "hono";
+import { ScopeError } from "@work-learn/mcp-server/direct";
+import { app, errorJson } from "./app.js";
 
 test("health reports ok without any configuration", async () => {
   const res = await app.request("/api/health");
@@ -127,4 +129,25 @@ test("/api/config returns 500 when supabase keys are missing", async () => {
     if (previousSupabaseAnonKey === undefined) delete process.env.SUPABASE_ANON_KEY;
     else process.env.SUPABASE_ANON_KEY = previousSupabaseAnonKey;
   }
+});
+
+test("errorJson reports scope denials as a real 403 and other failures as 500 (P2-6)", async () => {
+  const probe = new Hono();
+  probe.get("/denied", (c) => errorJson(c, "Forbidden", new ScopeError("write")));
+  probe.get("/broken", (c) => errorJson(c, "Broke", new Error("db gone")));
+  const denied = await probe.request("/denied");
+  assert.equal(denied.status, 403);
+  const deniedBody = (await denied.json()) as Record<string, unknown>;
+  assert.ok(!("status" in deniedBody), "the status belongs on the HTTP line, not in the body");
+  const broken = await probe.request("/broken");
+  assert.equal(broken.status, 500);
+});
+
+test("CORS reflects only the web app origins and varies per origin (P2-1)", async () => {
+  const path = "/api/oauth/.well-known/oauth-authorization-server";
+  const evil = await app.request(path, { headers: { Origin: "https://evil.example" } });
+  assert.equal(evil.headers.get("access-control-allow-origin"), null);
+  const own = await app.request(path, { headers: { Origin: "https://work-learn.pages.dev" } });
+  assert.equal(own.headers.get("access-control-allow-origin"), "https://work-learn.pages.dev");
+  assert.ok(own.headers.get("vary")?.toLowerCase().includes("origin"));
 });

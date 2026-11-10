@@ -72,3 +72,35 @@ test("resolvePublicOrigin: x-forwarded-host is NOT used (Vercel overwrites it)",
     if (previous !== undefined) process.env.WORK_LEARN_PUBLIC_API_URL = previous;
   }
 });
+
+test("resolvePublicOrigin: a spoofed entry host is ignored (P2-2)", () => {
+  const previous = process.env.WORK_LEARN_PUBLIC_API_URL;
+  delete process.env.WORK_LEARN_PUBLIC_API_URL;
+  try {
+    const req = makeReq({ "x-work-learn-entry-host": "evil.example.com" });
+    assert.equal(resolvePublicOrigin(req), "https://work-learn-api.vercel.app");
+  } finally {
+    if (previous !== undefined) process.env.WORK_LEARN_PUBLIC_API_URL = previous;
+  }
+});
+
+test("resolvePublicOrigin: look-alike entry hosts are rejected", () => {
+  const previous = process.env.WORK_LEARN_PUBLIC_API_URL;
+  delete process.env.WORK_LEARN_PUBLIC_API_URL;
+  try {
+    for (const host of ["work-learn.pages.dev.evil.com", "evilwork-learn.pages.dev", "work-learn.pages.dev@evil.com"]) {
+      const req = makeReq({ "x-work-learn-entry-host": host });
+      assert.equal(resolvePublicOrigin(req), "https://work-learn-api.vercel.app", host);
+    }
+  } finally {
+    if (previous !== undefined) process.env.WORK_LEARN_PUBLIC_API_URL = previous;
+  }
+});
+
+test("resolvePublicOrigin: branch previews pass, with the proto pinned to https", () => {
+  const req = makeReq({
+    "x-work-learn-entry-host": "fix-p2.work-learn.pages.dev",
+    "x-work-learn-entry-proto": "http"
+  });
+  assert.equal(resolvePublicOrigin(req), "https://fix-p2.work-learn.pages.dev");
+});

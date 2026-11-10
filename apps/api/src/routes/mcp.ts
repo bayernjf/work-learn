@@ -5,6 +5,7 @@ import { handleMcpHttpRequest } from "@work-learn/mcp-server/http";
 import { createSupabaseServiceClient } from "../lib/supabase.js";
 import { authenticate } from "../lib/auth.js";
 import { resolvePublicOrigin } from "../lib/origin.js";
+import { corsOrigin } from "../lib/cors.js";
 
 /**
  * Remote MCP endpoint (Streamable HTTP, stateless).
@@ -16,8 +17,9 @@ import { resolvePublicOrigin } from "../lib/origin.js";
  * token gets a 401 pointing at the protected-resource metadata, which is how it
  * discovers the authorization server and runs the OAuth flow unattended -- the
  * only path that works on a phone, where there is no local process to configure.
- * The same twenty tools as the stdio MCP server are available, but the request runs
- * inside the API function and writes to Supabase directly.
+ * The same MCP tools as the stdio server are available (both sides share
+ * registerTools), but the request runs inside the API function and writes to
+ * Supabase directly.
  */
 export const mcpRoute = new Hono();
 
@@ -31,7 +33,7 @@ const resourceMetadataUrl = (req: { url: string; header?: (name: string) => stri
 mcpRoute.use(
   "*",
   cors({
-    origin: (origin) => origin ?? "*",
+    origin: corsOrigin,
     allowMethods: ["GET", "POST", "OPTIONS"],
     allowHeaders: ["Authorization", "Content-Type", "Mcp-Session-Id"],
     // WWW-Authenticate carries the discovery pointer below. Without exposing it, a

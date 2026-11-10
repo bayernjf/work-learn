@@ -588,9 +588,9 @@ pnpm --filter @work-learn/shared-schema test
 **方案**：落库计数（用户决策；serverless 无共享存储，所有实例共用 Supabase 计数）。`oauth_clients` 已有 `created_at`，新增 `019` migration 只加 `created_at` 索引。
 
 **改动**：
-- `lib/oauth.ts`：`REGISTRATION_WINDOW_MS`（1h）/ `REGISTRATION_MAX_PER_WINDOW`（10，可经 `WORK_LEARN_REGISTRATION_MAX_PER_WINDOW` 覆盖）；`countRecentRegistrations`（`select count head:true .gte(created_at)`，查询失败 **fail-open**——随后 insert 同样会失败）；`checkRegistrationRateLimit`；`RegistrationRateLimitedError`；`registerClient` 增加可选 `{admin, windowMs, maxPerWindow}`（测试注入），insert 前检查、超预算抛限流错误不落库；
-- `routes/oauth.ts`：catch 限流错误 → 429 `{error:"too_many_registrations"}` + `Retry-After` header（RFC 7591 §4.2）；
-- 测试：oauth.test.ts 新增 6 条（计数/窗口边界/fail-open/放行落库/超限不落库），api 42→48。
+- `lib/oauth.ts`：`REGISTRATION_WINDOW_MS`（1h）/ `REGISTRATION_MAX_PER_WINDOW`（10，按来源 IP，可经 `WORK_LEARN_REGISTRATION_MAX_PER_WINDOW` 覆盖）+ `REGISTRATION_GLOBAL_MAX_PER_WINDOW`（100 全局兜底，`WORK_LEARN_REGISTRATION_GLOBAL_MAX_PER_WINDOW`）；**2026-11-02 评审 P1-4 后改为**：每次注册先落 `oauth_registration_attempts`（迁移 020，按 ip 计数）再判预算（先记后判，并发突发也被计数；计数查询失败抛错即拒绝，**fail-closed**，不再 fail-open）；`recordRegistrationAttempt` / `countRecentAttempts` / `checkRegistrationRateLimit(admin, ip, …)`；`RegistrationRateLimitedError`；`registerClient` 增加可选 `{admin, ip, windowMs, maxPerWindow, globalMaxPerWindow}`（测试注入），超预算抛限流错误、client 不落库（attempt 仍落库）；
+- `routes/oauth.ts`：catch 限流错误 → 429 `{error:"too_many_registrations"}` + `Retry-After` header（RFC 7591 §4.2）；注册限流来源取 `x-forwarded-for` 首跳（Pages worker / Vercel 边缘）→ `x-real-ip` → "unknown" 桶；
+- 测试：oauth.test.ts 新增 6 条（计数/窗口边界/fail-open/放行落库/超限不落库），api 42→48。**2026-11-03 更新**：rate-limit 段重写为 9 条（按 ip 计数、fail-closed 抛错、per-ip 超限、异源不受影响、全局兜底、attempt 先落库、unknown 桶），api 60。
 
 **验证**：api typecheck 0、48/48；全仓待跑。
 

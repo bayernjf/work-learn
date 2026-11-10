@@ -19,17 +19,19 @@ The following MCP tools are available when the Work Learn MCP server is connecte
 - `mark_mastered` — mark a review item completed by `reviewId`.
 - `snooze_review` — delay a review item by a chosen number of days.
 - `generate_practice` — generate structured practice prompts from one or recent saved materials. The tool returns prompts and source material; you run the practice conversation with the user.
-- `record_practice` — record one practice attempt's result (done / correct / feedback / mistakes) against a material or question. Input: `materialId` or `questionId`, `result`, optional `feedback`, `mistakes[]`. (C1)
+- `record_practice` — record one practice attempt against a material or question. Input: `exerciseType` (`reuse`/`recall`/`correction`/`apply`/`question`/`mcq`/`fill`/`scenario`), optional `materialId` or `questionId`, `focus`, `prompt`, `userAnswer`, `isCorrect` (true/false/null), `status` (`remembered`/`practice_again`/`pending`). (C1)
 - `get_practice_history` — fetch recent practice records and the mistake book (wrong items) for a material/question or the user. (C1)
 - `generate_adaptive_practice` — when `WORK_LEARN_LLM_*` is configured, ask the LLM to generate adaptive practice from recent mistakes; otherwise fall back to deterministic prompts. (C2)
 - `get_user_patterns` — summarize recent topics, reusable expressions, corrections, vocabulary, and suggested next practice.
 - `record_reuse` — record that a saved expression naturally appeared in later work text.
 - `get_reuse_summary` — summarize active vocabulary, sleeping expressions, cross-scene reuse, and recent reuse events.
 - `suggest_reuse` — given the user's current English text, find at most one other saved expression for the same intent. This is expansion, not correction.
+- `suggest_reuse_candidates` — when the user's text seems related to a saved expression but nothing matched exactly, return candidate expressions for the user to confirm; never records reuse by itself.
 - `list_expressions` — list saved expressions and their intent assignment; use `includeUnclustered: true` to see expressions that still need an intent.
 - `cluster_intents` — the host model groups semantically equivalent expressions by communicative goal and persists the groups as intents. The model judges grouping; the tool only stores it.
 - `merge_intents` — merge two intents that describe the same goal.
 - `split_intent` — split one intent into two or more finer-grained intents.
+- `list_intents` — list the current intent clusters together with their expressions; use it before clustering, merging, or splitting to see the existing grouping.
 - `configure_reuse_nudges` — turn reuse nudges on/off or change their cooldown and daily limit when the user asks to make them quieter or stop.
 
 ## Saving a question and its translation
