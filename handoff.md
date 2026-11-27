@@ -1,5 +1,22 @@
 # Handoff
 
+## 待办登记（标准）
+
+> 本段是本产品唯一活跃待办入口；详细背景见下方原有章节。完成一项改 `done` 并补 evidence。
+> 最近同步：2026-11-22
+
+<!-- tier:todos v1 -->
+| id | title | status | priority | owner | next | evidence | updated |
+|---|---|---|---|---|---|---|---|
+| WL-01 | 配置 access token 并完成一次 MCP 调用 | open | p1 | owner | 在 Claude Desktop / Codex / Hermes 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成至少一次调用 | `handoff.md` §待实现模块 | 2026-11-22 |
+| WL-02 | Claude Desktop / Claude Code 远程 MCP OAuth | open | p1 | owner | 无 token 401 → 浏览器 OAuth → `search_corpus` / `save_material` 可用 | `handoff.md` OAuth 清单 | 2026-11-22 |
+| WL-03 | Codex 远程 MCP 走 OAuth | open | p1 | owner | 在 Codex（OpenAI）中完成远程 MCP OAuth | `handoff.md` OAuth 清单 | 2026-11-22 |
+| WL-04 | Cursor / VS Code 远程 MCP OAuth | open | p1 | owner | 在 Cursor / VS Code 类客户端完成远程 MCP OAuth | `handoff.md` OAuth 清单 | 2026-11-22 |
+| WL-05 | MCP Inspector 连远程端点 + OAuth | open | p2 | owner | 用官方 Inspector 完成远程端点 + OAuth 流程 | `handoff.md` OAuth 清单 | 2026-11-22 |
+| WL-06 | refresh token 过期 / 吊销行为 | open | p2 | owner | 验证客户端静默重授权 | `handoff.md` OAuth 清单 | 2026-11-22 |
+| WL-07 | Web JSON 导出 / 导入人工试用 | open | p2 | owner | 登录后验证导出、导入与异常提示 | `handoff.md` | 2026-11-22 |
+<!-- /tier:todos -->
+
 ## 2026-08-26 迭代（C1–C4：练习闭环 / 自适应出题 / Agent 浮层 / rc-hook）
 
 全部实现并提交到 `dev`（未 push）。CI 在 `a275748` 修复 `noUncheckedIndexedAccess` 后转绿，PR #40 已合并并部署生产。
