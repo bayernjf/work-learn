@@ -3,12 +3,12 @@
 ## 待办登记（标准）
 
 > 本段是本产品唯一活跃待办入口；详细背景见下方原有章节。完成一项改 `done` 并补 evidence。
-> 最近同步：2026-11-22
+> 最近同步：2026-11-29
 
 <!-- tier:todos v1 -->
 | id | title | status | priority | owner | next | evidence | updated |
 |---|---|---|---|---|---|---|---|
-| WL-01 | 配置 access token 并完成一次 MCP 调用 | open | p1 | owner | 在 Claude Desktop / Codex / Hermes 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成至少一次调用 | `handoff.md` §待实现模块 | 2026-11-22 |
+| WL-01 | 配置 access token 并完成一次 MCP 调用 | open | p1 | owner | 本地 stdio MCP 闭环已验证（2026-11-29，无需 token）；剩在 Claude Desktop / Codex / Hermes 配 token 走远程 HTTP 调用 | `handoff.md` §待实现模块 | 2026-11-29 |
 | WL-02 | Claude Desktop / Claude Code 远程 MCP OAuth | open | p1 | owner | 无 token 401 → 浏览器 OAuth → `search_corpus` / `save_material` 可用 | `handoff.md` OAuth 清单 | 2026-11-22 |
 | WL-03 | Codex 远程 MCP 走 OAuth | open | p1 | owner | 在 Codex（OpenAI）中完成远程 MCP OAuth | `handoff.md` OAuth 清单 | 2026-11-22 |
 | WL-04 | Cursor / VS Code 远程 MCP OAuth | open | p1 | owner | 在 Cursor / VS Code 类客户端完成远程 MCP OAuth | `handoff.md` OAuth 清单 | 2026-11-22 |
@@ -90,6 +90,7 @@ Agent 中调用 Skill
 - [x] Web 练习入口：语料卡片"练习"按钮调用 /api/practice；首页"你的学习模式"面板调用 /api/patterns
 - [x] 复习卡片改为先回忆再展开：默认只显示原文，点"显示答案"后展开 better/why/reuse/词汇和练习按钮
 - [ ] 在 Claude Desktop / Codex / Hermes 等 Agent 中配置 `WORK_LEARN_ACCESS_TOKEN` 并完成一次 MCP 客户端调用
+- [x] 本地 stdio MCP 闭环（无需 token，本地优先路径）实测通过（2026-11-29）：`learn capture/search/stats` 写入/搜索本地 SQLite 正常，stdio MCP 注册 22 个工具、`search_corpus` 真实返回材料，Node 24 + pnpm，验证后测试数据已清理
 - [x] 云端提问翻译按规范化问题去重，新增并已执行 `014_question_norm_dedupe.sql`
 - [x] 复习项支持 snooze 到明天，Web/API/MCP/本地队列均支持
 - [x] Web 端支持编辑语料的 topic、explanation、tags 等字段
